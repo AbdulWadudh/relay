@@ -1,27 +1,25 @@
-// One-off Task 1 verification: schema creation + AES-256-GCM roundtrip.
+// One-off Task 1 verification: Drizzle schema migration + AES-256-GCM roundtrip.
 // Run: bun scripts/smoke-test.ts
-export {}
+import { sql } from "drizzle-orm"
 
-process.env.MASTER_ENCRYPTION_KEY ??= crypto
+process.env.VAULT_KEY ??= crypto
   .getRandomValues(new Uint8Array(32))
   .toHex()
-process.env.RELAY_DB_PATH = "./data/smoke-test.db"
+process.env.DATABASE_URL = "file:./data/smoke-test.db"
 
 const { getDb } = await import("../src/lib/db/index.ts")
 const { encrypt, decrypt } = await import("../src/lib/crypto.ts")
 
 const db = getDb()
 const tables = db
-  .query<{ name: string }, []>(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+  .all<{ name: string }>(
+    sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__drizzle%' ORDER BY name`,
   )
-  .all()
   .map((t) => t.name)
 const indexes = db
-  .query<{ name: string }, []>(
-    "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name",
+  .all<{ name: string }>(
+    sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name`,
   )
-  .all()
   .map((t) => t.name)
 
 console.log("tables:", tables.join(", "))

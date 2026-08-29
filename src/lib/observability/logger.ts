@@ -1,5 +1,7 @@
 import type { MiddlewareHandler } from "hono"
 
+import config from "@/config"
+
 /**
  * OpenObserve server-side logging pipeline (DESIGN §3, TRD §1).
  *
@@ -32,13 +34,11 @@ interface OpenObserveConfig {
 }
 
 function getConfig(): OpenObserveConfig | null {
-  const url = process.env.OPENOBSERVE_URL
-  const user = process.env.OPENOBSERVE_USER
-  const token = process.env.OPENOBSERVE_TOKEN
+  const { url, user, token, org } = config.observability
   if (!url || !user || !token) return null
   return {
     url: url.replace(/\/$/, ""),
-    org: process.env.OPENOBSERVE_ORG ?? "default",
+    org,
     auth: btoa(`${user}:${token}`),
   }
 }
@@ -103,35 +103,21 @@ export function ingest(stream: string, event: LogEventInput) {
   }
 }
 
+function log(level: LogLevel) {
+  return (message: string, fields: Record<string, unknown> = {}) =>
+    ingest(config.observability.streams.server, {
+      level,
+      message,
+      service: "relay-api",
+      ...fields,
+    })
+}
+
 export const logger = {
-  debug: (message: string, fields: Record<string, unknown> = {}) =>
-    ingest("relay_server", {
-      level: "debug",
-      message,
-      service: "relay-api",
-      ...fields,
-    }),
-  info: (message: string, fields: Record<string, unknown> = {}) =>
-    ingest("relay_server", {
-      level: "info",
-      message,
-      service: "relay-api",
-      ...fields,
-    }),
-  warn: (message: string, fields: Record<string, unknown> = {}) =>
-    ingest("relay_server", {
-      level: "warn",
-      message,
-      service: "relay-api",
-      ...fields,
-    }),
-  error: (message: string, fields: Record<string, unknown> = {}) =>
-    ingest("relay_server", {
-      level: "error",
-      message,
-      service: "relay-api",
-      ...fields,
-    }),
+  debug: log("debug"),
+  info: log("info"),
+  warn: log("warn"),
+  error: log("error"),
 }
 
 /**

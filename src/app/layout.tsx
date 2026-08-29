@@ -4,6 +4,7 @@ import { JetBrains_Mono, Oxanium, Space_Grotesk } from "next/font/google"
 import "./globals.css"
 import { TelemetryProvider } from "@/components/telemetry-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import config from "@/config"
 import { cn } from "@/lib/utils"
 
 const oxaniumHeading = Oxanium({
@@ -22,12 +23,16 @@ const fontMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(config.app.baseUrl),
   title: {
-    default: "Relay",
-    template: "%s · Relay",
+    default: config.app.name,
+    template: `%s · ${config.app.name}`,
   },
-  description:
-    "Self-hosted bridge from short-form video to structured Notion pages — evidence-grounded extraction, BYOK, local media processing.",
+  description: config.app.description,
+  icons: {
+    icon: config.assets.favicon,
+    apple: config.assets.logo,
+  },
 }
 
 export default function RootLayout({
@@ -48,7 +53,7 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>
+        <ThemeProvider storageKey={config.theme.storageKey}>
           <TelemetryProvider>{children}</TelemetryProvider>
         </ThemeProvider>
       </body>

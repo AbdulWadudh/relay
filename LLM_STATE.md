@@ -14,3 +14,11 @@
 - **Observability:** `src/lib/observability/logger.ts` (batched OpenObserve ingest + Hono middleware, console fallback when unconfigured), `src/lib/observability/client.ts` (RUM: page loads, errors, interactions), `/api/v1/telemetry` proxy keeps OpenObserve credentials server-side. Hono mounted at `src/app/api/v1/[[...route]]/route.ts` with `/api/v1/health`.
 - **Dependencies added (required by Task 1 spec):** `hono`, `@types/bun` (dev), `@biomejs/biome` (dev). Removed: `eslint`, `eslint-config-next`, `prettier`, `prettier-plugin-tailwindcss`.
 - **Verification:** `bun run typecheck` = 0 errors; `biome check` clean; `bun run build` succeeds; `bun scripts/smoke-test.ts` — tables/indexes created, crypto roundtrip OK, IV uniqueness OK, tamper detection OK.
+
+## Post-Task-1 Amendments (2026-08-29, human-directed)
+
+- **Drizzle ORM adopted** (reverses earlier no-ORM ruling): schema in `src/lib/db/schema.ts`, `drizzle-orm/bun-sqlite` driver, migrations in `drizzle/` via `bun run db:generate`, applied automatically on connection.
+- **Zod validation** at all API boundaries; shared schemas in `src/lib/schemas.ts`.
+- **`src/config/index.ts` is the single source of ALL configuration** — no `process.env` reads elsewhere. Vault key env var is `VAULT_KEY` (user-chosen name); DB URL from `DATABASE_URL` (default `file:./local.db`).
+- **Brand assets** generated to `public/relay_x32.ico` + `public/relay_x512.webp` (ffmpeg) and wired via `config.assets` in layout metadata; no icon files in `src/app`.
+- README rewritten with setup/scripts/layout documentation.

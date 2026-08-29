@@ -11,16 +11,18 @@
  * Decrypting a tampered payload throws, so integrity is always verified.
  */
 
+import config from "@/config"
+
 const IV_LENGTH = 12
 
 let cachedKey: CryptoKey | null = null
 
 async function getMasterKey(): Promise<CryptoKey> {
   if (cachedKey) return cachedKey
-  const hex = process.env.MASTER_ENCRYPTION_KEY
+  const hex = config.vault.keyHex
   if (!hex || !/^[0-9a-fA-F]{64}$/.test(hex)) {
     throw new Error(
-      'MASTER_ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Generate one with: bun -e "console.log(crypto.getRandomValues(new Uint8Array(32)).toHex())"',
+      'VAULT_KEY must be a 64-character hex string (32 bytes). Generate one with: bun -e "console.log(crypto.getRandomValues(new Uint8Array(32)).toHex())"',
     )
   }
   cachedKey = await crypto.subtle.importKey(
