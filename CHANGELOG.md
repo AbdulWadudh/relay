@@ -1,0 +1,15 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [0.1.0] - 2026-08-29
+### Task 1: Foundation & Database
+- Scaffolded Next.js App Router + Tailwind v4 + ShadCN (preset `b5pFrsf5Vq`: mira/zinc/emerald, HugeIcons, RTL) under Bun with a `src/` layout.
+- Emerald-on-Zinc OKLCH dark theme (default dark), Oxanium headings, Space Grotesk body, JetBrains Mono monospace.
+- `bun:sqlite` database with `users`, hybrid encrypted/plaintext `credentials` (AES-256-GCM tokens, plaintext `meta_data`, indexed `expires_at`), and `agents` tables.
+- AES-256-GCM crypto utilities with per-record IVs and tamper detection.
+- OpenObserve observability: batched server log pipeline + Hono request middleware, client RUM (page loads, errors) proxied via `/api/v1/telemetry`, Hono API mounted at `/api/v1/*`.
+- Toolchain: Biome for lint/format (replacing ESLint/Prettier), `tsc --noEmit` for typechecking, all scripts on the Bun runtime.
+
+### Initial Setup
+- Initialized system specs: PRD, TRD, Agent Rules, Design Guidelines, and Branding configuration for Relay.
