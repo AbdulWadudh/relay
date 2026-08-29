@@ -40,7 +40,7 @@ services:
       SERVICE_FQDN_STUDIO_4983: /
       PORT: 4983
       STORE_PATH: /app
-      MASTERPASS: "${STUDIO_PASSWORD:?generate one with openssl rand -base64 24}"
+      MASTERPASS: "${STUDIO_PASSWORD:-${DRIZZLE_MASTERPASS:?generate one with openssl rand -base64 24}}"
     depends_on:
       relay:
         condition: service_healthy
