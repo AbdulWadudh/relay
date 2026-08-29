@@ -13,13 +13,13 @@ import {
  * Responses are always masked: no token material ever leaves the vault.
  */
 
-export const credentialsApp = new Hono()
+export const credentialsModule = new Hono()
 
-credentialsApp.get("/", (c) => {
+credentialsModule.get("/", (c) => {
   return c.json({ credentials: listCredentials() })
 })
 
-credentialsApp.post("/", async (c) => {
+credentialsModule.post("/", async (c) => {
   const body = await c.req.json().catch(() => null)
   const parsed = credentialInputSchema.safeParse(body)
   if (!parsed.success) {
@@ -36,7 +36,7 @@ credentialsApp.post("/", async (c) => {
   return c.json({ credential }, 201)
 })
 
-credentialsApp.delete("/:id", (c) => {
+credentialsModule.delete("/:id", (c) => {
   const id = c.req.param("id")
   if (!deleteCredential(id)) {
     return c.json({ error: "Credential not found" }, 404)

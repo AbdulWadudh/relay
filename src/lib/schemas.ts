@@ -34,7 +34,7 @@ export const agentInputSchema = z.object({
 
 export type AgentInput = z.infer<typeof agentInputSchema>
 
-export const notionCallbackSchema = z.object({
+export const oauthCallbackSchema = z.object({
   code: z.string().min(1),
   state: z.string().min(1),
 })

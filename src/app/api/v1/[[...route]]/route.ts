@@ -10,8 +10,8 @@ import {
   openObserveMiddleware,
 } from "@/lib/observability/logger"
 import { telemetryEventSchema } from "@/lib/schemas"
-import { credentialsApp } from "@/server/credentials"
-import { oauthApp } from "@/server/oauth"
+import { credentialsModule } from "@/server/credentials"
+import { oauthModule } from "@/server/oauth"
 
 /**
  * Hono backend mounted inside the Next.js App Router (TRD §1, §3).
@@ -23,8 +23,8 @@ const app = new Hono().basePath(`/api/${config.api.version}`)
 
 app.use("*", openObserveMiddleware())
 
-app.route("/credentials", credentialsApp)
-app.route("/oauth", oauthApp)
+app.route("/credentials", credentialsModule)
+app.route("/oauth", oauthModule)
 
 app.get("/health", (c) => {
   const db = getDb()

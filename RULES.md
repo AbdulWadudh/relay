@@ -38,6 +38,8 @@
 
 ## Code Hygiene
 - **Max 250 lines per file.** Split modules/components before they cross it.
+- **Backend naming:** there is exactly ONE Hono app (mounted in `src/app/api/v1/[[...route]]/route.ts`). Everything under `src/server/` is a *module* (`credentialsModule`, `oauthModule`, ...) — never name sub-routers "app".
+- **OAuth is provider-generic:** flows go through the registry in `src/server/oauth-providers.ts` (`/oauth/:provider`); no provider-specific routes, cookies, or hardcoded provider strings in flow logic.
 
 ## Security
 - `access_token` / `refresh_token` always AES-256-GCM encrypted with a unique IV per record; `meta_data` stays plaintext JSON.
