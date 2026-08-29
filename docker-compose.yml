@@ -40,7 +40,7 @@ services:
       - "4983"
     environment:
       PORT: "4983"
-      MASTERPASS: ${DRIZZLE_MASTERPASS:?}
+      MASTERPASS: ${SERVICE_PASSWORD_DRIZZLE_GATEWAY}
     depends_on:
       relay:
         condition: service_healthy
