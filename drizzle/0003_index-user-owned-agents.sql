@@ -1,0 +1,1 @@
+CREATE INDEX `idx_agents_user_id` ON `agents` (`user_id`);

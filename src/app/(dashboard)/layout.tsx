@@ -3,11 +3,12 @@ import { cookies } from "next/headers"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import config from "@/config"
-import { LOCAL_USER } from "@/lib/vault"
+import { requireSession } from "@/lib/auth-session"
 
 export default async function DashboardLayout({
   children,
 }: React.PropsWithChildren) {
+  const session = await requireSession()
   // The sidebar persists its open state in the "sidebar_state" cookie;
   // read it server-side so a refresh keeps the collapsed state.
   const cookieStore = await cookies()
@@ -17,9 +18,9 @@ export default async function DashboardLayout({
     <SidebarProvider defaultOpen={defaultOpen}>
       <AppSidebar
         user={{
-          name: LOCAL_USER.name,
-          email: LOCAL_USER.email,
-          avatar: config.assets.logo,
+          name: session.user.name,
+          email: session.user.email,
+          avatar: session.user.image ?? config.assets.logo,
         }}
       />
       <SidebarInset className="relative flex h-svh flex-col overflow-hidden">

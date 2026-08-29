@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm"
 
 import { decrypt, encrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
-import { credentials, users } from "@/lib/db/schema"
+import { credentials } from "@/lib/db/schema"
 import type { CredentialInput } from "@/lib/schemas"
 
 /**
@@ -13,26 +13,6 @@ import type { CredentialInput } from "@/lib/schemas"
  * stored self-contained as `ivHex:cipherB64` with its own random IV.
  * `meta_data` stays plaintext JSON. Tokens are never logged or returned.
  */
-
-/** Single-tenant local user (single source; also feeds the profile UI). */
-export const LOCAL_USER = {
-  id: "local",
-  name: "Local User",
-  email: "local@relay.app",
-}
-
-export function ensureLocalUser(): string {
-  getDb()
-    .insert(users)
-    .values({
-      id: LOCAL_USER.id,
-      email: LOCAL_USER.email,
-      createdAt: Date.now(),
-    })
-    .onConflictDoNothing()
-    .run()
-  return LOCAL_USER.id
-}
 
 export interface MaskedCredential {
   id: string
@@ -54,8 +34,7 @@ const MASKED_COLUMNS = {
   updatedAt: credentials.updatedAt,
 }
 
-export function listCredentials(): MaskedCredential[] {
-  const userId = ensureLocalUser()
+export function listCredentials(userId: string): MaskedCredential[] {
   return getDb()
     .select(MASKED_COLUMNS)
     .from(credentials)
@@ -66,8 +45,8 @@ export function listCredentials(): MaskedCredential[] {
 
 export async function createCredential(
   input: CredentialInput,
+  userId: string,
 ): Promise<MaskedCredential> {
-  const userId = ensureLocalUser()
   const db = getDb()
   const access = await encrypt(input.accessToken)
   let refreshToken: string | null = null
@@ -124,8 +103,7 @@ export async function createCredential(
   return row
 }
 
-export function deleteCredential(id: string): boolean {
-  const userId = ensureLocalUser()
+export function deleteCredential(id: string, userId: string): boolean {
   const deleted = getDb()
     .delete(credentials)
     .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))
@@ -135,8 +113,10 @@ export function deleteCredential(id: string): boolean {
 }
 
 /** Decrypt the stored access token for a provider (pipeline use only). */
-export async function getAccessToken(provider: string): Promise<string | null> {
-  const userId = ensureLocalUser()
+export async function getAccessToken(
+  provider: string,
+  userId: string,
+): Promise<string | null> {
   const row = getDb()
     .select({ accessToken: credentials.accessToken, iv: credentials.iv })
     .from(credentials)

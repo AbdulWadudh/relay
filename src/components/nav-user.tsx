@@ -7,6 +7,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -24,6 +25,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { authClient } from "@/lib/auth-client"
 
 export interface ProfileUser {
   name: string
@@ -41,6 +43,13 @@ function initials(name: string): string {
 
 export function NavUser({ user }: { user: ProfileUser }) {
   const { isMobile } = useSidebar()
+  const router = useRouter()
+
+  async function signOut() {
+    await authClient.signOut()
+    router.push("/login")
+    router.refresh()
+  }
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -110,6 +119,12 @@ export function NavUser({ user }: { user: ProfileUser }) {
               >
                 <HugeiconsIcon icon={Settings01Icon} strokeWidth={2} />
                 Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={signOut}
+                className="transition-colors duration-200 focus:bg-red-500/10 focus:text-red-300"
+              >
+                Sign out
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>

@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 
 import config from "@/config"
+import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
 import { oauthCallbackSchema } from "@/lib/schemas"
 import { createCredential } from "@/lib/vault"
@@ -25,37 +26,45 @@ const VAULT_PATH = "/vault"
 export const oauthModule = new Hono()
 
 oauthModule.get("/:provider", (c) => {
-  const provider = getProvider(c.req.param("provider"))
-  if (!provider) return c.json({ error: "Unknown OAuth provider" }, 404)
-  if (!isConfigured(provider)) {
-    return c.json(
-      { error: `${provider.name} OAuth is not configured (client id/secret)` },
-      503,
-    )
-  }
-  const state = crypto.randomUUID()
-  setCookie(c, stateCookieName(provider), state, {
-    httpOnly: true,
-    sameSite: "Lax",
-    secure: config.app.baseUrl.startsWith("https://"),
-    path: "/",
-    maxAge: 600,
+  const sessionPromise = getRequestSession(c.req.raw.headers)
+  return sessionPromise.then((session) => {
+    if (!session) return c.redirect("/login")
+    const provider = getProvider(c.req.param("provider"))
+    if (!provider) return c.json({ error: "Unknown OAuth provider" }, 404)
+    if (!isConfigured(provider)) {
+      return c.json(
+        {
+          error: `${provider.name} OAuth is not configured (client id/secret)`,
+        },
+        503,
+      )
+    }
+    const state = crypto.randomUUID()
+    setCookie(c, stateCookieName(provider), state, {
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: config.app.baseUrl.startsWith("https://"),
+      path: "/",
+      maxAge: 600,
+    })
+    const url = new URL(provider.authorizeUrl)
+    url.searchParams.set("client_id", provider.clientId)
+    url.searchParams.set("response_type", "code")
+    url.searchParams.set("redirect_uri", redirectUri(provider))
+    url.searchParams.set("state", state)
+    if (provider.scopes?.length) {
+      url.searchParams.set("scope", provider.scopes.join(" "))
+    }
+    for (const [key, value] of Object.entries(provider.extraAuthParams ?? {})) {
+      url.searchParams.set(key, value)
+    }
+    return c.redirect(url.toString())
   })
-  const url = new URL(provider.authorizeUrl)
-  url.searchParams.set("client_id", provider.clientId)
-  url.searchParams.set("response_type", "code")
-  url.searchParams.set("redirect_uri", redirectUri(provider))
-  url.searchParams.set("state", state)
-  if (provider.scopes?.length) {
-    url.searchParams.set("scope", provider.scopes.join(" "))
-  }
-  for (const [key, value] of Object.entries(provider.extraAuthParams ?? {})) {
-    url.searchParams.set(key, value)
-  }
-  return c.redirect(url.toString())
 })
 
 oauthModule.get("/:provider/callback", async (c) => {
+  const session = await getRequestSession(c.req.raw.headers)
+  if (!session) return c.redirect("/login")
   const provider = getProvider(c.req.param("provider"))
   if (!provider) return c.json({ error: "Unknown OAuth provider" }, 404)
 
@@ -99,16 +108,19 @@ oauthModule.get("/:provider/callback", async (c) => {
 
   const token = (await response.json()) as TokenResponse
 
-  await createCredential({
-    type: "oauth",
-    provider: provider.name,
-    accessToken: token.access_token,
-    refreshToken: token.refresh_token,
-    expiresAt: token.expires_in
-      ? Date.now() + token.expires_in * 1000
-      : undefined,
-    metaData: provider.mapMetaData(token),
-  })
+  await createCredential(
+    {
+      type: "oauth",
+      provider: provider.name,
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token,
+      expiresAt: token.expires_in
+        ? Date.now() + token.expires_in * 1000
+        : undefined,
+      metaData: provider.mapMetaData(token),
+    },
+    session.user.id,
+  )
   logger.info("OAuth workspace connected", { provider: provider.name })
   return c.redirect(`${VAULT_PATH}?connected=${provider.name}`)
 })

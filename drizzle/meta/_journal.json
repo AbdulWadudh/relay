@@ -8,6 +8,41 @@
       "when": 1788016239003,
       "tag": "0000_powerful_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788030378674,
+      "tag": "0001_consolidate-auth-users",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788030489743,
+      "tag": "0002_auth-secret-default-check",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788030514879,
+      "tag": "0003_index-user-owned-agents",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788030532931,
+      "tag": "0004_align-better-auth-account",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788030634440,
+      "tag": "0005_rename-users-to-auth-users",
+      "breakpoints": true
     }
   ]
 }

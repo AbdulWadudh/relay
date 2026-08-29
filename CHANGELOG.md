@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+### Authentication & Observability
+- Added Better Auth email/password and Google sign-in backed by one `auth_users` table, with session, account, and verification persistence.
+- Scoped credentials and agents to the authenticated user with cascading ownership foreign keys.
+- Added public Privacy Policy, Terms of Service, and branded sign-in pages.
+- Replaced the server logger with Pino and added OpenObserve browser RUM and logs with Coolify build-time public configuration.
+
 ## [0.3.0] - 2026-08-29
 ### Deployment
 - Added production Docker and Docker Compose configuration for Coolify, including persistent SQLite storage and runtime environment variable wiring.

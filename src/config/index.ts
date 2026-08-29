@@ -20,6 +20,12 @@ export const config = {
   api: {
     version: "v1",
   },
+  auth: {
+    baseUrl: BASE_URL,
+    secret: process.env.VAULT_KEY ?? "",
+    googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  },
   database: {
     url: (process.env.DATABASE_URL ?? "file:./local.db").replace(
       /^turso:\/\//,
@@ -47,7 +53,6 @@ export const config = {
   observability: {
     url: process.env.OPENOBSERVE_URL ?? "",
     org: process.env.OPENOBSERVE_ORG ?? "default",
-    user: process.env.OPENOBSERVE_USER ?? "",
     token: process.env.OPENOBSERVE_TOKEN ?? "",
     streams: {
       server: "relay_server",

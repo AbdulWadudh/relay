@@ -3,6 +3,7 @@ import { Suspense } from "react"
 import { ShellContent, ShellHeader } from "@/components/app-shell"
 import { CredentialsTable } from "@/components/vault/credentials-table"
 import { VaultActions, VaultNotices } from "@/components/vault/vault-actions"
+import { requireSession } from "@/lib/auth-session"
 import { listCredentials } from "@/lib/vault"
 import { configuredProviderIds } from "@/server/oauth-providers"
 
@@ -10,8 +11,9 @@ export const dynamic = "force-dynamic"
 
 export const metadata = { title: "Vault" }
 
-export default function VaultPage() {
-  const credentials = listCredentials()
+export default async function VaultPage() {
+  const session = await requireSession()
+  const credentials = listCredentials(session.user.id)
   const configuredIds = configuredProviderIds()
 
   return (

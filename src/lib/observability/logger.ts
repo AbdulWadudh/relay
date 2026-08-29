@@ -1,15 +1,8 @@
+import { Writable } from "node:stream"
 import type { MiddlewareHandler } from "hono"
+import pino, { type Logger } from "pino"
 
 import config from "@/config"
-
-/**
- * OpenObserve server-side logging pipeline (DESIGN §3, TRD §1).
- *
- * Events are buffered and flushed in batches to the OpenObserve JSON ingest
- * API (`/api/{org}/{stream}/_json`). When OPENOBSERVE_URL is not configured
- * the logger degrades to structured console output so local development
- * works with zero external dependencies.
- */
 
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
@@ -20,97 +13,101 @@ export interface LogEventInput {
   [key: string]: unknown
 }
 
-export interface LogEvent extends LogEventInput {
-  _timestamp: number
-}
-
-const FLUSH_INTERVAL_MS = 2000
-const MAX_BUFFER = 50
-
 interface OpenObserveConfig {
   url: string
   org: string
-  auth: string
+  stream: string
+  authorization: string
 }
 
-function getConfig(): OpenObserveConfig | null {
-  const { url, user, token, org } = config.observability
-  if (!url || !user || !token) return null
+function getOpenObserveConfig(): OpenObserveConfig | null {
+  const { url, token, org, streams } = config.observability
+  if (!url || !token) return null
   return {
     url: url.replace(/\/$/, ""),
     org,
-    auth: btoa(`${user}:${token}`),
+    stream: streams.server,
+    authorization: token,
   }
 }
 
-const buffers = new Map<string, LogEvent[]>()
-let flushTimer: ReturnType<typeof setTimeout> | null = null
+const openObserveConfig = getOpenObserveConfig()
 
-async function flushStream(stream: string, events: LogEvent[]) {
-  const config = getConfig()
-  if (!config) return
-  try {
-    await fetch(`${config.url}/api/${config.org}/${stream}/_json`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${config.auth}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(events),
-    })
-  } catch (error) {
-    console.error("[observability] OpenObserve ingest failed:", error)
+class OpenObserveStream extends Writable {
+  private readonly pending: Record<string, unknown>[] = []
+  private timer: ReturnType<typeof setTimeout> | null = null
+
+  override _write(
+    chunk: Buffer,
+    _encoding: string,
+    callback: (error?: Error) => void,
+  ) {
+    try {
+      this.pending.push(JSON.parse(chunk.toString()) as Record<string, unknown>)
+      if (this.pending.length >= 50) void this.flush()
+      else this.schedule()
+      callback()
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error(String(error)))
+    }
   }
+
+  private schedule() {
+    if (this.timer) return
+    this.timer = setTimeout(() => {
+      this.timer = null
+      void this.flush()
+    }, 2000)
+  }
+
+  private async flush() {
+    const target = openObserveConfig
+    if (!target || this.pending.length === 0) return
+    const events = this.pending.splice(0, this.pending.length)
+    try {
+      await fetch(`${target.url}/api/${target.org}/${target.stream}/_json`, {
+        method: "POST",
+        headers: {
+          Authorization: target.authorization,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(events),
+      })
+    } catch (error) {
+      console.error("[observability] OpenObserve ingest failed:", error)
+    }
+  }
+
+  async shutdown() {
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = null
+    await this.flush()
+  }
+}
+
+const openObserveStream = openObserveConfig ? new OpenObserveStream() : null
+const pinoLogger: Logger = pino(
+  { level: "debug", base: { service: "relay-api" } },
+  openObserveStream
+    ? pino.multistream([
+        { stream: process.stdout },
+        { stream: openObserveStream },
+      ])
+    : process.stdout,
+)
+
+export function ingest(stream: string, event: LogEventInput) {
+  const child = pinoLogger.child({ stream })
+  child[event.level]({ ...event, _timestamp: Date.now() }, event.message)
 }
 
 export async function flushAll() {
-  if (flushTimer) {
-    clearTimeout(flushTimer)
-    flushTimer = null
-  }
-  const pending = [...buffers.entries()].filter(([, e]) => e.length > 0)
-  buffers.clear()
-  await Promise.all(
-    pending.map(([stream, events]) => flushStream(stream, events)),
-  )
-}
-
-function scheduleFlush() {
-  if (flushTimer) return
-  flushTimer = setTimeout(() => {
-    flushTimer = null
-    void flushAll()
-  }, FLUSH_INTERVAL_MS)
-}
-
-export function ingest(stream: string, event: LogEventInput) {
-  const entry: LogEvent = { ...event, _timestamp: Date.now() }
-  if (!getConfig()) {
-    const line = `[${entry.level}] ${entry.service}: ${entry.message}`
-    if (entry.level === "error") console.error(line, entry)
-    else if (entry.level === "warn") console.warn(line, entry)
-    else console.log(line)
-    return
-  }
-  const buffer = buffers.get(stream) ?? []
-  buffer.push(entry)
-  buffers.set(stream, buffer)
-  if (buffer.length >= MAX_BUFFER) {
-    const events = buffer.splice(0, buffer.length)
-    void flushStream(stream, events)
-  } else {
-    scheduleFlush()
-  }
+  await openObserveStream?.shutdown()
 }
 
 function log(level: LogLevel) {
   return (message: string, fields: Record<string, unknown> = {}) =>
-    ingest(config.observability.streams.server, {
-      level,
-      message,
-      service: "relay-api",
-      ...fields,
-    })
+    pinoLogger[level](fields, message)
 }
 
 export const logger = {
@@ -120,11 +117,6 @@ export const logger = {
   error: log("error"),
 }
 
-/**
- * Hono middleware: logs every /api/v1 request (method, path, status,
- * duration) and routes uncaught handler errors to OpenObserve. Tokens and
- * request bodies are intentionally never logged (PRD §6).
- */
 export function openObserveMiddleware(): MiddlewareHandler {
   return async (c, next) => {
     const start = performance.now()

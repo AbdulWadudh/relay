@@ -1,4 +1,10 @@
 @import "tailwindcss";
+
+@keyframes relay-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -140,7 +146,7 @@
   /* RULES.md: the root viewport never scrolls; only designated inner panels do. */
   html,
   body {
-    @apply h-full overflow-hidden;
+    @apply h-full overflow-x-hidden overflow-y-auto;
   }
 }
 
