@@ -36,6 +36,9 @@ pnpm-debug.log*
 /data/
 local.db*
 
+# QA screenshots
+/.qa/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

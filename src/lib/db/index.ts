@@ -31,11 +31,11 @@ function createDb() {
 export type RelayDb = ReturnType<typeof createDb>
 
 // Cache on globalThis so Next.js dev-mode HMR doesn't leak connections.
-const globalForDb = globalThis as unknown as { __relayDb?: RelayDb }
+const globalForDb = globalThis as unknown as { __relayDrizzle?: RelayDb }
 
 export function getDb(): RelayDb {
-  globalForDb.__relayDb ??= createDb()
-  return globalForDb.__relayDb
+  globalForDb.__relayDrizzle ??= createDb()
+  return globalForDb.__relayDrizzle
 }
 
 export { schema }

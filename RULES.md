@@ -14,7 +14,7 @@
   - SQLite: **Drizzle ORM over the `bun:sqlite` driver** (`drizzle-orm/bun-sqlite`) — human decision 2026-08-29 (supersedes the earlier no-ORM ruling). Schema lives in `src/lib/db/schema.ts`; migrations via `bun run db:generate` / applied automatically on connection.
   - Shell/processes: `Bun.$` — not `child_process`.
   - Files: `Bun.file` / `Bun.write` where async is acceptable.
-- **Narrow exception:** a `node:*` import is allowed only when Bun ships no native or Web-standard equivalent (e.g. synchronous `mkdirSync`/`dirname` in `src/lib/db/index.ts`). Bun implements `node:*` modules natively in Zig — no Node.js binary is involved — but every such import must carry a justifying comment referencing this rule.
+- **Narrow exception:** a `node:*` import is allowed only when Bun ships no native or Web-standard equivalent (e.g. synchronous `mkdirSync`/`dirname` in `src/lib/db/index.ts`).
 
 ## Configuration (MANDATORY)
 - **`src/config/index.ts` is the single source of ALL configuration across the app** — human decision 2026-08-29. App identity, server, API version, database URL, vault key, asset paths, theme, and observability all flow through the exported `config` object.
@@ -32,6 +32,12 @@
 - Only dedicated ShadCN components. Native `<input>`, `<select>`, `<textarea>`, `<button>` are forbidden.
 - HugeIcons only (no Lucide). Oxanium headings, Space Grotesk body, JetBrains Mono for code.
 - `src/` directory layout: `src/app`, `src/components`, `src/lib`, `src/hooks`.
+- **Design skills (MANDATORY, human decision 2026-08-29):** every website/page/section build runs through the `design-taste-frontend` and `gpt-taste` skills — no templated/generic AI-slop layouts.
+- **Fixed-viewport shell:** the root viewport NEVER scrolls — `overflow-hidden` on the document root and app shell. Only designated inner panels (`overflow-y-auto`) scroll.
+- **Browser work:** always use `agent-browser` for any browser automation, QA, or screenshotting — never other browser tools.
+
+## Code Hygiene
+- **Max 250 lines per file.** Split modules/components before they cross it.
 
 ## Security
 - `access_token` / `refresh_token` always AES-256-GCM encrypted with a unique IV per record; `meta_data` stays plaintext JSON.

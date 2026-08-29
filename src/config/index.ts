@@ -37,6 +37,13 @@ export const config = {
   theme: {
     storageKey: "theme",
   },
+  notion: {
+    clientId: process.env.NOTION_CLIENT_ID ?? "",
+    clientSecret: process.env.NOTION_CLIENT_SECRET ?? "",
+    authorizeUrl: "https://api.notion.com/v1/oauth/authorize",
+    tokenUrl: "https://api.notion.com/v1/oauth/token",
+    redirectPath: "/api/v1/oauth/notion/callback",
+  },
   observability: {
     url: process.env.OPENOBSERVE_URL ?? "",
     org: process.env.OPENOBSERVE_ORG ?? "default",

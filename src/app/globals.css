@@ -137,4 +137,9 @@
   h4 {
     @apply font-heading;
   }
+  /* RULES.md: the root viewport never scrolls; only designated inner panels do. */
+  html,
+  body {
+    @apply h-full overflow-hidden;
+  }
 }

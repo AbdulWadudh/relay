@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-08-29
+### Task 2: Credentials Dashboard & Notion OAuth
+- Encrypted credentials vault service with single-tenant user bootstrap; masked API (`GET/POST /api/v1/credentials`, `DELETE /:id`) and Notion OAuth flow (`/api/v1/oauth/notion` + callback) with CSRF state cookie.
+- Fixed-viewport dashboard shell (root never scrolls) with sidebar navigation; `/vault` page: credentials table, add-key dialog, delete confirmation, OAuth result toasts — ShadCN + HugeIcons throughout.
+- New rules: design-taste-frontend + gpt-taste for all UI, 250-line file cap, agent-browser for browser work.
+
 ## [0.1.0] - 2026-08-29
 ### Task 1: Foundation & Database
 - Scaffolded Next.js App Router + Tailwind v4 + ShadCN (preset `b5pFrsf5Vq`: mira/zinc/emerald, HugeIcons, RTL) under Bun with a `src/` layout.

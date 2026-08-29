@@ -4,6 +4,7 @@ import { JetBrains_Mono, Oxanium, Space_Grotesk } from "next/font/google"
 import "./globals.css"
 import { TelemetryProvider } from "@/components/telemetry-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toast"
 import config from "@/config"
 import { cn } from "@/lib/utils"
 
@@ -54,7 +55,9 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider storageKey={config.theme.storageKey}>
-          <TelemetryProvider>{children}</TelemetryProvider>
+          <TelemetryProvider>
+            <Toaster>{children}</Toaster>
+          </TelemetryProvider>
         </ThemeProvider>
       </body>
     </html>
