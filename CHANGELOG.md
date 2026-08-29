@@ -8,7 +8,8 @@ All notable changes to this project will be documented in this file.
 - Created the `relay` environment under the Coolify `Apps` project.
 - Added the SQLite driver required by Drizzle Kit and a containerized Drizzle Studio service on port `4983`.
 - Switched the remote database browser to Drizzle Gateway, with read-only access to the Relay SQLite volume.
-- Configured Coolify to generate and inject the Drizzle Gateway master password automatically.
+- Configured Coolify to require and inject the Drizzle Gateway master password through `STUDIO_PASSWORD`.
+- Aligned the Studio service with Coolify's Gateway pattern: pinned image, generated port-qualified FQDN, persistent store, and required password.
 
 ## [0.2.0] - 2026-08-29
 ### Task 2: Credentials Dashboard & Notion OAuth

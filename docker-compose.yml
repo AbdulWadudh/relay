@@ -33,21 +33,20 @@ services:
     volumes:
       - relay_data:/app/data
 
-  drizzle-studio:
-    image: ghcr.io/drizzle-team/gateway:latest
+  studio:
+    image: ghcr.io/drizzle-team/gateway:1.4.1
     restart: unless-stopped
-    ports:
-      - "4983:4983"
     environment:
-      PORT: "4983"
+      SERVICE_FQDN_STUDIO_4983: /
+      PORT: 4983
       STORE_PATH: /app
-      MASTERPASS: ${SERVICE_PASSWORD_DRIZZLE_GATEWAY}
+      MASTERPASS: "${STUDIO_PASSWORD:?generate one with openssl rand -base64 24}"
     depends_on:
       relay:
         condition: service_healthy
     volumes:
       - drizzle_gateway:/app
-      - relay_data:/databases:ro
+      - relay_data:/databases
 
 volumes:
   relay_data:
