@@ -34,19 +34,20 @@ services:
       - relay_data:/app/data
 
   drizzle-studio:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/drizzle-team/gateway:latest
     restart: unless-stopped
-    command: bunx --bun drizzle-kit studio --host=0.0.0.0 --port=4983
     expose:
       - "4983"
     environment:
-      DATABASE_URL: file:/app/data/local.db
+      PORT: "4983"
+      MASTERPASS: ${DRIZZLE_MASTERPASS:?}
     depends_on:
-      - relay
+      relay:
+        condition: service_healthy
     volumes:
-      - relay_data:/app/data
+      - drizzle_gateway:/app
+      - relay_data:/databases:ro
 
 volumes:
   relay_data:
+  drizzle_gateway:
