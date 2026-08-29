@@ -1,27 +1,36 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
-
 /**
- * AES-256-GCM credential encryption (TRD §4).
+ * AES-256-GCM credential encryption (TRD §4) — Bun-native WebCrypto.
  *
- * - Cipher: AES-256-GCM, unique 96-bit IV per record.
- * - Key: 32-byte hex string in MASTER_ENCRYPTION_KEY (.env.local).
- * - Storage format: base64(ciphertext || authTag) in the encrypted column,
- *   hex IV in the `iv` column. The 16-byte GCM auth tag is appended to the
- *   ciphertext so tampering is detected on decrypt without a schema change.
+ * Zero `node:*` imports (RULES.md): uses `crypto.subtle` for AES-GCM,
+ * `crypto.getRandomValues` for unique 96-bit IVs per record, and Bun's
+ * native `Uint8Array` hex/base64 codecs.
+ *
+ * Storage format (unchanged): WebCrypto appends the 16-byte GCM auth tag
+ * to the ciphertext, so the encrypted column holds
+ * base64(ciphertext || authTag) and the `iv` column holds the hex IV.
+ * Decrypting a tampered payload throws, so integrity is always verified.
  */
 
-const ALGORITHM = "aes-256-gcm"
 const IV_LENGTH = 12
-const AUTH_TAG_LENGTH = 16
 
-function getMasterKey(): Buffer {
+let cachedKey: CryptoKey | null = null
+
+async function getMasterKey(): Promise<CryptoKey> {
+  if (cachedKey) return cachedKey
   const hex = process.env.MASTER_ENCRYPTION_KEY
   if (!hex || !/^[0-9a-fA-F]{64}$/.test(hex)) {
     throw new Error(
-      "MASTER_ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Generate one with: bun -e \"console.log(require('node:crypto').randomBytes(32).toString('hex'))\"",
+      'MASTER_ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Generate one with: bun -e "console.log(crypto.getRandomValues(new Uint8Array(32)).toHex())"',
     )
   }
-  return Buffer.from(hex, "hex")
+  cachedKey = await crypto.subtle.importKey(
+    "raw",
+    Uint8Array.fromHex(hex),
+    "AES-GCM",
+    false,
+    ["encrypt", "decrypt"],
+  )
+  return cachedKey
 }
 
 export interface EncryptedPayload {
@@ -31,29 +40,27 @@ export interface EncryptedPayload {
   iv: string
 }
 
-export function encrypt(plaintext: string): EncryptedPayload {
-  const key = getMasterKey()
-  const iv = randomBytes(IV_LENGTH)
-  const cipher = createCipheriv(ALGORITHM, key, iv)
-  const encrypted = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ])
-  const withTag = Buffer.concat([encrypted, cipher.getAuthTag()])
-  return { ciphertext: withTag.toString("base64"), iv: iv.toString("hex") }
+export async function encrypt(plaintext: string): Promise<EncryptedPayload> {
+  const key = await getMasterKey()
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH))
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(plaintext),
+  )
+  return { ciphertext: new Uint8Array(encrypted).toBase64(), iv: iv.toHex() }
 }
 
-export function decrypt(ciphertext: string, ivHex: string): string {
-  const key = getMasterKey()
-  const raw = Buffer.from(ciphertext, "base64")
-  if (raw.length < AUTH_TAG_LENGTH) {
-    throw new Error("Ciphertext payload is too short to contain an auth tag")
-  }
-  const authTag = raw.subarray(raw.length - AUTH_TAG_LENGTH)
-  const encrypted = raw.subarray(0, raw.length - AUTH_TAG_LENGTH)
-  const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(ivHex, "hex"))
-  decipher.setAuthTag(authTag)
-  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString(
-    "utf8",
+/** Throws on tampered or corrupted payloads (GCM auth tag mismatch). */
+export async function decrypt(
+  ciphertext: string,
+  ivHex: string,
+): Promise<string> {
+  const key = await getMasterKey()
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: Uint8Array.fromHex(ivHex) },
+    key,
+    Uint8Array.fromBase64(ciphertext),
   )
+  return new TextDecoder().decode(decrypted)
 }

@@ -1,8 +1,10 @@
 // One-off Task 1 verification: schema creation + AES-256-GCM roundtrip.
 // Run: bun scripts/smoke-test.ts
-import { randomBytes } from "node:crypto"
+export {}
 
-process.env.MASTER_ENCRYPTION_KEY ??= randomBytes(32).toString("hex")
+process.env.MASTER_ENCRYPTION_KEY ??= crypto
+  .getRandomValues(new Uint8Array(32))
+  .toHex()
 process.env.RELAY_DB_PATH = "./data/smoke-test.db"
 
 const { getDb } = await import("../src/lib/db/index.ts")
@@ -26,15 +28,21 @@ console.log("tables:", tables.join(", "))
 console.log("indexes:", indexes.join(", "))
 
 const secret = "sk-super-secret-token-123"
-const enc = encrypt(secret)
-console.log("crypto roundtrip:", decrypt(enc.ciphertext, enc.iv) === secret ? "OK" : "FAIL")
-console.log("iv uniqueness:", encrypt("x").iv !== encrypt("x").iv ? "OK" : "FAIL")
+const enc = await encrypt(secret)
+console.log(
+  "crypto roundtrip:",
+  (await decrypt(enc.ciphertext, enc.iv)) === secret ? "OK" : "FAIL",
+)
+console.log(
+  "iv uniqueness:",
+  (await encrypt("x")).iv !== (await encrypt("x")).iv ? "OK" : "FAIL",
+)
 
-// Tamper detection: flip a ciphertext byte, expect auth failure.
-const raw = Buffer.from(enc.ciphertext, "base64")
+// Tamper detection: flip a ciphertext byte, expect GCM auth failure.
+const raw = Uint8Array.fromBase64(enc.ciphertext)
 raw[0] ^= 0xff
 try {
-  decrypt(raw.toString("base64"), enc.iv)
+  await decrypt(raw.toBase64(), enc.iv)
   console.log("tamper detection: FAIL (decrypted tampered payload)")
 } catch {
   console.log("tamper detection: OK")

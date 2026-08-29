@@ -39,7 +39,7 @@ function getConfig(): OpenObserveConfig | null {
   return {
     url: url.replace(/\/$/, ""),
     org: process.env.OPENOBSERVE_ORG ?? "default",
-    auth: Buffer.from(`${user}:${token}`).toString("base64"),
+    auth: btoa(`${user}:${token}`),
   }
 }
 

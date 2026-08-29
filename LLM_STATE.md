@@ -2,11 +2,7 @@
 
 - **Current Phase:** AWAITING HUMAN APPROVAL — Task 1 complete, ready to begin Task 2 (Credentials Dashboard & Notion OAuth) upon approval.
 - **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**
-- **Active Circuit Breakers:**
-  - Max 3 files modified per execution step.
-  - Must run `bun run typecheck` with 0 errors before presenting completion.
-  - Must update `LLM_STATE.md`, commit code locally, and **STOP** for human approval after completing each task.
-  - No ghost dependencies (`bun add` or `npm install` without explicit human clearance).
+- **Active Circuit Breakers:** See `RULES.md` (canonical) — max 3 files/step, `bun run typecheck` 0 errors, commit + STOP per task, no ghost dependencies, **Bun-first: Bun-native/Web-standard APIs only; `node:*` compat only where Bun ships no equivalent, with justifying comment; raw `bun:sqlite`, no ORM.**
 
 ## Task 1 Completion Notes (2026-08-29)
 

@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { JetBrains_Mono, Oxanium, Space_Grotesk } from "next/font/google"
 
 import "./globals.css"
@@ -19,6 +20,15 @@ const fontMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
 })
+
+export const metadata: Metadata = {
+  title: {
+    default: "Relay",
+    template: "%s · Relay",
+  },
+  description:
+    "Self-hosted bridge from short-form video to structured Notion pages — evidence-grounded extraction, BYOK, local media processing.",
+}
 
 export default function RootLayout({
   children,

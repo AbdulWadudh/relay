@@ -1,4 +1,6 @@
 import { Database } from "bun:sqlite"
+// node:fs / node:path are Bun's own native implementations (RULES.md §Bun-first):
+// Bun ships no separate synchronous mkdir/dirname API.
 import { mkdirSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 
