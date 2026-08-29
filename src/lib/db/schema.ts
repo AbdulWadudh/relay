@@ -27,7 +27,11 @@ export const credentials = sqliteTable(
     accessToken: text("access_token").notNull(), // AES-256-GCM encrypted
     refreshToken: text("refresh_token"), // AES-256-GCM encrypted, nullable
     expiresAt: integer("expires_at"), // Unix timestamp in ms, nullable
-    metaData: text("meta_data"), // Plaintext JSON (workspace_id, bot_id, scopes, ...)
+    // Plaintext JSON (workspace_id, bot_id, scopes, ...) — TEXT on disk,
+    // auto parse/stringify + typing via Drizzle json mode.
+    metaData: text("meta_data", { mode: "json" }).$type<
+      Record<string, unknown>
+    >(),
     iv: text("iv").notNull(), // Unique AES-256-GCM initialization vector
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
@@ -46,7 +50,10 @@ export const agents = sqliteTable("agents", {
   type: text("type", { enum: ["system", "human"] }).notNull(),
   name: text("name").notNull(),
   systemPrompt: text("system_prompt").notNull(),
-  expectedOutputSchema: text("expected_output_schema").notNull(), // JSON Schema string
+  // JSON Schema object — TEXT on disk via Drizzle json mode.
+  expectedOutputSchema: text("expected_output_schema", { mode: "json" })
+    .$type<Record<string, unknown>>()
+    .notNull(),
   isActive: integer("is_active").default(1).notNull(),
   createdAt: integer("created_at").notNull(),
 })

@@ -27,14 +27,8 @@ export type CredentialInput = z.infer<typeof credentialInputSchema>
 export const agentInputSchema = z.object({
   name: z.string().min(1).max(120),
   systemPrompt: z.string().min(1),
-  expectedOutputSchema: z.string().refine((s) => {
-    try {
-      JSON.parse(s)
-      return true
-    } catch {
-      return false
-    }
-  }, "must be a valid JSON Schema string"),
+  // JSON Schema object; persisted via the schema's json-mode column.
+  expectedOutputSchema: z.record(z.string(), z.unknown()),
   isActive: z.boolean().default(true),
 })
 
