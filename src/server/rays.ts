@@ -16,7 +16,7 @@ import {
 
 /**
  * Rays are Relay's integrations. These routes use OAuth 2.0 underneath:
- * /rays/:provider and /rays/:provider/callback for every provider.
+ * /rays/oauth/:provider and /rays/oauth/:provider/callback for every provider.
  * CSRF protection via a short-lived, provider-scoped state cookie.
  * Exchanged tokens go encrypted into the vault; tokens are never logged.
  */

@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 
 /**
  * "Add Ray" dialog: one card per catalog provider. Available +
- * configured cards launch the generic /rays/:provider flow; available
+ * configured cards launch the generic /rays/oauth/:provider flow; available
  * but unconfigured cards hint at the missing env; the rest show "Soon".
  */
 
@@ -73,7 +73,7 @@ function ProviderCard({
   if (enabled) {
     return (
       <a
-        href={`/api/v1/rays/${provider.id}`}
+        href={`/api/v1/rays/oauth/${provider.id}`}
         style={{ animationDelay: `${index * 70}ms` }}
         className={cn(base, "active:scale-[0.98]", provider.accent)}
       >

@@ -59,8 +59,8 @@ All routes are mounted at `/api/v1/*`.
 ### Auth & Credential Vault
 - `POST /api/v1/credentials` - Encrypt and persist provider API keys.
 - `GET /api/v1/credentials` - Retrieve masked status list of configured providers.
-- `GET /api/v1/rays/notion` - Generate and redirect to Notion authorization URL.
-- `GET /api/v1/rays/notion/callback` - Exchange the provider authorization code, split encrypted tokens from metadata, and persist to `credentials`.
+- `GET /api/v1/rays/oauth/notion` - Generate and redirect to Notion authorization URL.
+- `GET /api/v1/rays/oauth/notion/callback` - Exchange the provider authorization code, split encrypted tokens from metadata, and persist to `credentials`.
 
 ### Agent Management
 - `GET /api/v1/agents` - List all System and Human agents.
@@ -99,7 +99,7 @@ All routes are mounted at `/api/v1/*`.
 ### Task 2: Credentials Dashboard & Notion Ray
 - Build Key Management UI using strictly ShadCN components.
 - Implement `/api/v1/credentials` routes with input encryption.
-- Implement `/api/v1/rays/notion` and `/api/v1/rays/notion/callback` flow.
+- Implement `/api/v1/rays/oauth/notion` and `/api/v1/rays/oauth/notion/callback` flow.
 
 ### Task 3: Agent Management System
 - Build Agent Dashboard UI with GSAP micro-interactions.

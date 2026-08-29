@@ -4,7 +4,7 @@ import type { RayProviderId } from "@/lib/providers"
 /**
  * Ray provider registry. Adding a provider (e.g. Google Docs/Sheets):
  * add its id to RAY_PROVIDERS in src/lib/providers.ts, its env vars to
- * src/config, and one entry here — the /rays/:provider routes are fully
+ * src/config, and one entry here — the /rays/oauth/:provider routes are fully
  * generic.
  */
 
@@ -96,7 +96,7 @@ export function configuredRayIds(): string[] {
 }
 
 export function redirectUri(provider: RayProvider): string {
-  return `${config.app.baseUrl}/api/v1/rays/${provider.name}/callback`
+  return `${config.app.baseUrl}/api/v1/rays/oauth/${provider.name}/callback`
 }
 
 export function stateCookieName(provider: RayProvider): string {

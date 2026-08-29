@@ -25,7 +25,7 @@ app.use("*", openObserveMiddleware())
 
 app.route("/credentials", credentialsModule)
 // Rays are Relay's public integration routes; OAuth is the underlying protocol.
-app.route("/rays", raysModule)
+app.route("/rays/oauth", raysModule)
 
 app.get("/health", (c) => {
   const db = getDb()

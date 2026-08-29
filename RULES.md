@@ -48,7 +48,7 @@
 ## Code Hygiene
 - **Max 250 lines per file.** Split modules/components before they cross it.
 - **Backend naming:** there is exactly ONE Hono app (mounted in `src/app/api/v1/[[...route]]/route.ts`). Everything under `src/server/` is a *module* (`credentialsModule`, `raysModule`, ...) — never name sub-routers "app".
-- **Rays are provider-generic:** flows go through the registry in `src/server/ray-providers.ts` (`/rays/:provider`); no provider-specific routes, cookies, or hardcoded provider strings in flow logic.
+- **Rays are provider-generic:** flows go through the registry in `src/server/ray-providers.ts` (`/rays/oauth/:provider`); no provider-specific routes, cookies, or hardcoded provider strings in flow logic.
 - **Provider-specific concepts NEVER leak into common files** (human decision 2026-08-29): registry entries map provider vocabulary (e.g. Notion's workspace) onto the generic `account_id` / `account_name` / `account_email` / `account_avatar` meta keys; the vault, routes, and UI consume ONLY the generic keys.
 
 ## Security

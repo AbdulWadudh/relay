@@ -42,7 +42,7 @@
 
 ### 4.4 BYOK Vault & Notion Integration (P0)
 - **Encrypted Credential Vault:** Secure at-rest storage (AES-256-GCM) for third-party AI provider keys and Notion Ray tokens.
-- **Notion Ray:** Native OAuth 2.0 authorization flow (`/api/v1/rays/notion/callback`) with workspace selection and database mapping.
+- **Notion Ray:** Native OAuth 2.0 authorization flow (`/api/v1/rays/oauth/notion/callback`) with workspace selection and database mapping.
 - **Structured Page Publishing:** Automated block and property layout creation in Notion with toggleable evidence callouts.
 
 ### 4.5 Observability & UI (P0)

@@ -145,7 +145,7 @@ export function CredentialsTable({
                             aria-label={`Reconnect ${providerLabel(credential.provider)}`}
                             render={
                               <a
-                                href={`/api/v1/rays/${credential.provider}`}
+                                href={`/api/v1/rays/oauth/${credential.provider}`}
                               />
                             }
                           />

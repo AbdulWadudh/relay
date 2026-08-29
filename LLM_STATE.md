@@ -6,7 +6,7 @@
 ## Task 2 Completion Notes (2026-08-29)
 
 - **Vault service** `src/lib/vault.ts`: create/list/delete credentials + `getAccessToken`; single-tenant local user bootstrap (`users` row `local`). Refresh tokens stored self-contained as `ivHex:cipherB64` (GCM IVs must never be reused; TRD's single `iv` column serves the access token).
-- **API**: `GET/POST /api/v1/credentials`, `DELETE /api/v1/credentials/:id` (Zod-validated, masked responses); `GET /api/v1/rays/notion` + `/callback` (state cookie CSRF, token exchange, encrypted persist, redirect to /vault with `?connected`/`?error`).
+- **API**: `GET/POST /api/v1/credentials`, `DELETE /api/v1/credentials/:id` (Zod-validated, masked responses); `GET /api/v1/rays/oauth/notion` + `/callback` (state cookie CSRF, token exchange, encrypted persist, redirect to /vault with `?connected`/`?error`).
 - **Config**: `config.notion` section (NOTION_CLIENT_ID/SECRET env vars).
 - **UI**: fixed-viewport app shell (`src/components/app-shell.tsx`, root never scrolls — only ShellContent scrolls); `(dashboard)` route group; `/vault` page with credentials table, empty state, Add API Key dialog (ShadCN Field/Select/Input), delete confirmation, toasts; Connect Notion disabled with hint until Ray env is set. Built under design-taste-frontend + gpt-taste constraints; all authored files < 250 lines.
 - **QA (agent-browser)**: add-key → encrypted row → delete round-trip verified in the running app; Select label bug and unconfigured-Notion UX fixed from findings.
