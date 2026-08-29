@@ -117,9 +117,47 @@ export const logger = {
   error: log("error"),
 }
 
+const SENSITIVE_FIELD =
+  /(^|_)(password|secret|token|authorization|cookie|code|key)(_|$)/i
+const MAX_TRACE_BODY_LENGTH = 8_192
+
+export function redactLogValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactLogValue)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      SENSITIVE_FIELD.test(key) ? "[REDACTED]" : redactLogValue(item),
+    ]),
+  )
+}
+
+async function traceBody(
+  body: ReadableStream<Uint8Array> | null,
+  contentType: string | undefined,
+): Promise<unknown> {
+  if (!body || !contentType?.match(/json|text|form-urlencoded/i)) return undefined
+  try {
+    const text = await new Response(body).text()
+    if (text.length > MAX_TRACE_BODY_LENGTH) {
+      return `${text.slice(0, MAX_TRACE_BODY_LENGTH)}…[truncated]`
+    }
+    if (contentType.includes("json")) {
+      return redactLogValue(JSON.parse(text))
+    }
+    return redactLogValue(Object.fromEntries(new URLSearchParams(text)))
+  } catch {
+    return "[unavailable]"
+  }
+}
+
 export function openObserveMiddleware(): MiddlewareHandler {
   return async (c, next) => {
     const start = performance.now()
+    const requestBody = await traceBody(
+      c.req.raw.clone().body,
+      c.req.header("content-type"),
+    )
     try {
       await next()
     } catch (error) {
@@ -133,9 +171,24 @@ export function openObserveMiddleware(): MiddlewareHandler {
     }
     const duration_ms = Math.round(performance.now() - start)
     const status = c.res.status
+    const responseBody = await traceBody(
+      c.res.clone().body,
+      c.res.headers.get("content-type") ?? undefined,
+    )
     logger[status >= 500 ? "error" : status >= 400 ? "warn" : "info"](
       "HTTP request",
-      { method: c.req.method, path: c.req.path, status, duration_ms },
+      {
+        method: c.req.method,
+        path: c.req.path,
+        query: redactLogValue(
+          Object.fromEntries(new URL(c.req.url).searchParams),
+        ),
+        status,
+        duration_ms,
+        request_body: requestBody,
+        response_body: responseBody,
+        response_content_type: c.res.headers.get("content-type"),
+      },
     )
   }
 }
