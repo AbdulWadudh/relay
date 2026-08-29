@@ -50,6 +50,13 @@
       "when": 1788030700000,
       "tag": "0006_rename-oauth-credentials-to-rays",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1788030800000,
+      "tag": "0007_restore-oauth-credential-type",
+      "breakpoints": true
     }
   ]
 }

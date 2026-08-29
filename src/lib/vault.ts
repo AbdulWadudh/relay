@@ -16,7 +16,7 @@ import type { CredentialInput } from "@/lib/schemas"
 
 export interface MaskedCredential {
   id: string
-  type: "api_key" | "ray"
+  type: "api_key" | "oauth"
   provider: string
   expiresAt: number | null
   metaData: Record<string, unknown> | null

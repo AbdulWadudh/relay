@@ -113,7 +113,7 @@ export function CredentialsTable({
                 {providerLabel(credential.provider)}
               </TableCell>
               <TableCell>
-                {credential.type === "ray" ? (
+                {credential.type === "oauth" ? (
                   <Badge className="border-violet-500/30 bg-violet-500/15 text-violet-300 transition-all duration-200 hover:bg-violet-500/25 hover:shadow-[0_0_10px_-2px_rgba(167,139,250,0.5)]">
                     Ray
                   </Badge>
@@ -133,7 +133,7 @@ export function CredentialsTable({
               </TableCell>
               <TableCell>
                 <div className="flex items-center justify-end gap-1">
-                  {credential.type === "ray" ? (
+                  {credential.type === "oauth" ? (
                     <Tooltip>
                       <TooltipTrigger
                         render={

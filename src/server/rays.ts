@@ -110,7 +110,7 @@ raysModule.get("/:provider/callback", async (c) => {
 
   await createCredential(
     {
-      type: "ray",
+      type: "oauth",
       provider: provider.name,
       accessToken: token.access_token,
       refreshToken: token.refresh_token,

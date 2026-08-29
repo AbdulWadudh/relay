@@ -16,7 +16,7 @@ export const telemetryEventSchema = z.looseObject({
 export type TelemetryEvent = z.infer<typeof telemetryEventSchema>
 
 export const credentialInputSchema = z.object({
-  type: z.enum(["api_key", "ray"]),
+  type: z.enum(["api_key", "oauth"]),
   provider: z.enum(PROVIDER_IDS),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1).optional(),
