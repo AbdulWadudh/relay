@@ -25,5 +25,20 @@ services:
     volumes:
       - relay_data:/app/data
 
+  drizzle-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: bunx --bun drizzle-kit studio --host=0.0.0.0 --port=4983
+    expose:
+      - "4983"
+    environment:
+      DATABASE_URL: file:/app/data/local.db
+    depends_on:
+      - relay
+    volumes:
+      - relay_data:/app/data
+
 volumes:
   relay_data:

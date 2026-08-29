@@ -7,7 +7,7 @@ export default defineConfig({
   schema: "./src/lib/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    // bun:sqlite opens a plain file path, not a file: URL.
-    url: config.database.url.replace(/^file:/, ""),
+    // Drizzle Kit's SQLite driver expects the file: URL format.
+    url: config.database.url,
   },
 })

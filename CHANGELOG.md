@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 ### Deployment
 - Added production Docker and Docker Compose configuration for Coolify, including persistent SQLite storage and runtime environment variable wiring.
 - Created the `relay` environment under the Coolify `Apps` project.
+- Added the SQLite driver required by Drizzle Kit and a containerized Drizzle Studio service on port `4983`.
 
 ## [0.2.0] - 2026-08-29
 ### Task 2: Credentials Dashboard & Notion OAuth
