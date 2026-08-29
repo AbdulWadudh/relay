@@ -1,7 +1,42 @@
 import type { NextFetchEvent, NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
-import { logger, redactLogValue } from "@/lib/observability/logger"
+const SENSITIVE_FIELD =
+  /(^|_)(password|secret|token|authorization|cookie|code|key)(_|$)/i
+
+function redact(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redact)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      SENSITIVE_FIELD.test(key) ? "[REDACTED]" : redact(item),
+    ]),
+  )
+}
+
+function sendTrace(event: Record<string, unknown>) {
+  const url = process.env.OPENOBSERVE_URL?.replace(/\/$/, "")
+  const token = process.env.OPENOBSERVE_TOKEN
+  const org = process.env.OPENOBSERVE_ORG ?? "default"
+  if (!url || !token) {
+    console.log(JSON.stringify(event))
+    return
+  }
+  return fetch(`${url}/api/${org}/relay_server/_json`, {
+    method: "POST",
+    headers: {
+      Authorization: token,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify([event]),
+  }).catch((error) => {
+    console.error(
+      "[observability] OpenObserve proxy ingest failed:",
+      error instanceof Error ? error.message : String(error),
+    )
+  })
+}
 
 /**
  * Global request boundary for Next.js. API responses are measured again by
@@ -14,20 +49,21 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
   const startedAt = performance.now()
 
   event.waitUntil(
-    Promise.resolve().then(() => {
-      logger.info("HTTP request received", {
+    Promise.resolve(sendTrace({
+        level: "info",
+        message: "HTTP request received",
+        service: "relay-api",
         request_id: requestId,
         method: request.method,
         path: request.nextUrl.pathname,
-        query: redactLogValue(
+        query: redact(
           Object.fromEntries(request.nextUrl.searchParams),
         ),
         user_agent: request.headers.get("user-agent") ?? undefined,
         content_type: request.headers.get("content-type") ?? undefined,
         started_at: Date.now(),
         proxy_duration_ms: Math.round(performance.now() - startedAt),
-      })
-    }),
+      })),
   )
 
   const response = NextResponse.next()
