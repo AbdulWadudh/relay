@@ -24,7 +24,9 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 COPY . .
-RUN bun run build
+# Keep the complete compiler output visible in Coolify when BuildKit only
+# reports the outer `RUN` failure.
+RUN bun run build > /tmp/relay-build.log 2>&1 || (cat /tmp/relay-build.log && exit 1)
 
 EXPOSE 3000
 
