@@ -36,10 +36,11 @@ services:
   drizzle-studio:
     image: ghcr.io/drizzle-team/gateway:latest
     restart: unless-stopped
-    expose:
-      - "4983"
+    ports:
+      - "4983:4983"
     environment:
       PORT: "4983"
+      STORE_PATH: /app
       MASTERPASS: ${SERVICE_PASSWORD_DRIZZLE_GATEWAY}
     depends_on:
       relay:
