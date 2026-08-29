@@ -4,7 +4,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 import config from "@/config"
 import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
-import { oauthCallbackSchema } from "@/lib/schemas"
+import { rayCallbackSchema } from "@/lib/schemas"
 import { createCredential } from "@/lib/vault"
 import {
   getProvider,
@@ -12,29 +12,29 @@ import {
   redirectUri,
   stateCookieName,
   type TokenResponse,
-} from "@/server/oauth-providers"
+} from "@/server/ray-providers"
 
 /**
- * Generic OAuth 2.0 routes (TRD §3, PRD §4.4): /oauth/:provider and
- * /oauth/:provider/callback for every entry in the provider registry.
+ * Rays are Relay's integrations. These routes use OAuth 2.0 underneath:
+ * /rays/:provider and /rays/:provider/callback for every provider.
  * CSRF protection via a short-lived, provider-scoped state cookie.
  * Exchanged tokens go encrypted into the vault; tokens are never logged.
  */
 
 const VAULT_PATH = "/vault"
 
-export const oauthModule = new Hono()
+export const raysModule = new Hono()
 
-oauthModule.get("/:provider", (c) => {
+raysModule.get("/:provider", (c) => {
   const sessionPromise = getRequestSession(c.req.raw.headers)
   return sessionPromise.then((session) => {
     if (!session) return c.redirect("/login")
     const provider = getProvider(c.req.param("provider"))
-    if (!provider) return c.json({ error: "Unknown OAuth provider" }, 404)
+    if (!provider) return c.json({ error: "Unknown Ray provider" }, 404)
     if (!isConfigured(provider)) {
       return c.json(
         {
-          error: `${provider.name} OAuth is not configured (client id/secret)`,
+          error: `${provider.name} Ray is not configured (client id/secret)`,
         },
         503,
       )
@@ -62,13 +62,13 @@ oauthModule.get("/:provider", (c) => {
   })
 })
 
-oauthModule.get("/:provider/callback", async (c) => {
+raysModule.get("/:provider/callback", async (c) => {
   const session = await getRequestSession(c.req.raw.headers)
   if (!session) return c.redirect("/login")
   const provider = getProvider(c.req.param("provider"))
-  if (!provider) return c.json({ error: "Unknown OAuth provider" }, 404)
+  if (!provider) return c.json({ error: "Unknown Ray provider" }, 404)
 
-  const parsed = oauthCallbackSchema.safeParse({
+  const parsed = rayCallbackSchema.safeParse({
     code: c.req.query("code"),
     state: c.req.query("state"),
   })
@@ -77,7 +77,7 @@ oauthModule.get("/:provider/callback", async (c) => {
   deleteCookie(c, cookie, { path: "/" })
 
   if (!parsed.success || !cookieState || parsed.data.state !== cookieState) {
-    logger.warn("OAuth rejected", {
+    logger.warn("Ray authorization rejected", {
       provider: provider.name,
       reason: "state_mismatch",
     })
@@ -99,7 +99,7 @@ oauthModule.get("/:provider/callback", async (c) => {
   })
 
   if (!response.ok) {
-    logger.error("OAuth token exchange failed", {
+    logger.error("Ray token exchange failed", {
       provider: provider.name,
       status: response.status,
     })
@@ -110,7 +110,7 @@ oauthModule.get("/:provider/callback", async (c) => {
 
   await createCredential(
     {
-      type: "oauth",
+      type: "ray",
       provider: provider.name,
       accessToken: token.access_token,
       refreshToken: token.refresh_token,
@@ -121,6 +121,6 @@ oauthModule.get("/:provider/callback", async (c) => {
     },
     session.user.id,
   )
-  logger.info("OAuth workspace connected", { provider: provider.name })
+  logger.info("Ray workspace connected", { provider: provider.name })
   return c.redirect(`${VAULT_PATH}?connected=${provider.name}`)
 })

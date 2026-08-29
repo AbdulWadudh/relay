@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Scoped credentials and agents to the authenticated user with cascading ownership foreign keys.
 - Added public Privacy Policy, Terms of Service, and branded sign-in pages.
 - Replaced the server logger with Pino and added OpenObserve browser RUM and logs with Coolify build-time public configuration.
+- Rebranded connected integrations as Rays; provider authorization now uses `/api/v1/rays/:provider` and its callback.
 
 ## [0.3.0] - 2026-08-29
 ### Deployment
@@ -19,9 +20,9 @@ All notable changes to this project will be documented in this file.
 - Aligned the Studio service with Coolify's Gateway pattern: pinned image, generated port-qualified FQDN, persistent store, and required password.
 
 ## [0.2.0] - 2026-08-29
-### Task 2: Credentials Dashboard & Notion OAuth
-- Encrypted credentials vault service with single-tenant user bootstrap; masked API (`GET/POST /api/v1/credentials`, `DELETE /:id`) and Notion OAuth flow (`/api/v1/oauth/notion` + callback) with CSRF state cookie.
-- Fixed-viewport dashboard shell (root never scrolls) with sidebar navigation; `/vault` page: credentials table, add-key dialog, delete confirmation, OAuth result toasts — ShadCN + HugeIcons throughout.
+### Task 2: Credentials Dashboard & Notion Ray
+- Encrypted credentials vault service with single-tenant user bootstrap; masked API (`GET/POST /api/v1/credentials`, `DELETE /:id`) and Notion Ray flow (`/api/v1/rays/notion` + callback) with CSRF state cookie.
+- Fixed-viewport dashboard shell (root never scrolls) with sidebar navigation; `/vault` page: credentials table, add-key dialog, delete confirmation, Ray result toasts — ShadCN + HugeIcons throughout.
 - New rules: design-taste-frontend + gpt-taste for all UI, 250-line file cap, agent-browser for browser work.
 
 ## [0.1.0] - 2026-08-29

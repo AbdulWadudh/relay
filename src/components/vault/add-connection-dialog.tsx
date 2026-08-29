@@ -13,12 +13,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { OAUTH_PROVIDERS, type OAuthProviderInfo } from "@/lib/providers"
+import { RAY_PROVIDERS, type RayProviderInfo } from "@/lib/providers"
 import { cn } from "@/lib/utils"
 
 /**
- * "Add Connection" dialog: one card per catalog provider. Available +
- * configured cards launch the generic /oauth/:provider flow; available
+ * "Add Ray" dialog: one card per catalog provider. Available +
+ * configured cards launch the generic /rays/:provider flow; available
  * but unconfigured cards hint at the missing env; the rest show "Soon".
  */
 
@@ -27,7 +27,7 @@ function ProviderCard({
   configured,
   index,
 }: {
-  provider: OAuthProviderInfo
+  provider: RayProviderInfo
   configured: boolean
   index: number
 }) {
@@ -73,7 +73,7 @@ function ProviderCard({
   if (enabled) {
     return (
       <a
-        href={`/api/v1/oauth/${provider.id}`}
+        href={`/api/v1/rays/${provider.id}`}
         style={{ animationDelay: `${index * 70}ms` }}
         className={cn(base, "active:scale-[0.98]", provider.accent)}
       >
@@ -87,7 +87,7 @@ function ProviderCard({
       className={cn(base, "cursor-not-allowed opacity-60")}
       title={
         provider.available
-          ? `Set the ${provider.label} OAuth client id/secret in .env.local first`
+          ? `Set the ${provider.label} Ray client id/secret in .env.local first`
           : `${provider.label} support is on the roadmap`
       }
     >
@@ -116,18 +116,18 @@ export function AddConnectionDialog({
           data-icon="inline-start"
           className="transition-transform duration-300 group-hover/button:rotate-12"
         />
-        Add Connection
+        Add Ray
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-xl">Add a connection</DialogTitle>
+          <DialogTitle className="text-xl">Add a Ray</DialogTitle>
           <DialogDescription className="text-sm">
             Connect a destination workspace. Tokens are encrypted with
             AES-256-GCM and connecting again adds another account.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
-          {OAUTH_PROVIDERS.map((provider, index) => (
+          {RAY_PROVIDERS.map((provider, index) => (
             <ProviderCard
               key={provider.id}
               provider={provider}

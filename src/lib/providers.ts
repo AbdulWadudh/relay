@@ -10,12 +10,12 @@ import type { IconSvgElement } from "@hugeicons/react"
 /**
  * Single source of truth for credential providers (RULES.md: no
  * hardcoding). Adding a provider means editing THIS file only — the Zod
- * schema, vault typing, OAuth registry keys, and UI (labels, icons,
+ * schema, Ray registry keys, and UI (labels, icons,
  * descriptions, accent styling) all derive from these lists.
  *
- * `available: false` renders a "Soon" card in the Add Connection dialog;
+ * `available: false` renders a "Soon" card in the Add Ray dialog;
  * flipping it on requires a matching registry entry in
- * src/server/oauth-providers.ts plus its env vars in src/config.
+ * src/server/ray-providers.ts plus its env vars in src/config.
  */
 
 export const AI_KEY_PROVIDERS = [
@@ -24,7 +24,7 @@ export const AI_KEY_PROVIDERS = [
   { id: "gemini", label: "Gemini" },
 ] as const
 
-export interface OAuthProviderInfo {
+export interface RayProviderInfo {
   id: string
   label: string
   description: string
@@ -36,7 +36,7 @@ export interface OAuthProviderInfo {
   tile: string
 }
 
-export const OAUTH_PROVIDERS = [
+export const RAY_PROVIDERS = [
   {
     id: "notion",
     label: "Notion",
@@ -87,12 +87,12 @@ export const OAUTH_PROVIDERS = [
       "hover:border-indigo-400/40 hover:bg-indigo-500/5 hover:shadow-[0_0_20px_-6px_rgba(129,140,248,0.4)]",
     tile: "bg-indigo-500/15 text-indigo-300",
   },
-] as const satisfies readonly OAuthProviderInfo[]
+] as const satisfies readonly RayProviderInfo[]
 
-export const ALL_PROVIDERS = [...AI_KEY_PROVIDERS, ...OAUTH_PROVIDERS] as const
+export const ALL_PROVIDERS = [...AI_KEY_PROVIDERS, ...RAY_PROVIDERS] as const
 
 export type AiKeyProviderId = (typeof AI_KEY_PROVIDERS)[number]["id"]
-export type OAuthProviderId = (typeof OAUTH_PROVIDERS)[number]["id"]
+export type RayProviderId = (typeof RAY_PROVIDERS)[number]["id"]
 export type ProviderId = (typeof ALL_PROVIDERS)[number]["id"]
 
 export const PROVIDER_IDS = ALL_PROVIDERS.map((p) => p.id) as [

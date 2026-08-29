@@ -24,7 +24,7 @@ CREATE TABLE users (
 CREATE TABLE credentials (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type TEXT CHECK(type IN ('api_key', 'oauth')) NOT NULL,
+  type TEXT CHECK(type IN ('api_key', 'ray')) NOT NULL,
   provider TEXT NOT NULL, -- 'openai', 'groq', 'gemini', 'notion'
   access_token TEXT NOT NULL, -- AES-256-GCM Encrypted
   refresh_token TEXT, -- AES-256-GCM Encrypted, Nullable
@@ -59,8 +59,8 @@ All routes are mounted at `/api/v1/*`.
 ### Auth & Credential Vault
 - `POST /api/v1/credentials` - Encrypt and persist provider API keys.
 - `GET /api/v1/credentials` - Retrieve masked status list of configured providers.
-- `GET /api/v1/oauth/notion` - Generate and redirect to Notion OAuth authorization URL.
-- `GET /api/v1/oauth/notion/callback` - Exchange OAuth code, split encrypted tokens from metadata, and persist to `credentials`.
+- `GET /api/v1/rays/notion` - Generate and redirect to Notion authorization URL.
+- `GET /api/v1/rays/notion/callback` - Exchange the provider authorization code, split encrypted tokens from metadata, and persist to `credentials`.
 
 ### Agent Management
 - `GET /api/v1/agents` - List all System and Human agents.
@@ -76,7 +76,7 @@ All routes are mounted at `/api/v1/*`.
   4. Calls Whisper endpoint to obtain raw transcript and timestamped English translation.
   5. Routes payload to selected (or dynamically synthesized) Agent schema.
   6. Enforces evidence citation verification.
-  7. Decrypts Notion OAuth token and publishes formatted page to target Notion database.
+  7. Decrypts the Notion Ray token and publishes formatted page to the target Notion database.
   8. Deletes local temp media files.
 
 ---
@@ -96,10 +96,10 @@ All routes are mounted at `/api/v1/*`.
 - Build AES-256-GCM encryption/decryption utilities.
 - Wire OpenObserve logging provider.
 
-### Task 2: Credentials Dashboard & Notion OAuth
+### Task 2: Credentials Dashboard & Notion Ray
 - Build Key Management UI using strictly ShadCN components.
 - Implement `/api/v1/credentials` routes with input encryption.
-- Implement `/api/v1/oauth/notion` and `/api/v1/oauth/notion/callback` flow.
+- Implement `/api/v1/rays/notion` and `/api/v1/rays/notion/callback` flow.
 
 ### Task 3: Agent Management System
 - Build Agent Dashboard UI with GSAP micro-interactions.

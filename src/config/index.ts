@@ -48,7 +48,7 @@ export const config = {
     clientSecret: process.env.NOTION_CLIENT_SECRET ?? "",
     authorizeUrl: "https://api.notion.com/v1/oauth/authorize",
     tokenUrl: "https://api.notion.com/v1/oauth/token",
-    redirectPath: "/api/v1/oauth/notion/callback",
+    redirectPath: "/api/v1/rays/notion/callback",
   },
   observability: {
     url: process.env.OPENOBSERVE_URL ?? "",

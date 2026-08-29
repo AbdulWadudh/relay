@@ -28,7 +28,7 @@ export const credentials = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => authUsers.id, { onDelete: "cascade" }),
-    type: text("type", { enum: ["api_key", "oauth"] }).notNull(),
+    type: text("type", { enum: ["api_key", "ray"] }).notNull(),
     provider: text("provider").notNull(), // 'openai', 'groq', 'gemini', 'notion'
     accessToken: text("access_token").notNull(), // AES-256-GCM encrypted
     refreshToken: text("refresh_token"), // AES-256-GCM encrypted, nullable

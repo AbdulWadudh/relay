@@ -43,6 +43,13 @@
       "when": 1788030634440,
       "tag": "0005_rename-users-to-auth-users",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788030700000,
+      "tag": "0006_rename-oauth-credentials-to-rays",
+      "breakpoints": true
     }
   ]
 }

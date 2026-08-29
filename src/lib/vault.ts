@@ -16,7 +16,7 @@ import type { CredentialInput } from "@/lib/schemas"
 
 export interface MaskedCredential {
   id: string
-  type: "api_key" | "oauth"
+  type: "api_key" | "ray"
   provider: string
   expiresAt: number | null
   metaData: Record<string, unknown> | null
@@ -56,7 +56,7 @@ export async function createCredential(
   }
   const now = Date.now()
 
-  // Replace scope: API keys are one-per-provider; OAuth credentials are
+  // Replace scope: API keys are one-per-provider; Ray credentials are
   // one-per-account, keyed on the provider-agnostic `account_id` meta key
   // (every registry entry maps its own concept onto it), so multiple
   // accounts of one provider coexist and reconnecting updates in place.

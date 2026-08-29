@@ -113,9 +113,9 @@ export function CredentialsTable({
                 {providerLabel(credential.provider)}
               </TableCell>
               <TableCell>
-                {credential.type === "oauth" ? (
+                {credential.type === "ray" ? (
                   <Badge className="border-violet-500/30 bg-violet-500/15 text-violet-300 transition-all duration-200 hover:bg-violet-500/25 hover:shadow-[0_0_10px_-2px_rgba(167,139,250,0.5)]">
-                    OAuth
+                    Ray
                   </Badge>
                 ) : (
                   <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300 transition-all duration-200 hover:bg-emerald-500/25 hover:shadow-[0_0_10px_-2px_rgba(52,211,153,0.5)]">
@@ -133,7 +133,7 @@ export function CredentialsTable({
               </TableCell>
               <TableCell>
                 <div className="flex items-center justify-end gap-1">
-                  {credential.type === "oauth" ? (
+                  {credential.type === "ray" ? (
                     <Tooltip>
                       <TooltipTrigger
                         render={
@@ -145,7 +145,7 @@ export function CredentialsTable({
                             aria-label={`Reconnect ${providerLabel(credential.provider)}`}
                             render={
                               <a
-                                href={`/api/v1/oauth/${credential.provider}`}
+                                href={`/api/v1/rays/${credential.provider}`}
                               />
                             }
                           />

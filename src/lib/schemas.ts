@@ -16,7 +16,7 @@ export const telemetryEventSchema = z.looseObject({
 export type TelemetryEvent = z.infer<typeof telemetryEventSchema>
 
 export const credentialInputSchema = z.object({
-  type: z.enum(["api_key", "oauth"]),
+  type: z.enum(["api_key", "ray"]),
   provider: z.enum(PROVIDER_IDS),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1).optional(),
@@ -36,7 +36,7 @@ export const agentInputSchema = z.object({
 
 export type AgentInput = z.infer<typeof agentInputSchema>
 
-export const oauthCallbackSchema = z.object({
+export const rayCallbackSchema = z.object({
   code: z.string().min(1),
   state: z.string().min(1),
 })

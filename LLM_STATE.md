@@ -1,14 +1,14 @@
 # LLM Execution State - Relay
 
-- **Current Phase:** AWAITING HUMAN APPROVAL — Task 2 complete, ready to begin Task 3 (Agent Management System) upon approval. Open human decision: whether to adopt better-auth (analysis delivered 2026-08-29; recommendation: keep hand-rolled vault OAuth until multi-user auth is needed).
-- **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion OAuth**
+- **Current Phase:** AWAITING HUMAN APPROVAL — Task 2 complete, ready to begin Task 3 (Agent Management System) upon approval. Open human decision: whether to adopt Better Auth (now implemented for multi-user authentication).
+- **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**
 
 ## Task 2 Completion Notes (2026-08-29)
 
 - **Vault service** `src/lib/vault.ts`: create/list/delete credentials + `getAccessToken`; single-tenant local user bootstrap (`users` row `local`). Refresh tokens stored self-contained as `ivHex:cipherB64` (GCM IVs must never be reused; TRD's single `iv` column serves the access token).
-- **API**: `GET/POST /api/v1/credentials`, `DELETE /api/v1/credentials/:id` (Zod-validated, masked responses); `GET /api/v1/oauth/notion` + `/callback` (state cookie CSRF, token exchange, encrypted persist, redirect to /vault with `?connected`/`?error`).
+- **API**: `GET/POST /api/v1/credentials`, `DELETE /api/v1/credentials/:id` (Zod-validated, masked responses); `GET /api/v1/rays/notion` + `/callback` (state cookie CSRF, token exchange, encrypted persist, redirect to /vault with `?connected`/`?error`).
 - **Config**: `config.notion` section (NOTION_CLIENT_ID/SECRET env vars).
-- **UI**: fixed-viewport app shell (`src/components/app-shell.tsx`, root never scrolls — only ShellContent scrolls); `(dashboard)` route group; `/vault` page with credentials table, empty state, Add API Key dialog (ShadCN Field/Select/Input), delete confirmation, toasts; Connect Notion disabled with hint until OAuth env is set. Built under design-taste-frontend + gpt-taste constraints; all authored files < 250 lines.
+- **UI**: fixed-viewport app shell (`src/components/app-shell.tsx`, root never scrolls — only ShellContent scrolls); `(dashboard)` route group; `/vault` page with credentials table, empty state, Add API Key dialog (ShadCN Field/Select/Input), delete confirmation, toasts; Connect Notion disabled with hint until Ray env is set. Built under design-taste-frontend + gpt-taste constraints; all authored files < 250 lines.
 - **QA (agent-browser)**: add-key → encrypted row → delete round-trip verified in the running app; Select label bug and unconfigured-Notion UX fixed from findings.
 - **Gotchas fixed**: user-added `NODE_ENV=development` in `.env.local` broke `next build` (removed — Next manages NODE_ENV); stale HMR global renamed to `__relayDrizzle`; Biome override for vendored `src/components/ui/**`.
 - **Active Circuit Breakers:** See `RULES.md` (canonical) — max 3 files/step, `bun run typecheck` 0 errors, commit + STOP per task, no ghost dependencies, **Bun-first: Bun-native/Web-standard APIs only; `node:*` compat only where Bun ships no equivalent, with justifying comment; raw `bun:sqlite`, no ORM.**

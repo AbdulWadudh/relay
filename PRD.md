@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD) - Relay
 
 ## 1. Executive Summary
-**Relay** is an open-source, self-hosted web application that acts as an intelligent bridge between short-form video content (Instagram Reels, YouTube Shorts) and Notion. It locally extracts media via `yt-dlp` and `ffmpeg`, transcribes/translates multilingual audio using user-provided API keys (BYOK), routes content through customizable extraction agents (System-built and Human-built), verifies all claims with timestamped evidence quotes, and syncs structured knowledge pages directly to connected Notion databases via OAuth.
+**Relay** is an open-source, self-hosted web application that acts as an intelligent bridge between short-form video content (Instagram Reels, YouTube Shorts) and Notion. It locally extracts media via `yt-dlp` and `ffmpeg`, transcribes/translates multilingual audio using user-provided API keys (BYOK), routes content through customizable extraction agents (System-built and Human-built), verifies all claims with timestamped evidence quotes, and syncs structured knowledge pages directly to connected Notion databases through Rays.
 
 ---
 
@@ -41,8 +41,8 @@
 - **Evidence Verification Layer:** Every extracted property, ingredient, or step must include an `evidence` object containing `timestamp_start`, `timestamp_end`, and `transcript_quote`.
 
 ### 4.4 BYOK Vault & Notion Integration (P0)
-- **Encrypted Credential Vault:** Secure at-rest storage (AES-256-GCM) for third-party AI provider keys and Notion OAuth tokens.
-- **Notion OAuth App:** Native OAuth 2.0 authorization flow (`/api/v1/oauth/notion/callback`) with workspace selection and database mapping.
+- **Encrypted Credential Vault:** Secure at-rest storage (AES-256-GCM) for third-party AI provider keys and Notion Ray tokens.
+- **Notion Ray:** Native OAuth 2.0 authorization flow (`/api/v1/rays/notion/callback`) with workspace selection and database mapping.
 - **Structured Page Publishing:** Automated block and property layout creation in Notion with toggleable evidence callouts.
 
 ### 4.5 Observability & UI (P0)
@@ -62,4 +62,4 @@
 ## 6. Success Metrics
 1. **100% Grounding:** Every extracted entity maps to an exact transcript quote and timestamp range.
 2. **Sub-30s Processing:** End-to-end execution (URL ingestion to Notion page creation) completes in under 30 seconds for standard <60s clips.
-3. **Zero Plaintext Token Exposure:** API keys and OAuth tokens are never logged or exposed in plaintext.
+3. **Zero Plaintext Token Exposure:** API keys and Ray tokens are never logged or exposed in plaintext.

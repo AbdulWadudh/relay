@@ -11,12 +11,12 @@ import {
 } from "@/lib/observability/logger"
 import { telemetryEventSchema } from "@/lib/schemas"
 import { credentialsModule } from "@/server/credentials"
-import { oauthModule } from "@/server/oauth"
+import { raysModule } from "@/server/rays"
 
 /**
  * Hono backend mounted inside the Next.js App Router (TRD §1, §3).
  * All v1 routes live under /api/v1/*; later tasks register credentials,
- * oauth, agents, and relay/process sub-routers here.
+ * rays, agents, and relay/process sub-routers here.
  */
 
 const app = new Hono().basePath(`/api/${config.api.version}`)
@@ -24,7 +24,8 @@ const app = new Hono().basePath(`/api/${config.api.version}`)
 app.use("*", openObserveMiddleware())
 
 app.route("/credentials", credentialsModule)
-app.route("/oauth", oauthModule)
+// Rays are Relay's public integration routes; OAuth is the underlying protocol.
+app.route("/rays", raysModule)
 
 app.get("/health", (c) => {
   const db = getDb()

@@ -154,7 +154,7 @@ function AddCredentialDialog() {
   )
 }
 
-/** Surfaces OAuth redirect results (?connected= / ?error=) as toasts. */
+/** Surfaces Ray redirect results (?connected= / ?error=) as toasts. */
 export function VaultNotices() {
   const params = useSearchParams()
   const router = useRouter()
@@ -170,7 +170,7 @@ export function VaultNotices() {
       toast.add({
         type: "error",
         title: "Notion connection failed",
-        description: "Check the OAuth configuration and try again.",
+        description: "Check this Ray's configuration and try again.",
       })
     }
     router.replace(pathname, { scroll: false })

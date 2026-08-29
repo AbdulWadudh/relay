@@ -1,10 +1,10 @@
 import config from "@/config"
-import type { OAuthProviderId } from "@/lib/providers"
+import type { RayProviderId } from "@/lib/providers"
 
 /**
- * OAuth provider registry. Adding a provider (e.g. Google Docs/Sheets):
- * add its id to OAUTH_PROVIDERS in src/lib/providers.ts, its env vars to
- * src/config, and one entry here — the /oauth/:provider routes are fully
+ * Ray provider registry. Adding a provider (e.g. Google Docs/Sheets):
+ * add its id to RAY_PROVIDERS in src/lib/providers.ts, its env vars to
+ * src/config, and one entry here — the /rays/:provider routes are fully
  * generic.
  */
 
@@ -23,9 +23,9 @@ export interface TokenResponse {
   [key: string]: unknown
 }
 
-export interface OAuthProvider {
+export interface RayProvider {
   /** Vault provider id, derived from the provider catalog. */
-  name: OAuthProviderId
+  name: RayProviderId
   authorizeUrl: string
   tokenUrl: string
   clientId: string
@@ -50,7 +50,7 @@ export interface OAuthProvider {
 }
 
 // Partial: catalog entries flagged `available: false` have no flow yet.
-const providers: Partial<Record<OAuthProviderId, OAuthProvider>> = {
+const providers: Partial<Record<RayProviderId, RayProvider>> = {
   notion: {
     name: "notion",
     authorizeUrl: config.notion.authorizeUrl,
@@ -80,25 +80,25 @@ const providers: Partial<Record<OAuthProviderId, OAuthProvider>> = {
   },
 }
 
-export function getProvider(name: string): OAuthProvider | null {
-  return (providers as Record<string, OAuthProvider | undefined>)[name] ?? null
+export function getProvider(name: string): RayProvider | null {
+  return (providers as Record<string, RayProvider | undefined>)[name] ?? null
 }
 
-export function isConfigured(provider: OAuthProvider): boolean {
+export function isConfigured(provider: RayProvider): boolean {
   return Boolean(provider.clientId && provider.clientSecret)
 }
 
-/** Provider ids whose OAuth env credentials are configured (server-only). */
-export function configuredProviderIds(): string[] {
+/** Provider ids whose Ray credentials are configured (server-only). */
+export function configuredRayIds(): string[] {
   return Object.values(providers)
-    .filter((p): p is OAuthProvider => Boolean(p) && isConfigured(p))
+    .filter((p): p is RayProvider => Boolean(p) && isConfigured(p))
     .map((p) => p.name)
 }
 
-export function redirectUri(provider: OAuthProvider): string {
-  return `${config.app.baseUrl}/api/v1/oauth/${provider.name}/callback`
+export function redirectUri(provider: RayProvider): string {
+  return `${config.app.baseUrl}/api/v1/rays/${provider.name}/callback`
 }
 
-export function stateCookieName(provider: OAuthProvider): string {
-  return `oauth_state_${provider.name}`
+export function stateCookieName(provider: RayProvider): string {
+  return `ray_state_${provider.name}`
 }

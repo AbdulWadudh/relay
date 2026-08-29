@@ -19,6 +19,7 @@ export const auth = betterAuth({
     schema: authSchema,
   }),
   baseURL: config.auth.baseUrl,
+  basePath: "/api/v1/auth",
   secret: config.auth.secret,
   trustedOrigins: [config.auth.baseUrl],
   user: { modelName: "auth_users" },
