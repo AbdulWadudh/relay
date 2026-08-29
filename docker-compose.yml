@@ -1,0 +1,29 @@
+services:
+  relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      APP_BASE_URL: ${APP_BASE_URL}
+      PORT: "3000"
+      HOST: 0.0.0.0
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      VAULT_KEY: ${VAULT_KEY}
+      DATABASE_URL: file:/app/data/local.db
+      DATABASE_TOKEN: ${DATABASE_TOKEN}
+      NOTION_CLIENT_ID: ${NOTION_CLIENT_ID}
+      NOTION_CLIENT_SECRET: ${NOTION_CLIENT_SECRET}
+      OPENOBSERVE_URL: ${OPENOBSERVE_URL}
+      OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
+      OPENOBSERVE_USER: ${OPENOBSERVE_USER}
+      OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
+    volumes:
+      - relay_data:/app/data
+
+volumes:
+  relay_data:

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-08-29
+### Deployment
+- Added production Docker and Docker Compose configuration for Coolify, including persistent SQLite storage and runtime environment variable wiring.
+- Created the `relay` environment under the Coolify `Apps` project.
+
 ## [0.2.0] - 2026-08-29
 ### Task 2: Credentials Dashboard & Notion OAuth
 - Encrypted credentials vault service with single-tenant user bootstrap; masked API (`GET/POST /api/v1/credentials`, `DELETE /:id`) and Notion OAuth flow (`/api/v1/oauth/notion` + callback) with CSRF state cookie.

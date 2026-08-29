@@ -19,6 +19,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export function DeleteCredential({
   credentialId,
@@ -51,21 +56,29 @@ export function DeleteCredential({
 
   return (
     <AlertDialog>
-      <AlertDialogTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Remove ${providerLabel} credential`}
-          />
-        }
-      >
-        {pending ? (
-          <Spinner />
-        ) : (
-          <HugeiconsIcon icon={Delete02Icon} strokeWidth={1.5} />
-        )}
-      </AlertDialogTrigger>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <AlertDialogTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="transition-all duration-200 hover:scale-110 hover:bg-red-500/15 hover:text-red-400 hover:shadow-[0_0_12px_-2px_rgba(248,113,113,0.5)]"
+                  aria-label={`Remove ${providerLabel} credential`}
+                />
+              }
+            />
+          }
+        >
+          {pending ? (
+            <Spinner />
+          ) : (
+            <HugeiconsIcon icon={Delete02Icon} strokeWidth={1.5} />
+          )}
+        </TooltipTrigger>
+        <TooltipContent>Remove {providerLabel}</TooltipContent>
+      </Tooltip>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>

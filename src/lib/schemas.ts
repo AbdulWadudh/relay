@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { PROVIDER_IDS } from "@/lib/providers"
+
 /**
  * Zod validation schemas (RULES.md: all external input is Zod-validated
  * at the API boundary before touching the database or vault).
@@ -15,7 +17,7 @@ export type TelemetryEvent = z.infer<typeof telemetryEventSchema>
 
 export const credentialInputSchema = z.object({
   type: z.enum(["api_key", "oauth"]),
-  provider: z.enum(["openai", "groq", "gemini", "notion"]),
+  provider: z.enum(PROVIDER_IDS),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1).optional(),
   expiresAt: z.number().int().positive().optional(),

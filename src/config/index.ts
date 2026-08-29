@@ -32,7 +32,7 @@ export const config = {
   },
   assets: {
     favicon: "/logo.ico",
-    logo: "/logo.svg",
+    logo: "/logo.png",
   },
   theme: {
     storageKey: "theme",

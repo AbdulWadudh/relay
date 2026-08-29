@@ -3,8 +3,8 @@ import { Suspense } from "react"
 import { ShellContent, ShellHeader } from "@/components/app-shell"
 import { CredentialsTable } from "@/components/vault/credentials-table"
 import { VaultActions, VaultNotices } from "@/components/vault/vault-actions"
-import config from "@/config"
 import { listCredentials } from "@/lib/vault"
+import { configuredProviderIds } from "@/server/oauth-providers"
 
 export const dynamic = "force-dynamic"
 
@@ -12,29 +12,26 @@ export const metadata = { title: "Vault" }
 
 export default function VaultPage() {
   const credentials = listCredentials()
-  const notionConnected = credentials.some((c) => c.provider === "notion")
-  const notionReady = Boolean(
-    config.notion.clientId && config.notion.clientSecret,
-  )
+  const configuredIds = configuredProviderIds()
 
   return (
     <>
       <ShellHeader title="Vault">
-        <VaultActions
-          notionConnected={notionConnected}
-          notionReady={notionReady}
-        />
+        <VaultActions configuredIds={configuredIds} />
       </ShellHeader>
       <ShellContent>
         <Suspense>
           <VaultNotices />
         </Suspense>
-        <div className="mx-auto flex max-w-4xl flex-col gap-4">
-          <p className="max-w-[65ch] text-muted-foreground text-sm">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+          <p className="max-w-[70ch] text-base text-muted-foreground">
             Provider keys and OAuth tokens are encrypted at rest with
             AES-256-GCM. Relay never displays or logs stored secrets.
           </p>
-          <CredentialsTable credentials={credentials} />
+          <CredentialsTable
+            credentials={credentials}
+            configuredIds={configuredIds}
+          />
         </div>
       </ShellContent>
     </>

@@ -1,6 +1,6 @@
 "use client"
 
-import { Add01Icon, Notion01Icon } from "@hugeicons/core-free-icons"
+import { Add01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import * as React from "react"
@@ -32,38 +32,13 @@ import {
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import { AddConnectionDialog } from "@/components/vault/add-connection-dialog"
+import { AI_KEY_PROVIDERS } from "@/lib/providers"
 
-const API_PROVIDERS = [
-  { value: "openai", label: "OpenAI" },
-  { value: "groq", label: "Groq" },
-  { value: "gemini", label: "Gemini" },
-] as const
-
-export function VaultActions({
-  notionConnected,
-  notionReady,
-}: {
-  notionConnected: boolean
-  notionReady: boolean
-}) {
-  const label = notionConnected ? "Reconnect Notion" : "Connect Notion"
+export function VaultActions({ configuredIds }: { configuredIds: string[] }) {
   return (
     <>
-      {notionReady ? (
-        <Button variant="outline" render={<a href="/api/v1/oauth/notion" />}>
-          <HugeiconsIcon icon={Notion01Icon} data-icon="inline-start" />
-          {label}
-        </Button>
-      ) : (
-        <Button
-          variant="outline"
-          disabled
-          title="Set NOTION_CLIENT_ID and NOTION_CLIENT_SECRET in .env.local first"
-        >
-          <HugeiconsIcon icon={Notion01Icon} data-icon="inline-start" />
-          {label}
-        </Button>
-      )}
+      <AddConnectionDialog configuredIds={configuredIds} />
       <AddCredentialDialog />
     </>
   )
@@ -105,14 +80,22 @@ function AddCredentialDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>
-        <HugeiconsIcon icon={Add01Icon} data-icon="inline-start" />
+      <DialogTrigger
+        render={
+          <Button className="transition-all duration-200 hover:scale-[1.03] hover:shadow-[0_0_18px_-4px_rgba(16,185,129,0.7)]" />
+        }
+      >
+        <HugeiconsIcon
+          icon={Add01Icon}
+          data-icon="inline-start"
+          className="transition-transform duration-300 group-hover/button:rotate-90"
+        />
         Add API Key
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add API key</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl">Add API key</DialogTitle>
+          <DialogDescription className="text-sm">
             The key is encrypted with AES-256-GCM before it touches the
             database.
           </DialogDescription>
@@ -121,9 +104,9 @@ function AddCredentialDialog() {
           <Field>
             <FieldLabel htmlFor="vault-provider">Provider</FieldLabel>
             <Select
-              items={API_PROVIDERS.map((p) => ({
+              items={AI_KEY_PROVIDERS.map((p) => ({
                 label: p.label,
-                value: p.value,
+                value: p.id,
               }))}
               value={provider}
               onValueChange={(value) => setProvider(value as string)}
@@ -133,8 +116,8 @@ function AddCredentialDialog() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {API_PROVIDERS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
+                  {AI_KEY_PROVIDERS.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
                       {p.label}
                     </SelectItem>
                   ))}

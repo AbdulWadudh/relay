@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 
 import { decrypt, encrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
@@ -14,12 +14,21 @@ import type { CredentialInput } from "@/lib/schemas"
  * `meta_data` stays plaintext JSON. Tokens are never logged or returned.
  */
 
-const LOCAL_USER = { id: "local", email: "local@relay.app" }
+/** Single-tenant local user (single source; also feeds the profile UI). */
+export const LOCAL_USER = {
+  id: "local",
+  name: "Local User",
+  email: "local@relay.app",
+}
 
 export function ensureLocalUser(): string {
   getDb()
     .insert(users)
-    .values({ ...LOCAL_USER, createdAt: Date.now() })
+    .values({
+      id: LOCAL_USER.id,
+      email: LOCAL_USER.email,
+      createdAt: Date.now(),
+    })
     .onConflictDoNothing()
     .run()
   return LOCAL_USER.id
@@ -68,15 +77,32 @@ export async function createCredential(
   }
   const now = Date.now()
 
-  // One credential per provider for the single local user: replace on repeat.
-  db.delete(credentials)
-    .where(
-      and(
-        eq(credentials.userId, userId),
-        eq(credentials.provider, input.provider),
-      ),
-    )
-    .run()
+  // Replace scope: API keys are one-per-provider; OAuth credentials are
+  // one-per-account, keyed on the provider-agnostic `account_id` meta key
+  // (every registry entry maps its own concept onto it), so multiple
+  // accounts of one provider coexist and reconnecting updates in place.
+  const accountId = input.metaData?.account_id
+  if (input.type === "api_key") {
+    db.delete(credentials)
+      .where(
+        and(
+          eq(credentials.userId, userId),
+          eq(credentials.provider, input.provider),
+          eq(credentials.type, "api_key"),
+        ),
+      )
+      .run()
+  } else if (typeof accountId === "string" && accountId.length > 0) {
+    db.delete(credentials)
+      .where(
+        and(
+          eq(credentials.userId, userId),
+          eq(credentials.provider, input.provider),
+          sql`json_extract(${credentials.metaData}, '$.account_id') = ${accountId}`,
+        ),
+      )
+      .run()
+  }
 
   const [row] = db
     .insert(credentials)

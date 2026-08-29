@@ -5,6 +5,7 @@ import "./globals.css"
 import { TelemetryProvider } from "@/components/telemetry-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toast"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import config from "@/config"
 import { cn } from "@/lib/utils"
 
@@ -56,7 +57,9 @@ export default function RootLayout({
       <body>
         <ThemeProvider storageKey={config.theme.storageKey}>
           <TelemetryProvider>
-            <Toaster>{children}</Toaster>
+            <TooltipProvider>
+              <Toaster>{children}</Toaster>
+            </TooltipProvider>
           </TelemetryProvider>
         </ThemeProvider>
       </body>

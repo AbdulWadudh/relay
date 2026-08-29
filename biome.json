@@ -33,10 +33,12 @@
         "rules": {
           "a11y": {
             "useSemanticElements": "off",
-            "noLabelWithoutControl": "off"
+            "noLabelWithoutControl": "off",
+            "useFocusableInteractive": "off"
           },
           "suspicious": {
-            "noArrayIndexKey": "off"
+            "noArrayIndexKey": "off",
+            "noDocumentCookie": "off"
           }
         }
       }

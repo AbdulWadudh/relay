@@ -143,3 +143,20 @@
     @apply h-full overflow-hidden;
   }
 }
+
+/* Theme-switch page-peel: the toggle animates the new root snapshot with
+   a clip-path circle, so the default cross-fade must be disabled and the
+   new view must sit on top. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+}

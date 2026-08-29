@@ -3,8 +3,10 @@
 ## Circuit Breakers
 - Max 3 files modified per execution step.
 - Must run `bun run typecheck` with 0 errors before presenting completion.
-- Must update `LLM_STATE.md`, commit code locally, and **STOP** for human approval after completing each task.
+- Must update `LLM_STATE.md` and **STOP** for human approval after completing each task.
+- **NEVER commit without explicit human approval** — human decision 2026-08-29. Present the changes, wait for the go.
 - No ghost dependencies (`bun add` or `npm install`) without explicit human clearance.
+- **No hardcoding** — human decision 2026-08-29. Provider ids/labels live only in `src/lib/providers.ts`; env-derived values only in `src/config`; types derive from the single source. MVP-first: minimal entries, scalable machinery.
 
 ## Bun-first (MANDATORY)
 - **Bun runs everything.** Never invoke Node, npm, npx, or Node-installed binaries. Use `bun`, `bun run`, `bunx --bun`. Package scripts must run Next via `bun --bun` so Bun-native APIs (`bun:sqlite`, `Bun.$`) are available at runtime.
@@ -32,7 +34,14 @@
 - Only dedicated ShadCN components. Native `<input>`, `<select>`, `<textarea>`, `<button>` are forbidden.
 - HugeIcons only (no Lucide). Oxanium headings, Space Grotesk body, JetBrains Mono for code.
 - `src/` directory layout: `src/app`, `src/components`, `src/lib`, `src/hooks`.
-- **Design skills (MANDATORY, human decision 2026-08-29):** every website/page/section build runs through the `design-taste-frontend` and `gpt-taste` skills — no templated/generic AI-slop layouts.
+- **Design skills (MANDATORY, human decision 2026-08-29):** every website/page/section build runs through the `design-taste-frontend`, `gpt-taste`, `ui-styling`, and `ui-ux-pro-max` skills — no templated/generic AI-slop layouts.
+- **Vivid UI (MANDATORY, human decision 2026-08-29):** no dead/static surfaces. Use colors and animations heavily — every interactive icon/button action has its OWN unique hover accent color (not one global accent), plus motion feedback (scale/translate/glow transitions). Entrance animations on panels/lists.
+- **Living app motion (human decision 2026-08-29):** app-level state changes use the **View Transitions API** (e.g. the theme switch's circular page-peel from the click point; route transitions later). Element-level motion uses micro-interactions, staggered orchestration, and shared-element/FLIP transitions. Every big state change should feel physical, never a hard swap. Always gate behind `prefers-reduced-motion`.
+- **Generous scale (MANDATORY, human decision 2026-08-29):** this is a desktop command center — use the screen space. No cramped micro-UI: buttons ≥ h-9 with text-sm, inputs ≥ h-10, table rows with real padding (px-4 py-3+), page headers h-16 with text-lg+ titles, content padding p-8, dialogs sized to their content (wide grids get max-w-2xl+), icon tiles and icons scaled up. When in doubt, go larger.
+- **Brand logo:** always the PNG asset (`config.assets.logo`), and it always links to the home page.
+- **Layout primitives (human decision 2026-08-29):** app chrome uses the ShadCN `Sidebar` (sidebar-07 pattern, icon-collapsible, with `NavUser` profile footer); scrollable panels use ShadCN `ScrollArea` (never raw `overflow-y-auto` divs); multi-pane workbenches use ShadCN `Resizable` panels.
+- **Solid surfaces only (human decision 2026-08-29):** no glass/translucent effects — no `backdrop-blur`, no `bg-popover/70`-style translucent popups. Menus, selects, dialogs are solid `bg-popover`; modal scrims dim without blurring.
+- **Row-scoped actions:** operations on an existing record (reconnect, delete) live in that record's table row, not in the page header; the header holds only creation/first-time actions.
 - **Fixed-viewport shell:** the root viewport NEVER scrolls — `overflow-hidden` on the document root and app shell. Only designated inner panels (`overflow-y-auto`) scroll.
 - **Browser work:** always use `agent-browser` for any browser automation, QA, or screenshotting — never other browser tools.
 
@@ -40,6 +49,7 @@
 - **Max 250 lines per file.** Split modules/components before they cross it.
 - **Backend naming:** there is exactly ONE Hono app (mounted in `src/app/api/v1/[[...route]]/route.ts`). Everything under `src/server/` is a *module* (`credentialsModule`, `oauthModule`, ...) — never name sub-routers "app".
 - **OAuth is provider-generic:** flows go through the registry in `src/server/oauth-providers.ts` (`/oauth/:provider`); no provider-specific routes, cookies, or hardcoded provider strings in flow logic.
+- **Provider-specific concepts NEVER leak into common files** (human decision 2026-08-29): registry entries map provider vocabulary (e.g. Notion's workspace) onto the generic `account_id` / `account_name` / `account_email` / `account_avatar` meta keys; the vault, routes, and UI consume ONLY the generic keys.
 
 ## Security
 - `access_token` / `refresh_token` always AES-256-GCM encrypted with a unique IV per record; `meta_data` stays plaintext JSON.
