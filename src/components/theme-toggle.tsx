@@ -27,7 +27,14 @@ export function ThemeToggle() {
       return
     }
 
-    const { clientX: x, clientY: y } = event
+    // Origin from the sun/moon icon's own on-screen position rather than
+    // the raw click/tap coordinates — touch taps on mobile don't reliably
+    // report clientX/clientY at the tap point (observed starting the ripple
+    // from the top of the screen instead of the icon).
+    const icon = event.currentTarget.querySelector("svg")
+    const rect = (icon ?? event.currentTarget).getBoundingClientRect()
+    const x = rect.left + rect.width / 2
+    const y = rect.top + rect.height / 2
     const transition = document.startViewTransition(() => {
       flushSync(() => setTheme(next))
     })
