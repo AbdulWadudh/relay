@@ -41,14 +41,16 @@ export function RunsTableSkeleton() {
       </div>
 
       <div className="hidden rounded-lg border sm:block">
-        <Table>
+        <Table className="min-w-[44rem] table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead>Source</TableHead>
-              <TableHead className="w-[9.5rem]">Status</TableHead>
-              <TableHead className="w-24">Duration</TableHead>
-              <TableHead>Submitted</TableHead>
-              <TableHead className="text-end">Actions</TableHead>
+              <TableHead className="w-[8.5rem]">Status</TableHead>
+              <TableHead className="w-20">Duration</TableHead>
+              <TableHead className="hidden w-44 lg:table-cell">
+                Submitted
+              </TableHead>
+              <TableHead className="w-24 text-end">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -67,7 +69,7 @@ export function RunsTableSkeleton() {
                 <TableCell>
                   <Skeleton className="h-4 w-12" />
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden lg:table-cell">
                   <Skeleton className="h-4 w-32" />
                 </TableCell>
                 <TableCell>

@@ -158,16 +158,25 @@ export function RunsTable() {
           </div>
 
           <div className="hidden rounded-lg border sm:block">
-            <Table>
+            {/* Fixed layout: every column except Source is sized to its own
+                content, so Source absorbs all remaining width. Auto layout
+                shared the space evenly and left the titles truncated to a
+                few characters while Submitted sat half empty. Fixed layout
+                is also what makes `truncate` inside the cells behave — under
+                auto layout a truncating cell just grows the table instead. */}
+            <Table className="min-w-[44rem] table-fixed">
               <TableHeader>
                 <TableRow>
+                  {/* No width: takes whatever the sized columns leave. */}
                   <TableHead>Source</TableHead>
-                  {/* Widths reserved so a status change (Queued -> Done)
-                      cannot reflow the columns beside it. */}
-                  <TableHead className="w-[9.5rem]">Status</TableHead>
-                  <TableHead className="w-24">Duration</TableHead>
-                  <TableHead>Submitted</TableHead>
-                  <TableHead className="text-end">Actions</TableHead>
+                  {/* Sized to their widest real content, which also keeps a
+                      status change (Queued -> Done) from reflowing anything. */}
+                  <TableHead className="w-[8.5rem]">Status</TableHead>
+                  <TableHead className="w-20">Duration</TableHead>
+                  <TableHead className="hidden w-44 lg:table-cell">
+                    Submitted
+                  </TableHead>
+                  <TableHead className="w-24 text-end">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -176,7 +185,7 @@ export function RunsTable() {
                     key={run.id}
                     className="transition-colors duration-200 hover:bg-muted"
                   >
-                    <TableCell className="max-w-sm">
+                    <TableCell>
                       <RunTitle run={run} />
                       {run.error ? (
                         // TableCell bakes in `whitespace-nowrap`, which stops
@@ -193,7 +202,7 @@ export function RunsTable() {
                     <TableCell className="font-mono text-muted-foreground text-xs">
                       {duration(run)}
                     </TableCell>
-                    <TableCell className="font-mono text-muted-foreground text-xs">
+                    <TableCell className="hidden font-mono text-muted-foreground text-xs lg:table-cell">
                       {dateFormat.format(run.createdAt)}
                     </TableCell>
                     <TableCell>
