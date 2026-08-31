@@ -2,7 +2,6 @@ import { cookies } from "next/headers"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import config from "@/config"
 import { requireSession } from "@/lib/auth-session"
 
 export default async function DashboardLayout({
@@ -20,7 +19,7 @@ export default async function DashboardLayout({
         user={{
           name: session.user.name,
           email: session.user.email,
-          avatar: session.user.image ?? config.assets.logo,
+          avatar: session.user.image ?? undefined,
         }}
       />
       <SidebarInset className="relative flex h-svh flex-col overflow-hidden">

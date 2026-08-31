@@ -30,7 +30,11 @@ import { authClient } from "@/lib/auth-client"
 export interface ProfileUser {
   name: string
   email: string
-  avatar: string
+  // Social login providers give a real profile picture; local email/password
+  // accounts don't, and should fall back to initials (AvatarFallback) rather
+  // than a fake image — leave this unset for that case instead of pointing
+  // it at a placeholder, which would always "load" and hide the fallback.
+  avatar?: string
 }
 
 function initials(name: string): string {
