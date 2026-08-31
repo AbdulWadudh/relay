@@ -1,10 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
-import Link from "next/link"
 import { useGSAP } from "@gsap/react"
-import gsap from "gsap"
-import { ScrollTrigger } from "gsap/ScrollTrigger"
 import {
   AiBrain01Icon,
   ClipboardPasteIcon,
@@ -16,6 +12,10 @@ import {
   YoutubeIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
+import gsap from "gsap"
+import { ScrollTrigger } from "gsap/ScrollTrigger"
+import Link from "next/link"
+import { useRef, useState } from "react"
 
 import config from "@/config"
 
@@ -47,11 +47,7 @@ const marquee = [
   { name: "Discord", icon: DiscordIcon },
 ]
 
-export function LandingPage({
-  isAuthenticated,
-}: {
-  isAuthenticated: boolean
-}) {
+export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
   const pageRef = useRef<HTMLElement>(null)
   const storyRef = useRef<HTMLElement>(null)
   const [activeStory, setActiveStory] = useState(0)
@@ -356,7 +352,9 @@ export function LandingPage({
                     icon={story.icon}
                     size={26}
                     strokeWidth={1.5}
-                    className={activeStory === index ? "text-[#d8f27e]" : "text-white/70"}
+                    className={
+                      activeStory === index ? "text-[#d8f27e]" : "text-white/70"
+                    }
                   />
                 </div>
                 <div className="absolute bottom-7 left-7 right-7 flex items-end justify-between gap-6">
