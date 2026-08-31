@@ -1,31 +1,29 @@
-import { Database } from "bun:sqlite"
-// node:fs / node:path are Bun's own native implementations (RULES.md §Bun-first):
-// Bun ships no separate synchronous mkdir/dirname API.
-import { mkdirSync } from "node:fs"
-import { dirname, resolve } from "node:path"
-import { drizzle } from "drizzle-orm/bun-sqlite"
-import { migrate } from "drizzle-orm/bun-sqlite/migrator"
+import { createClient } from "@libsql/client"
+import { drizzle } from "drizzle-orm/libsql"
 
 import config from "@/config"
 
 import * as schema from "./schema"
 
 /**
- * Drizzle ORM over Bun native `bun:sqlite` (TRD §2, RULES.md).
- * Connection string comes from config.database.url; migrations generated
- * by drizzle-kit (`bun run db:generate`) are applied on first connection.
+ * Drizzle ORM over libSQL (TRD §2, RULES.md). `config.database.url` is either
+ * a local `file:` path (dev) or a remote `libsql://` Turso URL (production),
+ * both handled by the same @libsql/client connection.
+ *
+ * Migrations are applied via the explicit `bun run db:migrate` step (the
+ * Dockerfile CMD runs it before `next start`), not automatically here:
+ * libsql's migrator is async, but getDb() is called synchronously all over
+ * the codebase (e.g. vault.ts's listCredentials/deleteCredential), and
+ * running it per-connection also meant every Next.js build worker importing
+ * this module raced to migrate the same database in parallel.
  */
 
 function createDb() {
-  // bun:sqlite opens plain file paths; config.database.url is a file: URL.
-  const path = resolve(config.database.url.replace(/^file:/, ""))
-  mkdirSync(dirname(path), { recursive: true })
-  const sqlite = new Database(path, { create: true })
-  sqlite.exec("PRAGMA journal_mode = WAL;")
-  sqlite.exec("PRAGMA foreign_keys = ON;")
-  const db = drizzle(sqlite, { schema })
-  migrate(db, { migrationsFolder: "./drizzle" })
-  return db
+  const client = createClient({
+    url: config.database.url,
+    authToken: config.database.authToken,
+  })
+  return drizzle(client, { schema })
 }
 
 export type RelayDb = ReturnType<typeof createDb>

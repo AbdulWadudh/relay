@@ -15,11 +15,10 @@ import {
 
 export const credentialsModule = new Hono()
 
-credentialsModule.get("/", (c) => {
-  return getRequestSession(c.req.raw.headers).then((session) => {
-    if (!session) return c.json({ error: "Unauthorized" }, 401)
-    return c.json({ credentials: listCredentials(session.user.id) })
-  })
+credentialsModule.get("/", async (c) => {
+  const session = await getRequestSession(c.req.raw.headers)
+  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  return c.json({ credentials: await listCredentials(session.user.id) })
 })
 
 credentialsModule.post("/", async (c) => {
@@ -41,15 +40,13 @@ credentialsModule.post("/", async (c) => {
   return c.json({ credential }, 201)
 })
 
-credentialsModule.delete("/:id", (c) => {
-  const sessionPromise = getRequestSession(c.req.raw.headers)
+credentialsModule.delete("/:id", async (c) => {
+  const session = await getRequestSession(c.req.raw.headers)
   const id = c.req.param("id")
-  return sessionPromise.then((session) => {
-    if (!session) return c.json({ error: "Unauthorized" }, 401)
-    if (!deleteCredential(id, session.user.id)) {
-      return c.json({ error: "Credential not found" }, 404)
-    }
-    logger.info("Credential deleted", { credentialId: id })
-    return c.json({ ok: true })
-  })
+  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  if (!(await deleteCredential(id, session.user.id))) {
+    return c.json({ error: "Credential not found" }, 404)
+  }
+  logger.info("Credential deleted", { credentialId: id })
+  return c.json({ ok: true })
 })

@@ -34,7 +34,7 @@ const MASKED_COLUMNS = {
   updatedAt: credentials.updatedAt,
 }
 
-export function listCredentials(userId: string): MaskedCredential[] {
+export async function listCredentials(userId: string): Promise<MaskedCredential[]> {
   return getDb()
     .select(MASKED_COLUMNS)
     .from(credentials)
@@ -62,7 +62,8 @@ export async function createCredential(
   // accounts of one provider coexist and reconnecting updates in place.
   const accountId = input.metaData?.account_id
   if (input.type === "api_key") {
-    db.delete(credentials)
+    await db
+      .delete(credentials)
       .where(
         and(
           eq(credentials.userId, userId),
@@ -72,7 +73,8 @@ export async function createCredential(
       )
       .run()
   } else if (typeof accountId === "string" && accountId.length > 0) {
-    db.delete(credentials)
+    await db
+      .delete(credentials)
       .where(
         and(
           eq(credentials.userId, userId),
@@ -83,7 +85,7 @@ export async function createCredential(
       .run()
   }
 
-  const [row] = db
+  const [row] = await db
     .insert(credentials)
     .values({
       id: crypto.randomUUID(),
@@ -103,8 +105,8 @@ export async function createCredential(
   return row
 }
 
-export function deleteCredential(id: string, userId: string): boolean {
-  const deleted = getDb()
+export async function deleteCredential(id: string, userId: string): Promise<boolean> {
+  const deleted = await getDb()
     .delete(credentials)
     .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))
     .returning({ id: credentials.id })
@@ -117,7 +119,7 @@ export async function getAccessToken(
   provider: string,
   userId: string,
 ): Promise<string | null> {
-  const row = getDb()
+  const row = await getDb()
     .select({ accessToken: credentials.accessToken, iv: credentials.iv })
     .from(credentials)
     .where(

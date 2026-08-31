@@ -3,11 +3,13 @@ import { defineConfig } from "drizzle-kit"
 import config from "./src/config/index.ts"
 
 export default defineConfig({
-  dialect: "sqlite",
+  dialect: "turso",
   schema: "./src/lib/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    // Drizzle Kit's SQLite driver expects the file: URL format.
+    // Local dev uses a file: URL with no authToken; production uses a
+    // remote libsql:// Turso URL with one.
     url: config.database.url,
+    authToken: config.database.authToken,
   },
 })

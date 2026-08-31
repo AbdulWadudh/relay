@@ -13,7 +13,7 @@ export const metadata = { title: "Vault" }
 
 export default async function VaultPage() {
   const session = await requireSession()
-  const credentials = listCredentials(session.user.id)
+  const credentials = await listCredentials(session.user.id)
   const configuredIds = configuredRayIds()
 
   return (

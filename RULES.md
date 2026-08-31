@@ -13,10 +13,10 @@
 - **Prefer Bun-native and Web-standard APIs over `node:*` compat modules:**
   - Crypto: WebCrypto (`crypto.subtle`, `crypto.getRandomValues`) — not `node:crypto`.
   - Encoding: native `Uint8Array` `.toHex()`/`.toBase64()`/`fromHex()`/`fromBase64()`, `btoa`/`atob`, `TextEncoder`/`TextDecoder` — not `Buffer`.
-  - SQLite: **Drizzle ORM over the `bun:sqlite` driver** (`drizzle-orm/bun-sqlite`) — human decision 2026-08-29 (supersedes the earlier no-ORM ruling). Schema lives in `src/lib/db/schema.ts`; migrations via `bun run db:generate` / applied automatically on connection.
+  - SQLite: **Drizzle ORM over the libSQL driver** (`drizzle-orm/libsql` + `@libsql/client`) — human decision 2026-08-31 (supersedes the earlier `drizzle-orm/bun-sqlite` decision of 2026-08-29). `config.database.url` is a local `file:` path in dev and a remote Turso `libsql://` URL in production, both via the same client. Schema lives in `src/lib/db/schema.ts`; migrations generated via `bun run db:generate` and applied via the explicit `bun run db:migrate` step (Dockerfile CMD runs it before `next start`) — not automatically on connection, because libsql's migrator is async while `getDb()` is called synchronously throughout the codebase, and auto-migrating per-connection let concurrent Next.js build workers race to migrate the same database.
   - Shell/processes: `Bun.$` — not `child_process`.
   - Files: `Bun.file` / `Bun.write` where async is acceptable.
-- **Narrow exception:** a `node:*` import is allowed only when Bun ships no native or Web-standard equivalent (e.g. synchronous `mkdirSync`/`dirname` in `src/lib/db/index.ts`).
+- **Narrow exception:** a `node:*` import is allowed only when Bun ships no native or Web-standard equivalent (e.g. `node:stream` in `src/lib/observability/logger.ts`, required by `pino`).
 
 ## Configuration (MANDATORY)
 - **`src/config/index.ts` is the single source of ALL configuration across the app** — human decision 2026-08-29. App identity, server, API version, database URL, vault key, asset paths, theme, and observability all flow through the exported `config` object.

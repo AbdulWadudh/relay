@@ -27,9 +27,9 @@ app.route("/credentials", credentialsModule)
 // Rays are Relay's public integration routes; OAuth is the underlying protocol.
 app.route("/rays/oauth", raysModule)
 
-app.get("/health", (c) => {
+app.get("/health", async (c) => {
   const db = getDb()
-  const tables = db.all<{ name: string }>(
+  const tables = await db.all<{ name: string }>(
     sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__drizzle%' ORDER BY name`,
   )
   return c.json({
