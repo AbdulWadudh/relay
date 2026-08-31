@@ -6,7 +6,10 @@ import { useGSAP } from "@gsap/react"
 import gsap from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
 import {
+  AiBrain01Icon,
+  ClipboardPasteIcon,
   DiscordIcon,
+  FileExportIcon,
   GoogleIcon,
   InstagramIcon,
   Notion01Icon,
@@ -22,17 +25,17 @@ const stories = [
   {
     title: "Drop in the video",
     copy: "Drop in a public social-video link and let Relay fetch the source for processing.",
-    image: "linear-gradient(135deg, #1c2a1f 0%, #101311 70%)",
+    icon: ClipboardPasteIcon,
   },
   {
     title: "Build the right understanding",
     copy: "Relay detects the category and uses an existing specialist agent or creates one for the new category.",
-    image: "linear-gradient(135deg, #22301f 0%, #101311 70%)",
+    icon: AiBrain01Icon,
   },
   {
     title: "Publish the finished page",
     copy: "Send the finished Markdown to Notion, Google, Discord, or another connected destination.",
-    image: "linear-gradient(135deg, #1a2b26 0%, #101311 70%)",
+    icon: FileExportIcon,
   },
 ]
 
@@ -326,13 +329,31 @@ export function LandingPage() {
             >
               <div
                 data-story-image
-                className={`relative aspect-[1.35] overflow-hidden rounded-[2rem] border transition-colors duration-500 will-change-transform ${activeStory === index ? "border-[#d8f27e]/60" : "border-white/10"}`}
+                className={`relative aspect-[1.35] overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_18%_12%,rgba(101,133,75,0.3),transparent_45%),linear-gradient(160deg,#161c17,#101311_65%)] transition-colors duration-500 will-change-transform ${activeStory === index ? "border-[#d8f27e]/60" : "border-white/10"}`}
               >
+                {/* Ambient dot-grid texture, fills the card without needing a photo. */}
                 <div
-                  className="absolute inset-0 transition-transform duration-700 ease-out group-hover:scale-105"
-                  style={{ backgroundImage: story.image }}
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 opacity-[0.12] [background-image:radial-gradient(rgba(255,255,255,0.6)_1px,transparent_1px)] [background-size:20px_20px]"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#101311] via-transparent to-transparent" />
+                {/* Oversized ghost numeral for editorial depth. */}
+                <span
+                  aria-hidden
+                  className={`pointer-events-none absolute -top-8 -right-3 select-none font-heading text-[10rem] font-semibold leading-none transition-colors duration-500 ${activeStory === index ? "text-[#d8f27e]/[0.09]" : "text-white/[0.04]"}`}
+                >
+                  0{index + 1}
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-t from-[#101311] via-[#101311]/15 to-transparent" />
+                <div
+                  className={`absolute left-7 top-7 flex size-14 items-center justify-center rounded-2xl border transition-all duration-500 group-hover:-translate-y-1 ${activeStory === index ? "border-[#d8f27e]/50 bg-[#d8f27e]/10" : "border-white/10 bg-white/5"}`}
+                >
+                  <HugeiconsIcon
+                    icon={story.icon}
+                    size={26}
+                    strokeWidth={1.5}
+                    className={activeStory === index ? "text-[#d8f27e]" : "text-white/70"}
+                  />
+                </div>
                 <div className="absolute bottom-7 left-7 right-7 flex items-end justify-between gap-6">
                   <div>
                     <h3 className="font-heading text-3xl font-semibold tracking-[-0.05em]">
