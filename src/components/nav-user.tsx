@@ -45,6 +45,28 @@ function initials(name: string): string {
     .join("")
 }
 
+// Curated gradient set in the app's emerald/lime editorial-tech palette (plus
+// a few accent hues for visual variety once multiple users share a sidebar).
+// Picked deterministically from the user's email so the same person always
+// gets the same avatar color instead of it changing on every render.
+const AVATAR_GRADIENTS = [
+  "linear-gradient(135deg, #6ee7b7 0%, #047857 100%)",
+  "linear-gradient(135deg, #d8f27e 0%, #4d6b39 100%)",
+  "linear-gradient(135deg, #7dd3fc 0%, #0369a1 100%)",
+  "linear-gradient(135deg, #fcd34d 0%, #b45309 100%)",
+  "linear-gradient(135deg, #c4b5fd 0%, #6d28d9 100%)",
+  "linear-gradient(135deg, #fda4af 0%, #9f1239 100%)",
+]
+
+function avatarGradient(seed: string): string {
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i)
+    hash |= 0
+  }
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]
+}
+
 export function NavUser({ user }: { user: ProfileUser }) {
   const { isMobile } = useSidebar()
   const router = useRouter()
@@ -68,7 +90,10 @@ export function NavUser({ user }: { user: ProfileUser }) {
           >
             <Avatar className="rounded-md">
               <AvatarImage src={user.avatar} alt={user.name} />
-              <AvatarFallback className="rounded-md bg-emerald-500/15 text-emerald-300">
+              <AvatarFallback
+                className="rounded-md font-semibold text-white/90 text-xs tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-1px_2px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
+                style={{ backgroundImage: avatarGradient(user.email) }}
+              >
                 {initials(user.name)}
               </AvatarFallback>
             </Avatar>
@@ -95,7 +120,10 @@ export function NavUser({ user }: { user: ProfileUser }) {
                 <div className="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
                   <Avatar className="rounded-md">
                     <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback className="rounded-md bg-emerald-500/15 text-emerald-300">
+                    <AvatarFallback
+                      className="rounded-md font-semibold text-white/90 text-xs tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-1px_2px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
+                      style={{ backgroundImage: avatarGradient(user.email) }}
+                    >
                       {initials(user.name)}
                     </AvatarFallback>
                   </Avatar>
