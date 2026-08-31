@@ -22,17 +22,17 @@ const stories = [
   {
     title: "Drop in the video",
     copy: "Drop in a public social-video link and let Relay fetch the source for processing.",
-    image: "https://picsum.photos/seed/relay-signal/1200/900",
+    image: "linear-gradient(135deg, #1c2a1f 0%, #101311 70%)",
   },
   {
     title: "Build the right understanding",
     copy: "Relay detects the category and uses an existing specialist agent or creates one for the new category.",
-    image: "https://picsum.photos/seed/relay-shape/1200/900",
+    image: "linear-gradient(135deg, #22301f 0%, #101311 70%)",
   },
   {
     title: "Publish the finished page",
     copy: "Send the finished Markdown to Notion, Google, Discord, or another connected destination.",
-    image: "https://picsum.photos/seed/relay-control/1200/900",
+    image: "linear-gradient(135deg, #1a2b26 0%, #101311 70%)",
   },
 ]
 
@@ -177,7 +177,7 @@ export function LandingPage() {
 
       <section className="relative flex min-h-[100dvh] items-center justify-center px-6 pb-24 pt-36 text-center">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(101,133,75,0.32),transparent_35%),linear-gradient(180deg,rgba(16,19,17,0.1),#101311_88%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-[58vh] bg-[url('https://picsum.photos/seed/relay-hero/1920/1080')] bg-cover bg-center opacity-25 mix-blend-luminosity contrast-125" />
+        <div className="absolute inset-x-0 bottom-0 h-[58vh] bg-[linear-gradient(180deg,transparent,rgba(101,133,75,0.35)_60%,#101311)] opacity-70" />
         <div className="relative z-10 flex w-full max-w-6xl flex-col items-center">
           <p
             data-hero
@@ -190,7 +190,7 @@ export function LandingPage() {
             className="w-full max-w-6xl text-balance font-heading text-[clamp(3.2rem,7vw,7.5rem)] font-semibold leading-[0.94] tracking-[-0.075em]"
           >
             Give every video a{" "}
-            <span className="mx-1 inline-block h-[0.62em] w-[1.2em] rounded-full bg-[url('https://picsum.photos/seed/relay-orbit/600/400')] bg-cover bg-center align-[0.02em] shadow-[0_0_60px_rgba(216,242,126,0.22)] sm:mx-3" />{" "}
+            <span className="mx-1 inline-block h-[0.62em] w-[1.2em] rounded-full bg-[linear-gradient(135deg,#d8f27e,#65854b)] align-[0.02em] shadow-[0_0_60px_rgba(216,242,126,0.22)] sm:mx-3" />{" "}
             useful second life.
           </h1>
           <p
@@ -236,7 +236,7 @@ export function LandingPage() {
             data-bento
             className="group relative col-span-12 row-span-2 min-h-[420px] overflow-hidden rounded-[2rem] bg-[#c8df7b] p-7 text-[#101311] md:col-span-7 md:p-10"
           >
-            <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/relay-vault/1200/900')] bg-cover bg-center opacity-20 mix-blend-multiply transition-transform duration-700 ease-out group-hover:scale-105" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,19,17,0.35),transparent_60%)] opacity-60 transition-transform duration-700 ease-out group-hover:scale-105" />
             <div className="relative flex h-full max-w-md flex-col justify-between">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[0.2em] opacity-60">
@@ -329,8 +329,8 @@ export function LandingPage() {
                 className={`relative aspect-[1.35] overflow-hidden rounded-[2rem] border transition-colors duration-500 will-change-transform ${activeStory === index ? "border-[#d8f27e]/60" : "border-white/10"}`}
               >
                 <div
-                  className="absolute inset-0 bg-cover bg-center grayscale transition-transform duration-700 ease-out group-hover:scale-105"
-                  style={{ backgroundImage: `url(${story.image})` }}
+                  className="absolute inset-0 transition-transform duration-700 ease-out group-hover:scale-105"
+                  style={{ backgroundImage: story.image }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#101311] via-transparent to-transparent" />
                 <div className="absolute bottom-7 left-7 right-7 flex items-end justify-between gap-6">

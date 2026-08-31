@@ -143,16 +143,11 @@
   h4 {
     @apply font-heading;
   }
-  /* Public pages (landing, login, privacy, terms) scroll normally via the
-     browser's native document scroll. min-h-full (not h-full) lets body grow
-     past one viewport for long content instead of clipping it at a fixed
-     height; the dashboard workbench's own "root never scrolls" rule
-     (RULES.md) is enforced independently by `h-svh overflow-hidden` on
-     SidebarInset (src/app/(dashboard)/layout.tsx), not by this global rule. */
-  html,
-  body {
-    @apply min-h-full overflow-x-hidden;
-  }
+  /* No global overflow/height rule on html or body: every page scrolls via
+     the browser's plain default document scroll. The dashboard workbench's
+     "root never scrolls" rule (RULES.md) is fully self-contained — `h-svh
+     overflow-hidden` on SidebarInset (src/app/(dashboard)/layout.tsx) — and
+     needs nothing set here. */
 }
 
 /* Theme-switch page-peel: the toggle animates the new root snapshot with
