@@ -22,7 +22,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
 import config from "@/config"
@@ -121,16 +120,12 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarMenu>
-            {NAV.map((item, index) => {
+          <SidebarMenu className="gap-2">
+            {NAV.map((item) => {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`)
               return (
-                <SidebarMenuItem
-                  key={item.href}
-                  style={{ animationDelay: `${index * 60}ms` }}
-                  className="fade-in slide-in-from-left-2 animate-in fill-mode-both"
-                >
+                <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     tooltip={
                       item.soon ? `${item.label} — coming soon` : item.label
@@ -173,7 +168,6 @@ export function AppSidebar({
         <ThemeToggle />
         <NavUser user={user} />
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   )
 }

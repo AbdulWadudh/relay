@@ -14,7 +14,12 @@ export default async function DashboardLayout({
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false"
 
   return (
-    <SidebarProvider defaultOpen={defaultOpen}>
+    <SidebarProvider
+      defaultOpen={defaultOpen}
+      // Roomier icon rail: 3.5rem leaves 40px of content between the
+      // group's padding, which is exactly the collapsed button size.
+      style={{ "--sidebar-width-icon": "3.5rem" } as React.CSSProperties}
+    >
       <AppSidebar
         user={{
           name: session.user.name,

@@ -65,7 +65,7 @@ export function ThemeToggle() {
         <Spin
           duration={500}
           onClick={toggleTheme}
-          className="flex h-10 w-full flex-row-reverse items-center justify-between rounded-md px-3 text-xl transition-all duration-200 hover:bg-amber-500 hover:text-white active:scale-[0.98] group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 dark:hover:bg-indigo-500 dark:hover:text-white"
+          className="flex h-10 w-full flex-row-reverse items-center justify-between rounded-md px-3 text-xl transition-all duration-200 hover:bg-amber-500 hover:text-white active:scale-[0.98] group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 dark:hover:bg-indigo-500 dark:hover:text-white"
         >
           <span className="text-sm group-data-[collapsible=icon]:hidden">
             Dark mode
