@@ -1,13 +1,12 @@
-import {
-  DiscordIcon,
-  GoogleDocIcon,
-  GoogleGeminiIcon,
-  GoogleSheetIcon,
-  Key01Icon,
-  Notion01Icon,
-  SlackIcon,
-} from "@hugeicons/core-free-icons"
-import type { IconSvgElement } from "@hugeicons/react"
+import Discord from "@thesvg/react/discord"
+import Gemini from "@thesvg/react/gemini"
+import GoogleDocs2026 from "@thesvg/react/google-docs-2026"
+import GoogleSheets2026 from "@thesvg/react/google-sheets-2026"
+import Groq from "@thesvg/react/groq"
+import Notion from "@thesvg/react/notion"
+import Openai from "@thesvg/react/openai"
+import Slack from "@thesvg/react/slack"
+import type { ComponentType, SVGProps } from "react"
 
 /**
  * Single source of truth for credential providers (RULES.md: no
@@ -15,31 +14,45 @@ import type { IconSvgElement } from "@hugeicons/react"
  * schema, Ray registry keys, and UI (labels, icons,
  * descriptions, accent styling) all derive from these lists.
  *
+ * Icons are official brand marks from `@thesvg/react`, rendered as-is with
+ * no background chip. Most icons carry their own hardcoded brand color and
+ * work on any surface. Notion and OpenAI's default marks are a color/white
+ * cutout meant to sit on a filled tile, so those two use the library's
+ * `currentColor`-only variant ("mono" / "light") instead so they stay
+ * visible against a plain background — they just inherit the surrounding
+ * text color rather than needing one baked in.
+ *
  * `available: false` renders a "Soon" card in the Add Ray dialog;
  * flipping it on requires a matching registry entry in
  * src/server/ray-providers.ts plus its env vars in src/config.
  */
 
+// Each thesvg icon component has its own narrower `variant` union, which
+// doesn't unify across 8 different components — callers that need to pass
+// `variant` cast to `ProviderIconWithVariant` (see the two render sites).
+export type ProviderIcon = ComponentType<SVGProps<SVGSVGElement>>
+export type ProviderIconWithVariant = ComponentType<
+  SVGProps<SVGSVGElement> & { variant?: string }
+>
+
 export const AI_KEY_PROVIDERS = [
   {
     id: "openai",
     label: "OpenAI",
-    // No official OpenAI/Groq mark in HugeIcons (RULES.md: HugeIcons only) —
-    // a plain key glyph is honest instead of an approximated brand mark.
-    icon: Key01Icon,
-    tile: "bg-zinc-700 text-white",
+    icon: Openai,
+    iconVariant: "light",
   },
   {
     id: "groq",
     label: "Groq",
-    icon: Key01Icon,
-    tile: "bg-orange-600 text-white",
+    icon: Groq,
+    iconVariant: undefined,
   },
   {
     id: "gemini",
     label: "Gemini",
-    icon: GoogleGeminiIcon,
-    tile: "bg-violet-600 text-white",
+    icon: Gemini,
+    iconVariant: undefined,
   },
 ] as const
 
@@ -47,16 +60,14 @@ export interface RayProviderInfo {
   id: string
   label: string
   description: string
-  icon: IconSvgElement
+  icon: ProviderIcon
+  iconVariant?: string
   available: boolean
   /** Solid hover accent for this provider's card/actions. */
   accent: string
-  /** Icon tile fill. */
-  tile: string
 }
 
-// Solid neutral hover shared by every provider card — the icon tile already
-// carries the per-provider color, so the card itself stays neutral.
+// Solid neutral hover shared by every provider card.
 const CARD_HOVER =
   "hover:border-zinc-400 hover:bg-zinc-100 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
 
@@ -65,46 +76,46 @@ export const RAY_PROVIDERS = [
     id: "notion",
     label: "Notion",
     description: "Publish structured pages to your Notion workspace.",
-    icon: Notion01Icon,
+    icon: Notion,
+    iconVariant: "mono",
     available: true,
     accent: CARD_HOVER,
-    tile: "bg-zinc-700 text-white",
   },
   {
     id: "google-docs",
     label: "Google Docs",
     description: "Sync extracted pages into Google Docs documents.",
-    icon: GoogleDocIcon,
+    icon: GoogleDocs2026,
+    iconVariant: undefined,
     available: false,
     accent: CARD_HOVER,
-    tile: "bg-blue-600 text-white",
   },
   {
     id: "google-sheets",
     label: "Google Sheets",
     description: "Append structured rows to Google Sheets spreadsheets.",
-    icon: GoogleSheetIcon,
+    icon: GoogleSheets2026,
+    iconVariant: undefined,
     available: false,
     accent: CARD_HOVER,
-    tile: "bg-green-600 text-white",
   },
   {
     id: "slack",
     label: "Slack",
     description: "Post processed summaries into Slack channels.",
-    icon: SlackIcon,
+    icon: Slack,
+    iconVariant: undefined,
     available: false,
     accent: CARD_HOVER,
-    tile: "bg-fuchsia-600 text-white",
   },
   {
     id: "discord",
     label: "Discord",
     description: "Deliver extraction results to Discord servers.",
-    icon: DiscordIcon,
+    icon: Discord,
+    iconVariant: undefined,
     available: false,
     accent: CARD_HOVER,
-    tile: "bg-indigo-600 text-white",
   },
 ] as const satisfies readonly RayProviderInfo[]
 
@@ -123,13 +134,10 @@ export function providerLabel(id: string): string {
   return ALL_PROVIDERS.find((p) => p.id === id)?.label ?? id
 }
 
-export function providerIcon(id: string): IconSvgElement | null {
+export function providerIcon(id: string): ProviderIcon | null {
   return ALL_PROVIDERS.find((p) => p.id === id)?.icon ?? null
 }
 
-export function providerTile(id: string): string {
-  return (
-    ALL_PROVIDERS.find((p) => p.id === id)?.tile ??
-    "bg-muted text-muted-foreground"
-  )
+export function providerIconVariant(id: string): string | undefined {
+  return ALL_PROVIDERS.find((p) => p.id === id)?.iconVariant
 }

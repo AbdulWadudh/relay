@@ -25,8 +25,12 @@ import {
 } from "@/components/ui/tooltip"
 import { AddConnectionDialog } from "@/components/vault/add-connection-dialog"
 import { DeleteCredential } from "@/components/vault/delete-credential"
-import { providerIcon, providerLabel, providerTile } from "@/lib/providers"
-import { cn } from "@/lib/utils"
+import {
+  type ProviderIconWithVariant,
+  providerIcon,
+  providerIconVariant,
+  providerLabel,
+} from "@/lib/providers"
 import type { MaskedCredential } from "@/lib/vault"
 
 const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" })
@@ -47,19 +51,10 @@ function accountEmailFor(credential: MaskedCredential): string | null {
 }
 
 function ProviderTile({ provider }: { provider: string }) {
-  const icon = providerIcon(provider)
-  return (
-    <span
-      className={cn(
-        "flex size-10 shrink-0 items-center justify-center rounded-lg",
-        providerTile(provider),
-      )}
-    >
-      {icon ? (
-        <HugeiconsIcon icon={icon} strokeWidth={1.5} className="size-5" />
-      ) : null}
-    </span>
-  )
+  const Icon = providerIcon(provider) as ProviderIconWithVariant | null
+  return Icon ? (
+    <Icon variant={providerIconVariant(provider)} className="size-8 shrink-0" />
+  ) : null
 }
 
 function TypeBadge({ type }: { type: MaskedCredential["type"] }) {

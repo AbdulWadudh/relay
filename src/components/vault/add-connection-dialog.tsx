@@ -13,7 +13,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { RAY_PROVIDERS, type RayProviderInfo } from "@/lib/providers"
+import {
+  type ProviderIconWithVariant,
+  RAY_PROVIDERS,
+  type RayProviderInfo,
+} from "@/lib/providers"
 import { cn } from "@/lib/utils"
 
 /**
@@ -32,20 +36,13 @@ function ProviderCard({
   index: number
 }) {
   const enabled = provider.available && configured
+  const Icon = provider.icon as ProviderIconWithVariant
   const body = (
     <>
-      <span
-        className={cn(
-          "flex size-14 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 ease-out group-hover/card:-rotate-3 group-hover/card:scale-110",
-          provider.tile,
-        )}
-      >
-        <HugeiconsIcon
-          icon={provider.icon}
-          strokeWidth={1.5}
-          className="size-7"
-        />
-      </span>
+      <Icon
+        variant={provider.iconVariant}
+        className="size-10 shrink-0 transition-transform duration-300 ease-out group-hover/card:-rotate-3 group-hover/card:scale-110"
+      />
       <span className="grid flex-1 gap-1 text-start leading-snug">
         <span className="flex items-center gap-2 font-medium text-base">
           {provider.label}
