@@ -143,7 +143,7 @@ export function LandingPage() {
   return (
     <main
       ref={pageRef}
-      className="w-full max-w-full overflow-x-hidden bg-[#101311] text-[#f2f5ef]"
+      className="w-full max-w-full bg-[#101311] text-[#f2f5ef]"
     >
       <nav
         data-nav
