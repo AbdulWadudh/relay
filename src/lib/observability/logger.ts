@@ -144,7 +144,8 @@ async function traceBody(
   body: ReadableStream<Uint8Array> | null,
   contentType: string | undefined,
 ): Promise<unknown> {
-  if (!body || !contentType?.match(/json|text|form-urlencoded/i)) return undefined
+  if (!body || !contentType?.match(/json|text|form-urlencoded/i))
+    return undefined
   try {
     const text = await new Response(body).text()
     if (text.length > MAX_TRACE_BODY_LENGTH) {

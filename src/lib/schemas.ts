@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { parseSourceUrl, SUPPORTED_SOURCE_LABELS } from "@/lib/media/sources"
 import { PROVIDER_IDS } from "@/lib/providers"
 
 /**
@@ -42,6 +43,27 @@ export type AgentInput = z.infer<typeof agentInputSchema>
 export const agentUpdateSchema = agentInputSchema.partial()
 
 export type AgentUpdateInput = z.infer<typeof agentUpdateSchema>
+
+/**
+ * Pipeline input (TRD §3 `POST /relay/process`). The URL is narrowed to a
+ * supported public item by the source registry rather than a regex here,
+ * so adding a source never touches this schema.
+ */
+export const relayProcessSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2048)
+    .refine((value) => parseSourceUrl(value) !== null, {
+      message: `Enter a public ${SUPPORTED_SOURCE_LABELS} link.`,
+    }),
+  // Optional: falls back to the matching System agent, then to the dynamic
+  // schema synthesizer (PRD §4.3).
+  agentId: z.string().min(1).max(64).optional(),
+})
+
+export type RelayProcessInput = z.infer<typeof relayProcessSchema>
 
 export const rayCallbackSchema = z.object({
   code: z.string().min(1),

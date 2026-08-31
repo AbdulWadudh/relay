@@ -19,6 +19,14 @@ export const agentKeys = {
   detail: (id: string) => [...agentKeys.details(), id] as const,
 }
 
+export const runKeys = {
+  all: ["runs"] as const,
+  lists: () => [...runKeys.all, "list"] as const,
+  list: () => [...runKeys.lists()] as const,
+  details: () => [...runKeys.all, "detail"] as const,
+  detail: (id: string) => [...runKeys.details(), id] as const,
+}
+
 export const credentialKeys = {
   all: ["credentials"] as const,
   lists: () => [...credentialKeys.all, "list"] as const,

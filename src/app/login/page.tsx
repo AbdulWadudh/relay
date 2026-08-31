@@ -23,15 +23,16 @@ export default function LoginPage() {
               {config.app.name}
             </Link>
             <p className="mt-24 max-w-md font-heading text-5xl font-semibold leading-[1.05] tracking-tight">
-              Your keys. Your workflows. Your control.
+              Short-form video, turned into knowledge you can trust.
             </p>
             <p className="mt-6 max-w-md text-base leading-7 text-muted-foreground">
-              A private credential vault for the automations that keep your work
-              moving.
+              Relay pulls the audio from a Reel or a Short, transcribes it, and
+              publishes structured notes to your workspace — with every
+              extracted detail tied to a timestamped quote from the transcript.
             </p>
           </div>
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-emerald-400">
-            Secure by default · built for self-hosting
+            Self-hosted · bring your own keys
           </p>
         </section>
         <section className="p-7 sm:p-10">

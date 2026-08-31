@@ -5,6 +5,35 @@ WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
 
+# Media engine host binaries (TRD §1). The pipeline shells out to these via
+# Bun `$`; without them in the image every run fails at preflight. ffmpeg
+# comes from Debian; yt-dlp ships a self-contained build per architecture
+# (no Python runtime needed), pinned so an upstream release can't silently
+# change extraction behaviour between deploys.
+#
+# Deliberately placed ABOVE the NEXT_PUBLIC ARG/ENV block: those ENV values
+# are baked from build args, so changing one (a release bumping
+# NEXT_PUBLIC_OPENOBSERVE_VERSION, say) changes that layer's cache key and
+# invalidates every layer after it — re-running apt and re-downloading
+# yt-dlp on a deploy that only touched app code. Up here the layer depends
+# only on the base image, so it stays cached across ordinary pushes.
+ARG YT_DLP_VERSION=2026.03.17
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ffmpeg curl ca-certificates; \
+    rm -rf /var/lib/apt/lists/*; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) asset=yt-dlp_linux ;; \
+      arm64) asset=yt-dlp_linux_aarch64 ;; \
+      *) echo "unsupported architecture for yt-dlp: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/yt-dlp \
+      "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/${asset}"; \
+    chmod +x /usr/local/bin/yt-dlp; \
+    yt-dlp --version; \
+    ffmpeg -version | head -n 1
+
 # These values are intentionally public and are compiled into the browser bundle
 # for the OpenObserve RUM/logs SDK. Server credentials remain runtime-only.
 ARG NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN

@@ -1,7 +1,89 @@
 # LLM Execution State - Relay
 
-- **Current Phase:** AWAITING HUMAN APPROVAL — Task 3 complete, ready to begin Task 4 (Relay Media Engine & Markdown Publishing) upon approval.
-- **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**
+- **Current Phase:** AWAITING HUMAN APPROVAL — Task 4.2 (Run persistence, queue, Queue page) complete; 4.3–4.6 not started.
+- **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**, **Task 4.1: Media Ingest**, **Task 4.2: Run Persistence & Queue**
+
+## Queue UI + Deploy Notes (2026-09-01)
+
+- **Run detail page** `/queue/[id]`: stage timeline, both transcript streams with ms-stamped segments, discarded-output panel for no-speech runs, source/processing facts, and the full `additional_data` blob. Prefetched server-side into `runKeys.detail(id)`, polls while the run is live and stops when terminal.
+- **Stage completion is derived from EVIDENCE (recorded timings), not list position.** The first version showed green ticks on `extracting`/`publishing` for a finished run — stages that do not exist yet. They now render as "Not run".
+- **Status badge**: the spinner slot is only rendered while active; an always-present slot made terminal labels sit right-of-centre inside their own pill. Column width is reserved on the table cell instead.
+- **Links** resolve their icon in three tiers (`src/components/queue/link-icon.tsx`): media-source brand mark → bundled brand mark (12 platforms) → `config.links.faviconUrl` → generic glyph. Only the third tier touches the network, and it is the *browser* calling out, so `FAVICON_SERVICE_URL=""` disables it.
+- **Dragonfly runs with `--cluster_mode=emulated --lock_on_hashtags`** and BullMQ uses the hash-tagged prefix `{relay}`. CORRECTION to an earlier note: this pairing is a **throughput** choice, not correctness — measured locally, an un-tagged prefix still works fine under emulated cluster mode on a single node. The tag pins a queue's keys to one Dragonfly thread.
+- **Coolify (app `djtrhq2qxxyt1doyonjctwcb`, env `relay`)**: added `REDIS_URL=redis://dragonfly:6379`, `QUEUE_CONCURRENCY/ATTEMPTS/BACKOFF_MS`, `FAVICON_SERVICE_URL`. `STUDIO_PASSWORD` was already set, so dropping the `DRIZZLE_MASTERPASS` fallback from compose is safe (that var held the literal error string — a Coolify artifact).
+- **The worker service builds from the Dockerfile rather than reusing a shared image tag.** Coolify rewrites every compose service's image to `<resource-uuid>_<service>:<sha>`, so a hand-pinned `relay-app:latest` shared between `relay` and `worker` would not exist at deploy time. Docker's layer cache makes the second build nearly free.
+- **YouTube now rate-limits this dev machine** ("Sign in to confirm you're not a bot") after repeated pulls of the same clips. Not a code fault — it maps correctly to `SOURCE_UNAVAILABLE` — but it means the deferred cookie work applies to YouTube as well as Instagram.
+
+## Task 4.3 Completion Notes (2026-09-01)
+
+- **Provider registry** `src/lib/transcription/providers.ts` mirrors `src/server/ray-providers.ts`: the id catalog stays in `src/lib/providers.ts`, this file maps ids onto endpoints/models. Pipeline code never names a provider — `resolveProvider()` picks the first configured one in preference order (Groq first: far faster than OpenAI's whisper-1, and free).
+- **Two streams (PRD §4.2)**: `/audio/transcriptions` (spoken language) and `/audio/translations` (English) run **concurrently**, both `verbose_json`, float seconds converted to integer ms. Roman/phonetic output comes from a chat transliteration pass in `roman.ts` — phonetic, never translating.
+- **Whisper models**: `whisper-large-v3`, NOT `-turbo` — turbo is transcription-only and does not serve `/audio/translations`.
+- **Groq's catalog churns.** `llama-3.3-70b-versatile` was configured and had already been withdrawn ("model does not exist"); there are now **no llama models on Groq at all**, and **no vision-capable models**. Current chat model: `openai/gpt-oss-120b`. Verify against `GET /openai/v1/models` before changing.
+- **Free tier confirmed adequate**: Groq Whisper 20 RPM / 2,000 RPD / 28,800 audio-sec per day; chat 30 RPM / 14,400 RPD. One run ≈ 120 audio-seconds (two Whisper calls on the same clip) ⇒ ~240 clips/day free. OpenRouter cannot serve this stage at all — it has no audio transcription endpoint.
+- **Gotchas found by testing against real clips:**
+  1. **A Whisper decoding `prompt` was tried to force Latin script and removed.** It does not work (Hindi still returned Devanagari) and it *contaminates* output — a low-speech clip returned "The Latin ürlich", straight out of the prompt text.
+  2. **Whisper fabricates speech on music-only audio** ("Thank you for watching!", "Sampai jumpa di channel ini!"). Since silent Reels are common, this would have fed invented content to the extraction agent — the exact failure this product exists to prevent. Gated on `no_speech_prob`; fabricated text is discarded but retained under `additional_data.no_speech.discarded_text` for auditing.
+  3. **`avg_logprob` is NOT a usable speech signal** and briefly broke the gate: measured over whole clips it is *anti-correlated* — narrated Hindi averaged **-1.278** while music-only averaged **-0.708**, so the rule rejected real speech. Thresholds derived from a partial 6-segment sample were wrong; only `no_speech_prob` (0.107 vs 0.701) is gated on.
+  4. Transliteration is done **line by line with a segment-count check**; a mismatched count returns the original rather than misaligning the timestamps Task 4.5 verifies against.
+- **`hasSpeech: false` is a signal, not a throw** — transcription returns empty streams so the caller can fall back to the frame/vision layer (below). The pipeline throws `NoSpeechError` only because no fallback exists yet.
+- **Verified end to end** against real clips under `abdulwadudh5@gmail.com`: narrated Hindi Short → `done` in 7.5s with correct Roman ("aaj main aap sabke saath chaay ki recipe share karne wali") and English ("Today I will share a very easy and tasty tea recipe. Take 2 cups of water, add 1 inch ginger…"), both ms-aligned; music-only Short → `failed` with `NO_SPEECH`, nothing fabricated. Typecheck 0, biome clean, build succeeds, all files under 250 lines.
+
+## Planned: Task 4.3b — Frame/Vision Extraction (human decision 2026-09-01, AMENDS PRD §5)
+
+**PRD §5 lists "Visual frame-by-frame OCR / computer vision analysis" as Strict Out of Scope. That is now amended.** Evidence: most Reels/Shorts are music over on-screen text, with *no speech and empty descriptions* (verified: two silent Shorts had descriptions of "" and a bare URL). For those clips audio and metadata both yield nothing, so frames are the only content source.
+
+- **Approach**: ffmpeg samples keyframes (scene-change detection), a multimodal model reads on-screen text and what is visually happening.
+- **Groq cannot do this** — its catalog has no vision models. **Gemini's free tier is the intended provider** (it also exposes an OpenAI-compatible endpoint, so it fits the existing registry shape); `gemini` is already in `AI_KEY_PROVIDERS`. Requires the user to add a Gemini key.
+- **Evidence model gains two tiers, labelled (human decision):** transcript-derived fields keep the strong guarantee — a verbatim quote must appear in the transcript or the field is dropped. Frame-derived fields carry `{frame_timestamp, on_screen_text}` and are **explicitly marked as visual evidence** in the published output, because a model reading a frame is a weaker claim than a verbatim quote and must not be presented as equivalent.
+- Narrated clips keep transcript grounding; only silent clips fall back to visual citations.
+
+## Deferred: Social Cookie Credentials (human decision 2026-08-31)
+
+Instagram refuses anonymous downloads, so Reels need a signed-in session passed to yt-dlp via `--cookies`. Decided approach and sequencing:
+
+- **Build AFTER Task 4.6**, not now — the pipeline is the product; cookie capture only unlocks one extra source, and once 4.3–4.6 exist a captured cookie can be verified end-to-end instead of only proving the download step.
+- **Capture method: server-side browser the user drives**, not a paste box and not a child window. Chromium runs on the server (**headful + Xvfb** — chosen over `--headless=new` because Instagram fingerprints headless aggressively); frames stream to a `<canvas>` via CDP `Page.startScreencast`, user input is relayed back through `Input.dispatchMouseEvent`/`dispatchKeyEvent`. The user types their password into Instagram's own page, so **Relay never stores a social password** and 2FA/CAPTCHA just work. Cookies are read from the browser's own jar (`Storage.getCookies`), serialized to Netscape format, and stored as a new credential `type: "cookie"`.
+- **Why not an in-app child window** (asked and answered): `window.open` is cross-origin so the DOM is unreadable, `document.cookie` is origin-scoped, and Instagram's `sessionid` is `HttpOnly` so JavaScript cannot read it even same-origin. Every workable route goes through a privileged context — a browser extension (`chrome.cookies`) or a browser we own. There is no in-page route.
+- **Bonus property**: a cookie minted from the server's IP is later used by yt-dlp from that same IP, avoiding the IP/device mismatch that gets pasted home-browser cookies flagged.
+- **Known risks**: Instagram anti-automation on datacenter IPs (the main failure mode), ~400 MB image growth plus ~300–500 MB RAM per session, and the screencast WebSocket is a remote-control channel that must be authenticated, user-scoped, single-use and expiring. Note the password *transits* the server even though it is never stored.
+- `credentials.type` is plain TEXT with no CHECK constraint, so adding `"cookie"` needs **no migration** — only the Drizzle enum and Zod schema.
+
+## Task 4.2 Completion Notes (2026-08-31)
+
+- **Schema**: new `relay_runs` (id, user_id FK cascade, source_url, source, agent_id, status enum, error, timings JSON, result JSON, `additional_data` JSON, timestamps; index on `(user_id, status)`), plus `additional_data` added to `credentials` and `agents` per human decision. Migration `drizzle/0003_perfect_redwing.sql` is additive-only (two `ADD COLUMN ... NOT NULL DEFAULT '{}'`), generated and applied against the remote Turso database.
+- **Queue**: BullMQ 6.3.3 + ioredis 6 over Dragonfly. BullMQ v6 moved the Redis client to a **peer dependency**, so `ioredis` is a direct dependency now, not transitive.
+- **`--default_lua_flags=allow-undeclared-keys` is MANDATORY on Dragonfly.** BullMQ's Lua scripts build key names at runtime (`args[1] .. jobId`); Dragonfly rejects that by default and *every* job fails on first enqueue with `script tried accessing undeclared key`. Set in docker-compose and documented in `src/config` and `.env.example`.
+- **Architecture**: `POST /api/v1/relay/process` writes a `queued` row then enqueues, returning 202 — the request never waits on the pipeline. The row is created *before* the job so a job can never reference a missing row; if the enqueue itself fails the run is immediately marked `failed` with `ENQUEUE_FAILED` rather than sitting on `queued` forever. `relay_runs` is the source of truth, so a flushed Dragonfly loses scheduling, never history.
+- **Worker** runs as its own process (`bun run worker`, `scripts/worker.ts`, `worker` service in compose reusing the `relay-app:latest` image). Permanent failures (`SOURCE_UNSUPPORTED`, `SOURCE_UNAVAILABLE`, missing binary) throw `UnrecoverableError` so BullMQ stops instead of burning the retry budget re-downloading nothing — verified: an unavailable video failed after 1 attempt, not 2.
+- **`src/lib/run-status.ts`** holds the status vocabulary (labels, solid badge fills, terminal check) with only a *type* import from the schema, so client components can use it without pulling Drizzle into the browser bundle (`src/lib/runs.ts` opens the db and must never be imported client-side). `Record<RunStatus, …>` makes it exhaustive by type, so a new status can't silently drift.
+- **UI**: `/queue` follows the established list pattern (server prefetch into `runKeys`, HydrationBoundary, skeleton mirroring the real chrome, loading/error/empty/refetch/stale states). Polling is a `refetchInterval` function that returns 2000 while any run is non-terminal and `false` otherwise — measured at **3 polls during an 8s active window, 0 polls in 12s idle**. Sidebar "Queue" un-flagged.
+- **Gotchas found and fixed:**
+  1. `TableCell` bakes in `whitespace-nowrap`, so the error message's `line-clamp-2` could never wrap — it clipped mid-word. Needs an explicit `whitespace-normal`.
+  2. `pkill -f "start-server.js"` does **not** match this project's `bun --bun next start` process. Stale servers kept serving an old build while the "new" one silently failed to bind — which looked exactly like a broken route (`/queue` fell through to `[...catchAll]`, whose Title Case fallback even produced a convincing "Queue" heading). Kill by matching `next start` via PowerShell and confirm port 3000 is free before rebuilding.
+- **Verification**: typecheck 0 errors; `biome check` clean on all changed paths; `bun run build` succeeds. Full round-trip in the running app with agent-browser (dark + light, 1440×900 + 390×844): empty state → invalid-URL inline rejection → submit → `Queued` badge + toast → polled to `Done` with title and 3.5s duration → unavailable URL → red `Failed` badge with wrapped message → delete with confirm → row gone and persisted. QA account and its runs were removed afterwards.
+- **NOTE — `bun run lint` fails repo-wide** on pre-existing `useSortedClasses` violations in files this task never touched (`src/app/login/page.tsx`, `src/app/privacy/page.tsx`, landing page). Not introduced here; worth a separate formatting pass.
+- **Local dev** needs Dragonfly: `docker run -d --name relay-dragonfly --ulimit memlock=-1 -p 6379:6379 docker.dragonflydb.io/dragonflydb/dragonfly:latest --default_lua_flags=allow-undeclared-keys`, then `bun run worker` alongside `bun run start`.
+
+## Task 4 Human Decisions (2026-08-31)
+
+- **Queue/workers:** BullMQ + Dragonfly (Redis) — runs are enqueued, never executed inside the HTTP request. Lands in Task 4.2.
+- **`additional_data` JSON column** on all app-domain tables (`credentials`, `agents`, `relay_runs`) — NOT on Better Auth's `auth_*` tables, which Better Auth owns and would never populate.
+- **Production is containerised** — anything the pipeline needs at runtime must be installed in the image, not assumed on the host.
+
+## Task 4.1 Completion Notes (2026-08-31)
+
+- **Source registry** `src/lib/media/sources.ts`: owns the supported-source vocabulary the way `providers.ts` owns credential providers. `parseSourceUrl()` accepts only Instagram Reel (`/reel/`, `/reels/`, `/<account>/reel/`) and YouTube Shorts (`/shorts/`) paths on those hosts, normalises `www.`/`m.`, rejects non-http(s), and returns a tracking-free `canonicalUrl` that is what gets handed to yt-dlp and stored on the run. `SUPPORTED_SOURCE_LABELS` derives all user-facing copy, so no pipeline code contains a source string literal.
+- **Zod boundary**: `relayProcessSchema` in `src/lib/schemas.ts` refines the URL through `parseSourceUrl`, so adding a source never touches the schema.
+- **Binary preflight** `src/lib/media/binaries.ts`: every run checks `yt-dlp`/`ffmpeg` before spawning and throws `MediaBinaryError` naming the install command and the override env var. Only *successful* detections are cached, so installing a binary on a running server takes effect without a restart.
+- **Ingest** `src/lib/media/{ingest,download,errors}.ts`: `withIngestedAudio(input, consume)` is a scope function — it downloads into `data/tmp/run-<id>/`, hands the MP3 to the caller, and purges the directory in `finally`, so download failures, extraction failures and consumer failures all clean up. yt-dlp's ~500 KB info JSON is pruned to ~2.5 KB of analysable source metadata (title, description, channel, counts, tags, upload date) destined for `relay_runs.additional_data`; format tables, captions and expiring signed CDN URLs are dropped.
+- **Config**: new `config.media` section (`YT_DLP_PATH`, `FFMPEG_PATH`, `MEDIA_TEMP_DIR`, and the mono 16 kHz 64 kbps MP3 target Whisper wants).
+- **Dockerfile**: installs `ffmpeg` (Debian) and a pinned, arch-aware, self-contained `yt-dlp` build. Without this the containerised prod deploy would fail every run at preflight.
+- **Gotchas found and fixed (all three were silent failures):**
+  1. `ffmpeg` exits 8 on `--version` (it only accepts single-dash `-version`) after printing its banner, so a perfectly good ffmpeg read as "broken". The version flag is now per-binary.
+  2. A newline inside a Bun `$` template is a **command separator**, not whitespace — multi-line commands silently ran the second line as its own command. All invocations are single-line with arguments passed as an array (each element becomes exactly one argv entry).
+  3. Bun's `rm` shell builtin **silently no-ops on Windows when the path starts with `./`** — exit 0, empty stderr, directory untouched. Every run was leaking its media. The temp root strips the `./` prefix, and `purge()` now verifies the directory is actually gone instead of trusting the exit code.
+- **Verification**: `bun run typecheck` 0 errors; `biome check` clean; `bun run build` succeeds; `import { $ } from "bun"` confirmed to build *and execute* inside a real Next.js production route handler (temporary probe route, reverted). Full ingest exercised on Windows and again inside the `oven/bun:1` container: real YouTube Short downloads/extracts/purges; unavailable, unsupported, consumer-throws and missing-binary paths all verified. **Instagram happy path is NOT verified** — yt-dlp cannot fetch Reels anonymously ("rate-limit reached or login required"), which correctly maps to `SOURCE_UNAVAILABLE`; publishing real Reels will need a cookies/session mechanism that is not in Task 4's scope.
 
 ## Task 3 Completion Notes (2026-08-31)
 

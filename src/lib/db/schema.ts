@@ -39,6 +39,10 @@ export const credentials = sqliteTable(
       Record<string, unknown>
     >(),
     iv: text("iv").notNull(), // Unique AES-256-GCM initialization vector
+    additionalData: text("additional_data", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -73,9 +77,73 @@ export const agents = sqliteTable(
       .notNull()
       .default({}),
     isActive: integer("is_active").default(1).notNull(),
+    additionalData: text("additional_data", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [index("idx_agents_user_id").on(table.userId)],
+)
+
+/**
+ * Pipeline runs (Task 4.2). TRD §2 defines no table for these; this is the
+ * durable record behind the Queue page and the BullMQ job.
+ *
+ * The queue holds only the job reference — this table is the source of
+ * truth for a run's state, so a Dragonfly flush loses scheduling, never
+ * history. `additional_data` is the catch-all the rest of the pipeline
+ * appends to (source metadata from yt-dlp, transcripts, provider
+ * responses, binary versions), so nothing generated during a run is
+ * discarded just because it has no dedicated column.
+ */
+export const relayRuns = sqliteTable(
+  "relay_runs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    // Canonical, tracking-free URL produced by the source registry.
+    sourceUrl: text("source_url").notNull(),
+    // Parsed source id ("instagram" / "youtube") — queryable without
+    // reaching into additional_data.
+    source: text("source").notNull(),
+    // Null means "route automatically" (System agent, else synthesized).
+    agentId: text("agent_id"),
+    status: text("status", {
+      enum: [
+        "queued",
+        "downloading",
+        "transcribing",
+        "extracting",
+        "publishing",
+        "done",
+        "failed",
+      ],
+    })
+      .notNull()
+      .default("queued"),
+    // User-facing failure message; the machine-readable code and stack
+    // live in additional_data.
+    error: text("error"),
+    // Per-stage durations in ms, accumulated as the run progresses.
+    timings: text("timings", { mode: "json" })
+      .$type<Record<string, number>>()
+      .notNull()
+      .default({}),
+    // Extraction output + published destination URL (Tasks 4.4–4.6).
+    result: text("result", { mode: "json" }).$type<Record<string, unknown>>(),
+    additionalData: text("additional_data", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_relay_runs_user_status").on(table.userId, table.status),
+  ],
 )
 
 export const authSessions = sqliteTable(
@@ -147,3 +215,6 @@ export type Credential = typeof credentials.$inferSelect
 export type NewCredential = typeof credentials.$inferInsert
 export type Agent = typeof agents.$inferSelect
 export type NewAgent = typeof agents.$inferInsert
+export type RelayRun = typeof relayRuns.$inferSelect
+export type NewRelayRun = typeof relayRuns.$inferInsert
+export type RunStatus = RelayRun["status"]

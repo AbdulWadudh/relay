@@ -39,8 +39,65 @@ services:
       OPENOBSERVE_URL: ${OPENOBSERVE_URL}
       OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
       OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
+      REDIS_URL: redis://dragonfly:6379
+    depends_on:
+      dragonfly:
+        condition: service_healthy
     volumes:
       - relay_data:/app/data
+
+  # Runs the pipeline out of band so a download/transcription never occupies
+  # a request handler. Builds from the same Dockerfile as `relay` rather
+  # than reusing a shared tag: Coolify rewrites every service's image to
+  # <resource-uuid>_<service>:<sha>, so a hand-pinned `relay-app:latest`
+  # would not exist at deploy time. Docker's layer cache makes the second
+  # build nearly free since the layers are identical.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["bun", "scripts/worker.ts"]
+    environment:
+      NODE_ENV: production
+      VAULT_KEY: ${VAULT_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_TOKEN: ${DATABASE_TOKEN}
+      REDIS_URL: redis://dragonfly:6379
+      QUEUE_CONCURRENCY: ${QUEUE_CONCURRENCY:-2}
+      OPENOBSERVE_URL: ${OPENOBSERVE_URL}
+      OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
+      OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
+    depends_on:
+      relay:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+    volumes:
+      - relay_data:/app/data
+
+  # Redis-compatible queue backend for BullMQ.
+  # `--default_lua_flags=allow-undeclared-keys` is REQUIRED: BullMQ's Lua
+  # scripts build key names at runtime, which Dragonfly rejects by default
+  # with "script tried accessing undeclared key" — every job fails on the
+  # first enqueue without it.
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    restart: unless-stopped
+    command:
+      - "--default_lua_flags=allow-undeclared-keys"
+      - "--cluster_mode=emulated"
+      - "--lock_on_hashtags"
+    ulimits:
+      memlock: -1
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - dragonfly_data:/data
 
   studio:
     image: ghcr.io/drizzle-team/gateway:1.4.1
@@ -49,7 +106,7 @@ services:
       SERVICE_FQDN_STUDIO_4983: /
       PORT: 4983
       STORE_PATH: /app
-      MASTERPASS: "${STUDIO_PASSWORD:-${DRIZZLE_MASTERPASS:?generate one with openssl rand -base64 24}}"
+      MASTERPASS: "${STUDIO_PASSWORD:?generate one with openssl rand -base64 24}"
     depends_on:
       relay:
         condition: service_healthy
@@ -60,3 +117,4 @@ services:
 volumes:
   relay_data:
   drizzle_gateway:
+  dragonfly_data:

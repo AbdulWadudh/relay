@@ -34,7 +34,9 @@ const MASKED_COLUMNS = {
   updatedAt: credentials.updatedAt,
 }
 
-export async function listCredentials(userId: string): Promise<MaskedCredential[]> {
+export async function listCredentials(
+  userId: string,
+): Promise<MaskedCredential[]> {
   return getDb()
     .select(MASKED_COLUMNS)
     .from(credentials)
@@ -105,7 +107,10 @@ export async function createCredential(
   return row
 }
 
-export async function deleteCredential(id: string, userId: string): Promise<boolean> {
+export async function deleteCredential(
+  id: string,
+  userId: string,
+): Promise<boolean> {
   const deleted = await getDb()
     .delete(credentials)
     .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))

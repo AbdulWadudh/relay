@@ -64,7 +64,7 @@ const NAV = [
     idle: "hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600",
     active:
       "data-active:bg-amber-600 data-active:text-white dark:data-active:bg-amber-600",
-    soon: true,
+    soon: false,
   },
   {
     href: "/settings",

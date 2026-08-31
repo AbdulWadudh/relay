@@ -13,6 +13,7 @@ import { telemetryEventSchema } from "@/lib/schemas"
 import { agentsModule } from "@/server/agents"
 import { credentialsModule } from "@/server/credentials"
 import { raysModule } from "@/server/rays"
+import { relayModule, runsModule } from "@/server/runs"
 
 /**
  * Hono backend mounted inside the Next.js App Router (TRD §1, §3).
@@ -28,6 +29,8 @@ app.route("/credentials", credentialsModule)
 // Rays are Relay's public integration routes; OAuth is the underlying protocol.
 app.route("/rays/oauth", raysModule)
 app.route("/agents", agentsModule)
+app.route("/runs", runsModule)
+app.route("/relay", relayModule)
 
 app.get("/health", async (c) => {
   const db = getDb()

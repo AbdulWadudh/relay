@@ -10,9 +10,10 @@ import * as schema from "./schema"
 // wrapper, which has a known bug resolving @libsql/client's native bindings
 // ("Failed to load external module @libsql/client-<hash>"). Production
 // builds/next start were never affected — this only works around next dev.
-const { createClient } = require(/* turbopackIgnore: true */ "@libsql/client") as {
-  createClient: typeof createClientType
-}
+const { createClient } =
+  require(/* turbopackIgnore: true */ "@libsql/client") as {
+    createClient: typeof createClientType
+  }
 
 // drizzle-orm/libsql's own driver.js re-imports @libsql/client statically too
 // (for its createClient(url)/createClient(config) overloads, which we never

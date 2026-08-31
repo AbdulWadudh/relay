@@ -1,8 +1,8 @@
 "use client"
 
+import Google from "@thesvg/react/google"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -54,12 +54,12 @@ export default function LoginForm() {
           Welcome to Relay
         </p>
         <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight">
-          {mode === "signin" ? "Sign in to your vault" : "Create your account"}
+          {mode === "signin" ? "Sign in to Relay" : "Create your account"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {mode === "signin"
-            ? "Pick up where your workflows left off."
-            : "Start building a safer automation workspace."}
+            ? "Pick up where your last run left off."
+            : "Start turning videos into structured, sourced notes."}
         </p>
       </div>
       <Button
@@ -69,6 +69,9 @@ export default function LoginForm() {
         onClick={continueWithGoogle}
         disabled={pending}
       >
+        {/* Official multicolour Google mark — renders correctly on both
+            the light and dark surfaces without a variant override. */}
+        <Google className="size-5" aria-hidden data-icon="inline-start" />
         Continue with Google
       </Button>
       <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
