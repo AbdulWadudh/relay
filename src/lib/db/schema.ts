@@ -59,11 +59,19 @@ export const agents = sqliteTable(
       .references(() => authUsers.id, { onDelete: "cascade" }),
     type: text("type", { enum: ["system", "human"] }).notNull(),
     name: text("name").notNull(),
+    // Short human-facing summary shown in the agents list.
+    description: text("description").notNull().default(""),
     systemPrompt: text("system_prompt").notNull(),
     // JSON Schema object — TEXT on disk via Drizzle json mode.
     expectedOutputSchema: text("expected_output_schema", { mode: "json" })
       .$type<Record<string, unknown>>()
       .notNull(),
+    // Free-form agent configuration (model params, etc.) — TEXT on disk via
+    // Drizzle json mode, shape intentionally open-ended.
+    config: text("config", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     isActive: integer("is_active").default(1).notNull(),
     createdAt: integer("created_at").notNull(),
   },

@@ -1,7 +1,15 @@
 # LLM Execution State - Relay
 
-- **Current Phase:** AWAITING HUMAN APPROVAL — Task 2 complete, ready to begin Task 3 (Agent Management System) upon approval. Open human decision: whether to adopt Better Auth (now implemented for multi-user authentication).
-- **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**
+- **Current Phase:** AWAITING HUMAN APPROVAL — Task 3 complete, ready to begin Task 4 (Relay Media Engine & Markdown Publishing) upon approval.
+- **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**
+
+## Task 3 Completion Notes (2026-08-31)
+
+- **Agent service** `src/lib/agents.ts`: `listAgents`/`createAgent`/`updateAgent`/`deleteAgent`, masked to an `AgentSummary` shape (`isActive` coerced to boolean; the `is_active` column has no Drizzle boolean mode). Only `type: "human"` rows are creatable/mutable through this API — `update`/`delete` scope their WHERE clause to `type = "human"` so a future System agent (synthesized by Task 4's pipeline) can't be edited or removed from this UI.
+- **API**: `GET/POST /api/v1/agents`, `PUT/DELETE /api/v1/agents/:id` (Zod-validated via `agentInputSchema`/`agentUpdateSchema` in `src/lib/schemas.ts`), mounted in `src/server/agents.ts` following the `credentialsModule` pattern.
+- **UI**: `/agents` page — card grid (`agents-grid.tsx`/`agent-card.tsx`) instead of Vault's table, since agents carry richer content (prompt preview, JSON schema, active toggle) than a credential row. Shared create/edit dialog (`agent-form-dialog.tsx`) with a JSON-Schema `Textarea` (client-side `JSON.parse` validation with inline error, blocks submit on invalid JSON) and a live Active `Switch`. Added the ShadCN `Textarea` primitive (`bunx shadcn add textarea`) — didn't exist in the project yet. GSAP entrance stagger on cards per TRD's "GSAP micro-interactions" spec (`useGSAP` + `gsap.from`, scoped to the card ref) — the only page in the app using GSAP for chrome motion, everywhere else uses Tailwind `animate-in` utilities. Sidebar's "Agents" item un-flagged from `soon: true`.
+- **Gotcha fixed**: `AgentCard`'s optimistic `isActive` state (`useState(agent.isActive)`) went stale after editing an agent through the form dialog — `router.refresh()` re-renders the Server Component tree with fresh props, but the already-mounted `AgentCard` client component doesn't reset its own `useState` just because a prop changed. Fixed with a `useEffect` that re-syncs local state from the `agent.isActive` prop.
+- **QA (agent-browser)**: full create → toggle-active (persists across reload) → edit (including a deliberate invalid-JSON submit to confirm the inline error path) → delete round-trip verified in the running app, plus light mode and mobile viewport (390×844, single-column grid, dialog scrolls correctly).
 
 ## Task 2 Completion Notes (2026-08-29)
 

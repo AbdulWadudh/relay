@@ -10,6 +10,7 @@ import {
   openObserveMiddleware,
 } from "@/lib/observability/logger"
 import { telemetryEventSchema } from "@/lib/schemas"
+import { agentsModule } from "@/server/agents"
 import { credentialsModule } from "@/server/credentials"
 import { raysModule } from "@/server/rays"
 
@@ -26,6 +27,7 @@ app.use("*", openObserveMiddleware())
 app.route("/credentials", credentialsModule)
 // Rays are Relay's public integration routes; OAuth is the underlying protocol.
 app.route("/rays/oauth", raysModule)
+app.route("/agents", agentsModule)
 
 app.get("/health", async (c) => {
   const db = getDb()

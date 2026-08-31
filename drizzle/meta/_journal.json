@@ -15,6 +15,13 @@
       "when": 1788173461970,
       "tag": "0001_numerous_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788189891726,
+      "tag": "0002_previous_speedball",
+      "breakpoints": true
     }
   ]
 }

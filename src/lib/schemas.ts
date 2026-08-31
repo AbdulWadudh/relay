@@ -28,13 +28,20 @@ export type CredentialInput = z.infer<typeof credentialInputSchema>
 
 export const agentInputSchema = z.object({
   name: z.string().min(1).max(120),
+  description: z.string().min(1).max(280),
   systemPrompt: z.string().min(1),
   // JSON Schema object; persisted via the schema's json-mode column.
   expectedOutputSchema: z.record(z.string(), z.unknown()),
+  // Free-form agent configuration; persisted via its own json-mode column.
+  config: z.record(z.string(), z.unknown()).default({}),
   isActive: z.boolean().default(true),
 })
 
 export type AgentInput = z.infer<typeof agentInputSchema>
+
+export const agentUpdateSchema = agentInputSchema.partial()
+
+export type AgentUpdateInput = z.infer<typeof agentUpdateSchema>
 
 export const rayCallbackSchema = z.object({
   code: z.string().min(1),
