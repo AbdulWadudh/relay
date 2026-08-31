@@ -8,6 +8,13 @@
       "when": 1788170191585,
       "tag": "0000_jittery_stardust",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788173461970,
+      "tag": "0001_numerous_loa",
+      "breakpoints": true
     }
   ]
 }
