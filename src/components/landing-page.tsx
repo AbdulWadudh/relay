@@ -356,10 +356,10 @@ export function LandingPage() {
                 </div>
                 <div className="absolute bottom-7 left-7 right-7 flex items-end justify-between gap-6">
                   <div>
-                    <h3 className="font-heading text-3xl font-semibold tracking-[-0.05em]">
+                    <h3 className="font-heading text-4xl font-semibold tracking-[-0.05em] md:text-5xl">
                       {story.title}
                     </h3>
-                    <p className="mt-2 max-w-sm text-sm leading-6 text-white/60">
+                    <p className="mt-3 max-w-sm text-base leading-7 text-white/60">
                       {story.copy}
                     </p>
                   </div>
