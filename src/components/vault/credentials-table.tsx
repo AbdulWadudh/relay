@@ -33,9 +33,9 @@ export function CredentialsTable({
     isPending,
     isError,
     error,
+    dataUpdatedAt,
     isFetching,
     isStale,
-    dataUpdatedAt,
     refetch,
   } = useCredentials()
 
@@ -61,8 +61,8 @@ export function CredentialsTable({
         entity="credentials"
         isFetching={isFetching}
         isStale={isStale}
-        isError={isError}
         updatedAt={dataUpdatedAt}
+        isError={isError}
         onRefresh={() => refetch()}
       />
       {/* Narrow viewports can't fit a 6-column table — a stacked card per
@@ -73,7 +73,7 @@ export function CredentialsTable({
         {rows.map((credential) => (
           <div
             key={credential.id}
-            className="fade-in slide-in-from-bottom-1 animate-in rounded-lg border fill-mode-both p-4 transition-colors duration-200"
+            className="rounded-lg border p-4 transition-colors duration-200"
           >
             <div className="flex items-start gap-3">
               <ProviderTile provider={credential.provider} />
@@ -122,7 +122,7 @@ export function CredentialsTable({
             {rows.map((credential) => (
               <TableRow
                 key={credential.id}
-                className="fade-in slide-in-from-bottom-1 animate-in fill-mode-both transition-colors duration-200 hover:bg-muted"
+                className="transition-colors duration-200 hover:bg-muted"
               >
                 <TableCell>
                   <div className="flex items-center gap-3">

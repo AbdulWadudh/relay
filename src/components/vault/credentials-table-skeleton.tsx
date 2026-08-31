@@ -1,3 +1,4 @@
+import { QueryStatusBarSkeleton } from "@/components/query-status"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -16,7 +17,9 @@ const ROWS = [0, 1, 2, 3]
  */
 export function CredentialsTableSkeleton() {
   return (
-    <>
+    <div className="flex flex-col gap-2">
+      <QueryStatusBarSkeleton entity="credentials" />
+
       <div className="flex flex-col gap-3 sm:hidden">
         {ROWS.map((row) => (
           <div key={row} className="rounded-lg border p-4">
@@ -78,6 +81,6 @@ export function CredentialsTableSkeleton() {
           </TableBody>
         </Table>
       </div>
-    </>
+    </div>
   )
 }

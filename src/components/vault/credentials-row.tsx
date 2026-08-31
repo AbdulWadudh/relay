@@ -105,7 +105,7 @@ export function RowActions({ credential }: { credential: MaskedCredential }) {
 
 export function VaultEmpty({ configuredIds }: { configuredIds: string[] }) {
   return (
-    <Empty className="fade-in zoom-in-95 animate-in rounded-lg border border-dashed fill-mode-both transition-colors duration-300 hover:border-emerald-500/40">
+    <Empty className="rounded-lg border border-dashed transition-colors duration-300 hover:border-emerald-500/40">
       <EmptyHeader>
         <EmptyMedia variant="icon" className="bg-emerald-600 text-white">
           <HugeiconsIcon

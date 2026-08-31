@@ -66,7 +66,7 @@ function RowActions({ agent }: { agent: AgentSummary }) {
 
 function AgentsEmpty() {
   return (
-    <Empty className="fade-in zoom-in-95 animate-in rounded-lg border border-dashed fill-mode-both transition-colors duration-300 hover:border-emerald-500/40">
+    <Empty className="rounded-lg border border-dashed transition-colors duration-300 hover:border-emerald-500/40">
       <EmptyHeader>
         <EmptyMedia variant="icon" className="bg-emerald-600 text-white">
           <HugeiconsIcon
@@ -94,9 +94,9 @@ export function AgentsTable() {
     isPending,
     isError,
     error,
+    dataUpdatedAt,
     isFetching,
     isStale,
-    dataUpdatedAt,
     refetch,
   } = useAgents()
 
@@ -123,8 +123,8 @@ export function AgentsTable() {
         entity="agents"
         isFetching={isFetching}
         isStale={isStale}
-        isError={isError}
         updatedAt={dataUpdatedAt}
+        isError={isError}
         onRefresh={() => refetch()}
       />
 
@@ -139,7 +139,7 @@ export function AgentsTable() {
             {rows.map((agent) => (
               <div
                 key={agent.id}
-                className="fade-in slide-in-from-bottom-1 animate-in rounded-lg border fill-mode-both p-4 transition-colors duration-200"
+                className="rounded-lg border p-4 transition-colors duration-200"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="grid min-w-0 flex-1 gap-1 leading-tight">
@@ -176,7 +176,7 @@ export function AgentsTable() {
                 {rows.map((agent) => (
                   <TableRow
                     key={agent.id}
-                    className="fade-in slide-in-from-bottom-1 animate-in fill-mode-both transition-colors duration-200 hover:bg-muted"
+                    className="transition-colors duration-200 hover:bg-muted"
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
