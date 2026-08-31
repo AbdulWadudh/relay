@@ -2,9 +2,8 @@
 
 import { Add01Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { useRouter } from "next/navigation"
 import * as React from "react"
-
+import { useAgentForm } from "@/components/agents/use-agent-form"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -24,7 +23,6 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { toast } from "@/components/ui/toast"
 import {
   Tooltip,
   TooltipContent,
@@ -32,104 +30,25 @@ import {
 } from "@/components/ui/tooltip"
 import type { AgentSummary } from "@/lib/agents"
 
-const DEFAULT_SCHEMA = {
-  type: "object",
-  properties: {},
-  required: [],
-}
-
-const DEFAULT_CONFIG = {}
-
 export function AgentFormDialog({ agent }: { agent?: AgentSummary }) {
-  const isEdit = Boolean(agent)
-  const router = useRouter()
   const [open, setOpen] = React.useState(false)
-  const [name, setName] = React.useState(agent?.name ?? "")
-  const [description, setDescription] = React.useState(agent?.description ?? "")
-  const [systemPrompt, setSystemPrompt] = React.useState(
-    agent?.systemPrompt ?? "",
-  )
-  const [schemaText, setSchemaText] = React.useState(
-    JSON.stringify(agent?.expectedOutputSchema ?? DEFAULT_SCHEMA, null, 2),
-  )
-  const [configText, setConfigText] = React.useState(
-    JSON.stringify(agent?.config ?? DEFAULT_CONFIG, null, 2),
-  )
-  const [isActive, setIsActive] = React.useState(agent?.isActive ?? true)
-  const [schemaError, setSchemaError] = React.useState<string | null>(null)
-  const [configError, setConfigError] = React.useState<string | null>(null)
-  const [pending, setPending] = React.useState(false)
-
-  function reset() {
-    setName(agent?.name ?? "")
-    setDescription(agent?.description ?? "")
-    setSystemPrompt(agent?.systemPrompt ?? "")
-    setSchemaText(
-      JSON.stringify(agent?.expectedOutputSchema ?? DEFAULT_SCHEMA, null, 2),
-    )
-    setConfigText(JSON.stringify(agent?.config ?? DEFAULT_CONFIG, null, 2))
-    setIsActive(agent?.isActive ?? true)
-    setSchemaError(null)
-    setConfigError(null)
-  }
-
-  async function submit() {
-    let expectedOutputSchema: Record<string, unknown>
-    try {
-      expectedOutputSchema = JSON.parse(schemaText)
-    } catch {
-      setSchemaError("That's not valid JSON.")
-      return
-    }
-    let config: Record<string, unknown>
-    try {
-      config = JSON.parse(configText)
-    } catch {
-      setConfigError("That's not valid JSON.")
-      return
-    }
-    setSchemaError(null)
-    setConfigError(null)
-    setPending(true)
-    try {
-      const response = await fetch(
-        isEdit ? `/api/v1/agents/${agent?.id}` : "/api/v1/agents",
-        {
-          method: isEdit ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: name.trim(),
-            description: description.trim(),
-            systemPrompt: systemPrompt.trim(),
-            expectedOutputSchema,
-            config,
-            isActive,
-          }),
-        },
-      )
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      toast.add({
-        type: "success",
-        title: isEdit ? "Agent updated" : "Agent created",
-      })
-      setOpen(false)
-      router.refresh()
-    } catch {
-      toast.add({
-        type: "error",
-        title: isEdit
-          ? "Could not update the agent"
-          : "Could not create the agent",
-      })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  const invalid =
-    name.trim().length === 0 ||
-    description.trim().length === 0 ||
-    systemPrompt.trim().length === 0
+  const { isEdit, fields, errors, pending, invalid, reset, submit } =
+    useAgentForm(agent, () => setOpen(false))
+  const {
+    name,
+    setName,
+    description,
+    setDescription,
+    systemPrompt,
+    setSystemPrompt,
+    schemaText,
+    setSchemaText,
+    configText,
+    setConfigText,
+    isActive,
+    setIsActive,
+  } = fields
+  const { schemaError, setSchemaError, configError, setConfigError } = errors
 
   return (
     <Dialog

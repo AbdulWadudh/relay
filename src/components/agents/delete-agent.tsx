@@ -2,8 +2,6 @@
 
 import { Delete02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { useRouter } from "next/navigation"
-import * as React from "react"
 
 import {
   AlertDialog,
@@ -24,6 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useDeleteAgent } from "@/lib/query/agents"
 
 export function DeleteAgent({
   agentId,
@@ -32,23 +31,17 @@ export function DeleteAgent({
   agentId: string
   agentName: string
 }) {
-  const router = useRouter()
-  const [pending, setPending] = React.useState(false)
+  const deleteAgent = useDeleteAgent()
 
-  async function remove() {
-    setPending(true)
-    try {
-      const response = await fetch(`/api/v1/agents/${agentId}`, {
-        method: "DELETE",
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      toast.add({ type: "success", title: `${agentName} removed` })
-      router.refresh()
-    } catch {
-      toast.add({ type: "error", title: "Could not remove the agent" })
-    } finally {
-      setPending(false)
-    }
+  // The row is removed from the cache optimistically and restored if the
+  // request fails, so the confirm dialog closes onto an updated list.
+  function remove() {
+    deleteAgent.mutate(agentId, {
+      onSuccess: () =>
+        toast.add({ type: "success", title: `${agentName} removed` }),
+      onError: () =>
+        toast.add({ type: "error", title: "Could not remove the agent" }),
+    })
   }
 
   return (
@@ -68,7 +61,7 @@ export function DeleteAgent({
             />
           }
         >
-          {pending ? (
+          {deleteAgent.isPending ? (
             <Spinner />
           ) : (
             <HugeiconsIcon icon={Delete02Icon} strokeWidth={1.5} />
@@ -80,8 +73,8 @@ export function DeleteAgent({
         <AlertDialogHeader>
           <AlertDialogTitle>Remove {agentName}?</AlertDialogTitle>
           <AlertDialogDescription>
-            This agent's prompt and output schema are deleted permanently.
-            Pipelines routed to it will need a replacement agent.
+            The agent and its extraction schema are deleted permanently.
+            Pipelines referencing it will stop producing structured output.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

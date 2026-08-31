@@ -1,4 +1,4 @@
-import { isServer, QueryClient } from "@tanstack/react-query"
+import { environmentManager, QueryClient } from "@tanstack/react-query"
 
 import { ApiError } from "@/lib/query/http"
 
@@ -14,13 +14,10 @@ function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // Server-rendered data arrives already fresh — without a stale
-        // window every hydrated query would immediately refetch on mount.
         staleTime: 30_000,
         gcTime: 5 * 60_000,
         refetchOnWindowFocus: true,
         retry: (failureCount, error) => {
-          // 401/404/400 are terminal; only retry infrastructure failures.
           if (error instanceof ApiError && error.isClientError) return false
           return failureCount < 2
         },
@@ -36,7 +33,7 @@ function makeQueryClient(): QueryClient {
 let browserQueryClient: QueryClient | undefined
 
 export function getQueryClient(): QueryClient {
-  if (isServer) return makeQueryClient()
+  if (environmentManager.isServer()) return makeQueryClient()
   browserQueryClient ??= makeQueryClient()
   return browserQueryClient
 }

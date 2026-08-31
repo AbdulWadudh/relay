@@ -1,15 +1,7 @@
-import { RefreshIcon, VaultIcon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
+"use client"
+
+import { QueryErrorState } from "@/components/query-error"
+import { QueryStatusBar } from "@/components/query-status"
 import {
   Table,
   TableBody,
@@ -19,129 +11,66 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { AddConnectionDialog } from "@/components/vault/add-connection-dialog"
-import { DeleteCredential } from "@/components/vault/delete-credential"
-import {
-  type ProviderIconWithVariant,
-  providerIcon,
-  providerIconVariant,
-  providerLabel,
-} from "@/lib/providers"
-import type { MaskedCredential } from "@/lib/vault"
-
-const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" })
-
-function metaString(credential: MaskedCredential, key: string): string | null {
-  const value = credential.metaData?.[key]
-  return typeof value === "string" && value.length > 0 ? value : null
-}
-
-/** Account name (provider registry contract), only when distinct from the provider itself. */
-function accountNameFor(credential: MaskedCredential): string | null {
-  const name = metaString(credential, "account_name")
-  return name && name !== providerLabel(credential.provider) ? name : null
-}
-
-function accountEmailFor(credential: MaskedCredential): string | null {
-  return metaString(credential, "account_email")
-}
-
-function ProviderTile({ provider }: { provider: string }) {
-  const Icon = providerIcon(provider) as ProviderIconWithVariant | null
-  return Icon ? (
-    <Icon variant={providerIconVariant(provider)} className="size-8 shrink-0" />
-  ) : null
-}
-
-function TypeBadge({ type }: { type: MaskedCredential["type"] }) {
-  return type === "oauth" ? (
-    <Badge className="shrink-0 border-transparent bg-violet-600 text-white">
-      OAuth
-    </Badge>
-  ) : (
-    <Badge className="shrink-0 border-transparent bg-emerald-600 text-white">
-      API key
-    </Badge>
-  )
-}
-
-function RowActions({ credential }: { credential: MaskedCredential }) {
-  return (
-    <div className="flex items-center justify-end gap-1">
-      {credential.type === "oauth" ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                nativeButton={false}
-                className="transition-all duration-200 hover:scale-110 hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600"
-                aria-label={`Reconnect ${providerLabel(credential.provider)}`}
-                render={
-                  <a href={`/api/v1/rays/oauth/${credential.provider}`} />
-                }
-              />
-            }
-          >
-            <HugeiconsIcon icon={RefreshIcon} strokeWidth={1.5} />
-          </TooltipTrigger>
-          <TooltipContent>
-            Reconnect {providerLabel(credential.provider)}
-          </TooltipContent>
-        </Tooltip>
-      ) : null}
-      <DeleteCredential
-        credentialId={credential.id}
-        providerLabel={providerLabel(credential.provider)}
-      />
-    </div>
-  )
-}
+  accountEmailFor,
+  accountNameFor,
+  dateFormat,
+  ProviderTile,
+  RowActions,
+  TypeBadge,
+  VaultEmpty,
+} from "@/components/vault/credentials-row"
+import { CredentialsTableSkeleton } from "@/components/vault/credentials-table-skeleton"
+import { providerLabel } from "@/lib/providers"
+import { useCredentials } from "@/lib/query/credentials"
 
 export function CredentialsTable({
-  credentials,
   configuredIds,
 }: {
-  credentials: MaskedCredential[]
   configuredIds: string[]
 }) {
-  if (credentials.length === 0) {
+  const {
+    data: credentials,
+    isPending,
+    isError,
+    error,
+    isFetching,
+    isStale,
+    dataUpdatedAt,
+    refetch,
+  } = useCredentials()
+
+  if (isPending) return <CredentialsTableSkeleton />
+
+  if (isError && !credentials) {
     return (
-      <Empty className="fade-in zoom-in-95 animate-in rounded-lg border border-dashed fill-mode-both transition-colors duration-300 hover:border-emerald-500/40">
-        <EmptyHeader>
-          <EmptyMedia variant="icon" className="bg-emerald-600 text-white">
-            <HugeiconsIcon
-              icon={VaultIcon}
-              strokeWidth={1.5}
-              className="animate-pulse"
-            />
-          </EmptyMedia>
-          <EmptyTitle>The vault is empty</EmptyTitle>
-          <EmptyDescription>
-            Add an AI provider key or connect a workspace to start processing
-            videos.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <AddConnectionDialog configuredIds={configuredIds} />
-        </EmptyContent>
-      </Empty>
+      <QueryErrorState
+        entity="credentials"
+        error={error}
+        onRetry={() => refetch()}
+      />
     )
   }
 
+  const rows = credentials ?? []
+
+  if (rows.length === 0) return <VaultEmpty configuredIds={configuredIds} />
+
   return (
-    <>
+    <div className="flex flex-col gap-2">
+      <QueryStatusBar
+        entity="credentials"
+        isFetching={isFetching}
+        isStale={isStale}
+        isError={isError}
+        updatedAt={dataUpdatedAt}
+        onRefresh={() => refetch()}
+      />
       {/* Narrow viewports can't fit a 6-column table — a stacked card per
           credential reads far better than a squeezed or horizontally
           scrolling grid. Provider is the thing that matters most at a
           glance, so it leads the card (icon + name), not the account. */}
       <div className="flex flex-col gap-3 sm:hidden">
-        {credentials.map((credential) => (
+        {rows.map((credential) => (
           <div
             key={credential.id}
             className="fade-in slide-in-from-bottom-1 animate-in rounded-lg border fill-mode-both p-4 transition-colors duration-200"
@@ -190,7 +119,7 @@ export function CredentialsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {credentials.map((credential) => (
+            {rows.map((credential) => (
               <TableRow
                 key={credential.id}
                 className="fade-in slide-in-from-bottom-1 animate-in fill-mode-both transition-colors duration-200 hover:bg-muted"
@@ -228,6 +157,6 @@ export function CredentialsTable({
           </TableBody>
         </Table>
       </div>
-    </>
+    </div>
   )
 }

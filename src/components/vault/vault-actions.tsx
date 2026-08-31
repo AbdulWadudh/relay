@@ -2,6 +2,7 @@
 
 import { Add01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import * as React from "react"
 
@@ -33,7 +34,9 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { AddConnectionDialog } from "@/components/vault/add-connection-dialog"
-import { AI_KEY_PROVIDERS } from "@/lib/providers"
+import { AI_KEY_PROVIDERS, type AiKeyProviderId } from "@/lib/providers"
+import { useCreateCredential } from "@/lib/query/credentials"
+import { credentialKeys } from "@/lib/query/keys"
 
 export function VaultActions({ configuredIds }: { configuredIds: string[] }) {
   return (
@@ -45,36 +48,27 @@ export function VaultActions({ configuredIds }: { configuredIds: string[] }) {
 }
 
 function AddCredentialDialog() {
-  const router = useRouter()
+  const createCredential = useCreateCredential()
   const [open, setOpen] = React.useState(false)
-  const [provider, setProvider] = React.useState<string | null>(null)
+  const [provider, setProvider] = React.useState<AiKeyProviderId | null>(null)
   const [apiKey, setApiKey] = React.useState("")
-  const [pending, setPending] = React.useState(false)
+  const pending = createCredential.isPending
   const invalid = !provider || apiKey.trim().length === 0
 
   async function submit() {
-    if (invalid || pending) return
-    setPending(true)
+    if (invalid || pending || !provider) return
     try {
-      const response = await fetch("/api/v1/credentials", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "api_key",
-          provider,
-          accessToken: apiKey.trim(),
-        }),
+      await createCredential.mutateAsync({
+        type: "api_key",
+        provider,
+        accessToken: apiKey.trim(),
       })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
       toast.add({ type: "success", title: "Key stored in the vault" })
       setOpen(false)
       setProvider(null)
       setApiKey("")
-      router.refresh()
     } catch {
       toast.add({ type: "error", title: "Could not store the key" })
-    } finally {
-      setPending(false)
     }
   }
 
@@ -109,7 +103,7 @@ function AddCredentialDialog() {
                 value: p.id,
               }))}
               value={provider}
-              onValueChange={(value) => setProvider(value as string)}
+              onValueChange={(value) => setProvider(value as AiKeyProviderId)}
             >
               <SelectTrigger id="vault-provider" className="w-full">
                 <SelectValue placeholder="Select a provider" />
@@ -159,12 +153,16 @@ export function VaultNotices() {
   const params = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+  const queryClient = useQueryClient()
 
   React.useEffect(() => {
     const connected = params.get("connected")
     const error = params.get("error")
     if (!connected && !error) return
     if (connected === "notion") {
+      // The OAuth callback wrote the credential server-side, outside any
+      // mutation, so the cached list has to be refetched explicitly.
+      queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
       toast.add({ type: "success", title: "Notion workspace connected" })
     } else if (error) {
       toast.add({
@@ -174,7 +172,7 @@ export function VaultNotices() {
       })
     }
     router.replace(pathname, { scroll: false })
-  }, [params, router, pathname])
+  }, [params, router, pathname, queryClient])
 
   return null
 }

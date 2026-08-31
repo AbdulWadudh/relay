@@ -2,9 +2,6 @@
 
 import { Delete02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { useRouter } from "next/navigation"
-import * as React from "react"
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useDeleteCredential } from "@/lib/query/credentials"
 
 export function DeleteCredential({
   credentialId,
@@ -32,26 +30,19 @@ export function DeleteCredential({
   credentialId: string
   providerLabel: string
 }) {
-  const router = useRouter()
-  const [pending, setPending] = React.useState(false)
+  const deleteCredential = useDeleteCredential()
 
-  async function remove() {
-    setPending(true)
-    try {
-      const response = await fetch(`/api/v1/credentials/${credentialId}`, {
-        method: "DELETE",
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      toast.add({
-        type: "success",
-        title: `${providerLabel} credential removed`,
-      })
-      router.refresh()
-    } catch {
-      toast.add({ type: "error", title: "Could not remove the credential" })
-    } finally {
-      setPending(false)
-    }
+  // Removed from the cache optimistically and restored if the write fails.
+  function remove() {
+    deleteCredential.mutate(credentialId, {
+      onSuccess: () =>
+        toast.add({
+          type: "success",
+          title: `${providerLabel} credential removed`,
+        }),
+      onError: () =>
+        toast.add({ type: "error", title: "Could not remove the credential" }),
+    })
   }
 
   return (
@@ -71,7 +62,7 @@ export function DeleteCredential({
             />
           }
         >
-          {pending ? (
+          {deleteCredential.isPending ? (
             <Spinner />
           ) : (
             <HugeiconsIcon icon={Delete02Icon} strokeWidth={1.5} />
