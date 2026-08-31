@@ -1,9 +1,33 @@
-import { createClient } from "@libsql/client"
-import { drizzle } from "drizzle-orm/libsql"
+import type { Client, createClient as createClientType } from "@libsql/client"
+import type { LibSQLDatabase } from "drizzle-orm/libsql"
 
 import config from "@/config"
 
 import * as schema from "./schema"
+
+// require (not a static import) with turbopackIgnore so Turbopack leaves this
+// call untouched instead of routing it through its dev-mode external-module
+// wrapper, which has a known bug resolving @libsql/client's native bindings
+// ("Failed to load external module @libsql/client-<hash>"). Production
+// builds/next start were never affected — this only works around next dev.
+const { createClient } = require(/* turbopackIgnore: true */ "@libsql/client") as {
+  createClient: typeof createClientType
+}
+
+// drizzle-orm/libsql's own driver.js re-imports @libsql/client statically too
+// (for its createClient(url)/createClient(config) overloads, which we never
+// use — we always pass a pre-built client), which trips the same Turbopack
+// bug regardless of the workaround above, since that import lives inside
+// drizzle-orm's own package and can't be annotated. driver-core.js has the
+// same construct() logic driver.js delegates to for the "already have a
+// client" case, minus that import, so importing it directly sidesteps the
+// bug entirely instead of merely working around our own call site.
+const { construct } = require("drizzle-orm/libsql/driver-core") as {
+  construct: (
+    client: Client,
+    config?: { schema?: typeof schema },
+  ) => LibSQLDatabase<typeof schema>
+}
 
 /**
  * Drizzle ORM over libSQL (TRD §2, RULES.md). `config.database.url` is either
@@ -23,7 +47,7 @@ function createDb() {
     url: config.database.url,
     authToken: config.database.authToken,
   })
-  return drizzle(client, { schema })
+  return construct(client, { schema })
 }
 
 export type RelayDb = ReturnType<typeof createDb>

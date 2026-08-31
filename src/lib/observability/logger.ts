@@ -1,8 +1,16 @@
 import { Writable } from "node:stream"
 import type { MiddlewareHandler } from "hono"
-import pino, { type Logger } from "pino"
+import type pinoDefault from "pino"
+import type { Logger } from "pino"
 
 import config from "@/config"
+
+// require (not a static import) with turbopackIgnore so Turbopack leaves this
+// call untouched instead of routing it through its dev-mode external-module
+// wrapper, which has a known bug resolving pino's worker-thread transport
+// ("Failed to load external module pino-<hash>"). Production builds/next
+// start were never affected — this only works around next dev.
+const pino = require(/* turbopackIgnore: true */ "pino") as typeof pinoDefault
 
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
