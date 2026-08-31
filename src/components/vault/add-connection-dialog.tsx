@@ -50,11 +50,11 @@ function ProviderCard({
         <span className="flex items-center gap-2 font-medium text-base">
           {provider.label}
           {!provider.available ? (
-            <Badge className="border-amber-500/30 bg-amber-500/15 text-[10px] text-amber-300">
+            <Badge className="border-transparent bg-amber-600 text-[10px] text-white">
               Soon
             </Badge>
           ) : !configured ? (
-            <Badge className="border-red-500/30 bg-red-500/15 text-[10px] text-red-300">
+            <Badge className="border-transparent bg-red-600 text-[10px] text-white">
               Needs setup
             </Badge>
           ) : null}
@@ -107,7 +107,7 @@ export function AddConnectionDialog({
         render={
           <Button
             variant="outline"
-            className="transition-all duration-200 hover:scale-[1.03] hover:border-sky-400/50 hover:bg-sky-500/10 hover:text-sky-300 hover:shadow-[0_0_16px_-4px_rgba(56,189,248,0.5)]"
+            className="transition-all duration-200 hover:scale-[1.03] hover:border-sky-600 hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600"
           />
         }
       >

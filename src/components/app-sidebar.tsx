@@ -10,9 +10,9 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-
 import { NavUser, type ProfileUser } from "@/components/nav-user"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { Badge } from "@/components/ui/badge"
 import {
   Sidebar,
   SidebarContent,
@@ -37,37 +37,43 @@ const NAV = [
     href: "/vault",
     label: "Vault",
     icon: VaultIcon,
-    idle: "hover:bg-emerald-500/10 hover:text-emerald-300",
+    idle: "hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600",
+    // `data-active:` (presence-based) matches the shorthand variant baked
+    // into SidebarMenuButton's own `data-active:bg-sidebar-accent
+    // data-active:text-sidebar-accent-foreground` — same specificity, so
+    // whichever comes last in the merged className wins (ours does). An
+    // unconditional `text-emerald-300` here previously lost that fight and
+    // never rendered.
     active:
-      "bg-emerald-500/15 text-emerald-300 data-[active=true]:bg-emerald-500/15 data-[active=true]:text-emerald-300",
-    glow: "text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.6)]",
+      "data-active:bg-emerald-600 data-active:text-white dark:data-active:bg-emerald-600",
+    soon: false,
   },
   {
     href: "/agents",
     label: "Agents",
     icon: Robot01Icon,
-    idle: "hover:bg-violet-500/10 hover:text-violet-300",
+    idle: "hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600",
     active:
-      "bg-violet-500/15 text-violet-300 data-[active=true]:bg-violet-500/15 data-[active=true]:text-violet-300",
-    glow: "text-violet-400 drop-shadow-[0_0_6px_rgba(167,139,250,0.6)]",
+      "data-active:bg-violet-600 data-active:text-white dark:data-active:bg-violet-600",
+    soon: true,
   },
   {
     href: "/queue",
     label: "Queue",
     icon: Queue01Icon,
-    idle: "hover:bg-amber-500/10 hover:text-amber-300",
+    idle: "hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600",
     active:
-      "bg-amber-500/15 text-amber-300 data-[active=true]:bg-amber-500/15 data-[active=true]:text-amber-300",
-    glow: "text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]",
+      "data-active:bg-amber-600 data-active:text-white dark:data-active:bg-amber-600",
+    soon: true,
   },
   {
     href: "/settings",
     label: "Settings",
     icon: Settings01Icon,
-    idle: "hover:bg-sky-500/10 hover:text-sky-300",
+    idle: "hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600",
     active:
-      "bg-sky-500/15 text-sky-300 data-[active=true]:bg-sky-500/15 data-[active=true]:text-sky-300",
-    glow: "text-sky-400 drop-shadow-[0_0_6px_rgba(56,189,248,0.6)]",
+      "data-active:bg-sky-600 data-active:text-white dark:data-active:bg-sky-600",
+    soon: false,
   },
 ] as const
 
@@ -84,8 +90,8 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              className="group/logo transition-colors duration-200 hover:bg-emerald-500/10"
-              render={<Link href="/" />}
+              className="group/logo transition-colors duration-200 hover:bg-muted"
+              render={<Link href="/vault" />}
             >
               <Image
                 src={config.assets.logo}
@@ -95,7 +101,7 @@ export function AppSidebar({
                 className="size-9 rounded-md transition-transform duration-300 ease-out group-hover/logo:-rotate-6 group-hover/logo:scale-110"
               />
               <div className="grid flex-1 text-start leading-tight">
-                <span className="truncate font-heading font-semibold text-base tracking-wide transition-colors duration-200 group-hover/logo:text-emerald-300">
+                <span className="truncate font-heading font-semibold text-base tracking-wide transition-colors duration-200 group-hover/logo:text-emerald-700 dark:group-hover/logo:text-emerald-300">
                   {config.app.name}
                 </span>
                 <span className="truncate font-mono text-[11px] text-muted-foreground">
@@ -119,23 +125,35 @@ export function AppSidebar({
                   className="fade-in slide-in-from-left-2 animate-in fill-mode-both"
                 >
                   <SidebarMenuButton
-                    tooltip={item.label}
+                    tooltip={
+                      item.soon ? `${item.label} — coming soon` : item.label
+                    }
                     isActive={active}
+                    disabled={item.soon}
+                    aria-disabled={item.soon}
                     className={cn(
-                      "group/nav h-11 gap-3 px-3 text-[15px] transition-all duration-200 hover:translate-x-0.5 active:scale-[0.98] [&_svg]:size-5",
+                      "group/nav h-11 gap-3 px-3 text-[15px] transition-all duration-200 [&_svg]:size-5",
+                      item.soon
+                        ? "cursor-not-allowed opacity-50 hover:translate-x-0 active:scale-100"
+                        : "hover:translate-x-0.5 active:scale-[0.98]",
                       active ? item.active : item.idle,
                     )}
-                    render={<Link href={item.href} />}
+                    render={item.soon ? undefined : <Link href={item.href} />}
                   >
                     <HugeiconsIcon
                       icon={item.icon}
                       strokeWidth={1.5}
-                      className={cn(
-                        "transition-all duration-200 group-hover/nav:scale-110",
-                        active && item.glow,
-                      )}
+                      className="transition-all duration-200 group-hover/nav:scale-110"
                     />
                     <span>{item.label}</span>
+                    {item.soon ? (
+                      <Badge
+                        variant="outline"
+                        className="ms-auto group-data-[collapsible=icon]:hidden"
+                      >
+                        Soon
+                      </Badge>
+                    ) : null}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )

@@ -26,10 +26,6 @@ export default async function VaultPage() {
           <VaultNotices />
         </Suspense>
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-          <p className="max-w-[70ch] text-base text-muted-foreground">
-            Provider keys and Ray tokens are encrypted at rest with
-            AES-256-GCM. Relay never displays or logs stored secrets.
-          </p>
           <CredentialsTable
             credentials={credentials}
             configuredIds={configuredIds}

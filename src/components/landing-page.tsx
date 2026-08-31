@@ -47,10 +47,15 @@ const marquee = [
   { name: "Discord", icon: DiscordIcon },
 ]
 
-export function LandingPage() {
+export function LandingPage({
+  isAuthenticated,
+}: {
+  isAuthenticated: boolean
+}) {
   const pageRef = useRef<HTMLElement>(null)
   const storyRef = useRef<HTMLElement>(null)
   const [activeStory, setActiveStory] = useState(0)
+  const appHref = isAuthenticated ? "/vault" : "/login"
 
   useGSAP(() => {
     const context = gsap.context(() => {
@@ -171,10 +176,10 @@ export function LandingPage() {
           </Link>
         </div>
         <Link
-          href="/login"
+          href={appHref}
           className="rounded-full bg-[#d8f27e] px-4 py-2 text-sm font-semibold text-[#101311] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8f27e]"
         >
-          Sign in
+          {isAuthenticated ? "Go to app" : "Sign in"}
         </Link>
       </nav>
 
@@ -206,7 +211,7 @@ export function LandingPage() {
           </p>
           <div data-hero className="mt-10 flex flex-wrap justify-center gap-3">
             <Link
-              href="/login"
+              href={appHref}
               className="rounded-full bg-[#d8f27e] px-6 py-3 text-sm font-semibold text-[#101311] transition-all hover:scale-105 hover:bg-[#e5fa9d] active:scale-95"
             >
               Process a video
@@ -387,7 +392,7 @@ export function LandingPage() {
               inside the videos you already share.
             </p>
             <Link
-              href="/login"
+              href={appHref}
               className="mt-7 inline-flex rounded-full bg-[#101311] px-6 py-3 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
             >
               Process your first video ↗
@@ -414,8 +419,8 @@ export function LandingPage() {
           <Link href="/terms" className="transition-colors hover:text-white">
             Terms of service
           </Link>
-          <Link href="/login" className="transition-colors hover:text-white">
-            Sign in
+          <Link href={appHref} className="transition-colors hover:text-white">
+            {isAuthenticated ? "Go to app" : "Sign in"}
           </Link>
         </div>
         <span>Self-hosted, by design.</span>

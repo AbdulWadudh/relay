@@ -64,7 +64,7 @@ export function DeleteCredential({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="transition-all duration-200 hover:scale-110 hover:bg-red-500/15 hover:text-red-400 hover:shadow-[0_0_12px_-2px_rgba(248,113,113,0.5)]"
+                  className="transition-all duration-200 hover:scale-110 hover:bg-red-600 hover:text-white dark:hover:bg-red-600"
                   aria-label={`Remove ${providerLabel} credential`}
                 />
               }
@@ -93,7 +93,7 @@ export function DeleteCredential({
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={remove}
-            className="bg-destructive/10 text-destructive hover:bg-destructive/20"
+            className="bg-red-600 text-white hover:bg-red-700 dark:hover:bg-red-700"
           >
             Remove
           </AlertDialogAction>

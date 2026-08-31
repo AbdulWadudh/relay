@@ -26,6 +26,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { authClient } from "@/lib/auth-client"
+import { avatarGradient, initials } from "@/lib/avatar"
 
 export interface ProfileUser {
   name: string
@@ -35,36 +36,6 @@ export interface ProfileUser {
   // than a fake image — leave this unset for that case instead of pointing
   // it at a placeholder, which would always "load" and hide the fallback.
   avatar?: string
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .slice(0, 2)
-    .join("")
-}
-
-// Curated gradient set in the app's emerald/lime editorial-tech palette (plus
-// a few accent hues for visual variety once multiple users share a sidebar).
-// Picked deterministically from the user's email so the same person always
-// gets the same avatar color instead of it changing on every render.
-const AVATAR_GRADIENTS = [
-  "linear-gradient(135deg, #6ee7b7 0%, #047857 100%)",
-  "linear-gradient(135deg, #d8f27e 0%, #4d6b39 100%)",
-  "linear-gradient(135deg, #7dd3fc 0%, #0369a1 100%)",
-  "linear-gradient(135deg, #fcd34d 0%, #b45309 100%)",
-  "linear-gradient(135deg, #c4b5fd 0%, #6d28d9 100%)",
-  "linear-gradient(135deg, #fda4af 0%, #9f1239 100%)",
-]
-
-function avatarGradient(seed: string): string {
-  let hash = 0
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash << 5) - hash + seed.charCodeAt(i)
-    hash |= 0
-  }
-  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]
 }
 
 export function NavUser({ user }: { user: ProfileUser }) {
@@ -84,7 +55,7 @@ export function NavUser({ user }: { user: ProfileUser }) {
             render={
               <SidebarMenuButton
                 size="lg"
-                className="transition-all duration-200 hover:bg-emerald-500/10 aria-expanded:bg-emerald-500/10"
+                className="transition-all duration-200 hover:bg-muted aria-expanded:bg-muted"
               />
             }
           >
@@ -140,21 +111,21 @@ export function NavUser({ user }: { user: ProfileUser }) {
             <DropdownMenuGroup>
               <DropdownMenuItem
                 render={<Link href="/vault" />}
-                className="transition-colors duration-200 focus:bg-emerald-500/10 focus:text-emerald-300"
+                className="transition-colors duration-200 focus:bg-emerald-600 focus:text-white"
               >
                 <HugeiconsIcon icon={VaultIcon} strokeWidth={2} />
                 Credential vault
               </DropdownMenuItem>
               <DropdownMenuItem
                 render={<Link href="/settings" />}
-                className="transition-colors duration-200 focus:bg-sky-500/10 focus:text-sky-300"
+                className="transition-colors duration-200 focus:bg-sky-600 focus:text-white"
               >
                 <HugeiconsIcon icon={Settings01Icon} strokeWidth={2} />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={signOut}
-                className="transition-colors duration-200 focus:bg-red-500/10 focus:text-red-300"
+                className="transition-colors duration-200 focus:bg-red-600 focus:text-white"
               >
                 Sign out
               </DropdownMenuItem>

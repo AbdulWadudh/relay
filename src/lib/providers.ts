@@ -1,7 +1,9 @@
 import {
   DiscordIcon,
   GoogleDocIcon,
+  GoogleGeminiIcon,
   GoogleSheetIcon,
+  Key01Icon,
   Notion01Icon,
   SlackIcon,
 } from "@hugeicons/core-free-icons"
@@ -19,9 +21,26 @@ import type { IconSvgElement } from "@hugeicons/react"
  */
 
 export const AI_KEY_PROVIDERS = [
-  { id: "openai", label: "OpenAI" },
-  { id: "groq", label: "Groq" },
-  { id: "gemini", label: "Gemini" },
+  {
+    id: "openai",
+    label: "OpenAI",
+    // No official OpenAI/Groq mark in HugeIcons (RULES.md: HugeIcons only) —
+    // a plain key glyph is honest instead of an approximated brand mark.
+    icon: Key01Icon,
+    tile: "bg-zinc-700 text-white",
+  },
+  {
+    id: "groq",
+    label: "Groq",
+    icon: Key01Icon,
+    tile: "bg-orange-600 text-white",
+  },
+  {
+    id: "gemini",
+    label: "Gemini",
+    icon: GoogleGeminiIcon,
+    tile: "bg-violet-600 text-white",
+  },
 ] as const
 
 export interface RayProviderInfo {
@@ -30,11 +49,16 @@ export interface RayProviderInfo {
   description: string
   icon: IconSvgElement
   available: boolean
-  /** Vivid-UI hover accent for this provider's card/actions. */
+  /** Solid hover accent for this provider's card/actions. */
   accent: string
-  /** Icon tile tint. */
+  /** Icon tile fill. */
   tile: string
 }
+
+// Solid neutral hover shared by every provider card — the icon tile already
+// carries the per-provider color, so the card itself stays neutral.
+const CARD_HOVER =
+  "hover:border-zinc-400 hover:bg-zinc-100 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
 
 export const RAY_PROVIDERS = [
   {
@@ -43,9 +67,8 @@ export const RAY_PROVIDERS = [
     description: "Publish structured pages to your Notion workspace.",
     icon: Notion01Icon,
     available: true,
-    accent:
-      "hover:border-zinc-300/40 hover:bg-zinc-100/5 hover:shadow-[0_0_20px_-6px_rgba(244,244,245,0.4)]",
-    tile: "bg-zinc-100/10 text-zinc-100",
+    accent: CARD_HOVER,
+    tile: "bg-zinc-700 text-white",
   },
   {
     id: "google-docs",
@@ -53,9 +76,8 @@ export const RAY_PROVIDERS = [
     description: "Sync extracted pages into Google Docs documents.",
     icon: GoogleDocIcon,
     available: false,
-    accent:
-      "hover:border-blue-400/40 hover:bg-blue-500/5 hover:shadow-[0_0_20px_-6px_rgba(96,165,250,0.4)]",
-    tile: "bg-blue-500/15 text-blue-300",
+    accent: CARD_HOVER,
+    tile: "bg-blue-600 text-white",
   },
   {
     id: "google-sheets",
@@ -63,9 +85,8 @@ export const RAY_PROVIDERS = [
     description: "Append structured rows to Google Sheets spreadsheets.",
     icon: GoogleSheetIcon,
     available: false,
-    accent:
-      "hover:border-green-400/40 hover:bg-green-500/5 hover:shadow-[0_0_20px_-6px_rgba(74,222,128,0.4)]",
-    tile: "bg-green-500/15 text-green-300",
+    accent: CARD_HOVER,
+    tile: "bg-green-600 text-white",
   },
   {
     id: "slack",
@@ -73,9 +94,8 @@ export const RAY_PROVIDERS = [
     description: "Post processed summaries into Slack channels.",
     icon: SlackIcon,
     available: false,
-    accent:
-      "hover:border-fuchsia-400/40 hover:bg-fuchsia-500/5 hover:shadow-[0_0_20px_-6px_rgba(232,121,249,0.4)]",
-    tile: "bg-fuchsia-500/15 text-fuchsia-300",
+    accent: CARD_HOVER,
+    tile: "bg-fuchsia-600 text-white",
   },
   {
     id: "discord",
@@ -83,9 +103,8 @@ export const RAY_PROVIDERS = [
     description: "Deliver extraction results to Discord servers.",
     icon: DiscordIcon,
     available: false,
-    accent:
-      "hover:border-indigo-400/40 hover:bg-indigo-500/5 hover:shadow-[0_0_20px_-6px_rgba(129,140,248,0.4)]",
-    tile: "bg-indigo-500/15 text-indigo-300",
+    accent: CARD_HOVER,
+    tile: "bg-indigo-600 text-white",
   },
 ] as const satisfies readonly RayProviderInfo[]
 
@@ -102,4 +121,15 @@ export const PROVIDER_IDS = ALL_PROVIDERS.map((p) => p.id) as [
 
 export function providerLabel(id: string): string {
   return ALL_PROVIDERS.find((p) => p.id === id)?.label ?? id
+}
+
+export function providerIcon(id: string): IconSvgElement | null {
+  return ALL_PROVIDERS.find((p) => p.id === id)?.icon ?? null
+}
+
+export function providerTile(id: string): string {
+  return (
+    ALL_PROVIDERS.find((p) => p.id === id)?.tile ??
+    "bg-muted text-muted-foreground"
+  )
 }

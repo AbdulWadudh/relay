@@ -22,11 +22,7 @@ export default async function DashboardLayout({
           avatar: session.user.image ?? undefined,
         }}
       />
-      <SidebarInset className="relative flex h-svh flex-col overflow-hidden">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(16,185,129,0.06),transparent_55%)]"
-        />
+      <SidebarInset className="flex h-svh flex-col overflow-hidden">
         {children}
       </SidebarInset>
     </SidebarProvider>

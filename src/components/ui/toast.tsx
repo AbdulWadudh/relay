@@ -214,12 +214,12 @@ function ToastIcon({ type }: { type: string | undefined }) {
 // Rich colors per toast type (RULES.md: vivid UI).
 const TOAST_TYPE_STYLES: Record<string, string> = {
   success:
-    "border-emerald-500/50 bg-emerald-50 text-emerald-950 shadow-[0_0_24px_-8px_rgba(16,185,129,0.55)] dark:border-emerald-500/40 dark:bg-emerald-950 dark:text-emerald-50 [&_[data-slot=toast-description]]:text-emerald-900/70 dark:[&_[data-slot=toast-description]]:text-emerald-100/70",
+    "border-emerald-500/50 bg-emerald-50 text-emerald-950 dark:border-emerald-500/40 dark:bg-emerald-950 dark:text-emerald-50 [&_[data-slot=toast-description]]:text-emerald-900/70 dark:[&_[data-slot=toast-description]]:text-emerald-100/70",
   error:
-    "border-red-500/50 bg-red-50 text-red-950 shadow-[0_0_24px_-8px_rgba(248,113,113,0.55)] dark:border-red-500/40 dark:bg-red-950 dark:text-red-50 [&_[data-slot=toast-description]]:text-red-900/70 dark:[&_[data-slot=toast-description]]:text-red-100/70",
+    "border-red-500/50 bg-red-50 text-red-950 dark:border-red-500/40 dark:bg-red-950 dark:text-red-50 [&_[data-slot=toast-description]]:text-red-900/70 dark:[&_[data-slot=toast-description]]:text-red-100/70",
   warning:
-    "border-amber-500/50 bg-amber-50 text-amber-950 shadow-[0_0_24px_-8px_rgba(251,191,36,0.55)] dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-50 [&_[data-slot=toast-description]]:text-amber-900/70 dark:[&_[data-slot=toast-description]]:text-amber-100/70",
-  info: "border-sky-500/50 bg-sky-50 text-sky-950 shadow-[0_0_24px_-8px_rgba(56,189,248,0.55)] dark:border-sky-500/40 dark:bg-sky-950 dark:text-sky-50 [&_[data-slot=toast-description]]:text-sky-900/70 dark:[&_[data-slot=toast-description]]:text-sky-100/70",
+    "border-amber-500/50 bg-amber-50 text-amber-950 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-50 [&_[data-slot=toast-description]]:text-amber-900/70 dark:[&_[data-slot=toast-description]]:text-amber-100/70",
+  info: "border-sky-500/50 bg-sky-50 text-sky-950 dark:border-sky-500/40 dark:bg-sky-950 dark:text-sky-50 [&_[data-slot=toast-description]]:text-sky-900/70 dark:[&_[data-slot=toast-description]]:text-sky-100/70",
 }
 
 function ToastList() {
