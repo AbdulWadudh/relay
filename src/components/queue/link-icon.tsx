@@ -97,6 +97,10 @@ export function LinkIcon({
   const favicon = faviconFailed ? null : faviconFor(host)
   if (favicon) {
     return (
+      // next/image requires every remote host to be allow-listed in
+      // next.config, which is impossible when the favicon service is
+      // operator-configurable; at 14px there is nothing to optimise.
+      // biome-ignore lint/performance/noImgElement: configurable remote host, 14px icon
       <img
         src={favicon}
         alt=""

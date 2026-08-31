@@ -1,11 +1,13 @@
 import { Hono } from "hono"
 import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
-import { credentialInputSchema } from "@/lib/schemas"
+import { credentialInputSchema, credentialUpdateSchema } from "@/lib/schemas"
 import {
   createCredential,
   deleteCredential,
   listCredentials,
+  updateCredentialMeta,
+  updateCredentialSecret,
 } from "@/lib/vault"
 
 /**
@@ -49,4 +51,42 @@ credentialsModule.delete("/:id", async (c) => {
   }
   logger.info("Credential deleted", { credentialId: id })
   return c.json({ ok: true })
+})
+
+/** Rename and/or rotate the secret. Responses stay masked. */
+credentialsModule.patch("/:id", async (c) => {
+  const session = await getRequestSession(c.req.raw.headers)
+  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const id = c.req.param("id")
+  const body = await c.req.json().catch(() => null)
+  const parsed = credentialUpdateSchema.safeParse(body)
+  if (!parsed.success) {
+    return c.json(
+      { error: "Invalid credential payload", issues: parsed.error.issues },
+      400,
+    )
+  }
+
+  const { label, account, accessToken } = parsed.data
+
+  let credential = null
+  if (label !== undefined || account !== undefined) {
+    credential = await updateCredentialMeta(id, session.user.id, {
+      label,
+      accountName: account,
+    })
+  }
+  if (accessToken !== undefined) {
+    credential = await updateCredentialSecret(id, session.user.id, accessToken)
+  }
+  if (!credential) return c.json({ error: "Credential not found" }, 404)
+
+  // Never log which field changed to what — only that it changed.
+  logger.info("Credential updated", {
+    credential_id: id,
+    renamed: label !== undefined,
+    account_set: account !== undefined,
+    secret_rotated: accessToken !== undefined,
+  })
+  return c.json({ credential })
 })

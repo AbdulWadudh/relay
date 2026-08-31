@@ -110,7 +110,7 @@ export function NavUser({ user }: { user: ProfileUser }) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
-                render={<Link href="/vault" />}
+                render={<Link href="/runs" />}
                 className="transition-colors duration-200 focus:bg-emerald-600 focus:text-white"
               >
                 <HugeiconsIcon icon={VaultIcon} strokeWidth={2} />

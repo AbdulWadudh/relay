@@ -52,6 +52,7 @@ function AddCredentialDialog() {
   const [open, setOpen] = React.useState(false)
   const [provider, setProvider] = React.useState<AiKeyProviderId | null>(null)
   const [apiKey, setApiKey] = React.useState("")
+  const [account, setAccount] = React.useState("")
   const pending = createCredential.isPending
   const invalid = !provider || apiKey.trim().length === 0
 
@@ -62,11 +63,18 @@ function AddCredentialDialog() {
         type: "api_key",
         provider,
         accessToken: apiKey.trim(),
+        // `account_name` is the generic identity key the vault and UI
+        // already consume for Ray credentials, so an API key recorded
+        // here renders in the same Account column.
+        ...(account.trim().length > 0
+          ? { metaData: { account_name: account.trim() } }
+          : {}),
       })
       toast.add({ type: "success", title: "Key stored in the vault" })
       setOpen(false)
       setProvider(null)
       setApiKey("")
+      setAccount("")
     } catch {
       toast.add({ type: "error", title: "Could not store the key" })
     }
@@ -131,6 +139,21 @@ function AddCredentialDialog() {
             />
             <FieldDescription>
               Used server-side only for transcription and extraction calls.
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="vault-account">Account (optional)</FieldLabel>
+            <Input
+              id="vault-account"
+              autoComplete="off"
+              placeholder="e.g. abdul@example.com"
+              maxLength={120}
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
+            />
+            <FieldDescription>
+              Which account this key was generated from, so you can tell two
+              keys for the same provider apart.
             </FieldDescription>
           </Field>
         </FieldGroup>

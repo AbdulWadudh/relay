@@ -27,6 +27,28 @@ export const credentialInputSchema = z.object({
 
 export type CredentialInput = z.infer<typeof credentialInputSchema>
 
+/**
+ * User-editable credential fields. Every field is optional so the dialog
+ * can send only what changed; an empty string clears that field.
+ * `account` records which account an API key was generated from, and maps
+ * onto the same `account_name` meta key the OAuth flow populates.
+ */
+export const credentialUpdateSchema = z
+  .object({
+    label: z.string().trim().max(80).optional(),
+    account: z.string().trim().max(120).optional(),
+    accessToken: z.string().min(1).optional(),
+  })
+  .refine(
+    (value) =>
+      value.label !== undefined ||
+      value.account !== undefined ||
+      value.accessToken !== undefined,
+    { message: "Nothing to update" },
+  )
+
+export type CredentialUpdateInput = z.infer<typeof credentialUpdateSchema>
+
 export const agentInputSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().min(1).max(280),

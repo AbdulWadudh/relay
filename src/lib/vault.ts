@@ -16,6 +16,8 @@ import type { CredentialInput } from "@/lib/schemas"
 
 export interface MaskedCredential {
   id: string
+  /** User-chosen label, stored in plaintext meta_data (never the secret). */
+  label: string | null
   type: "api_key" | "oauth"
   provider: string
   expiresAt: number | null
@@ -34,15 +36,35 @@ const MASKED_COLUMNS = {
   updatedAt: credentials.updatedAt,
 }
 
+type MaskedRow = {
+  id: string
+  type: "api_key" | "oauth"
+  provider: string
+  expiresAt: number | null
+  metaData: Record<string, unknown> | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** Lifts the user-chosen label out of plaintext meta_data. */
+function toMasked(row: MaskedRow): MaskedCredential {
+  const label = row.metaData?.label
+  return {
+    ...row,
+    label: typeof label === "string" && label.length > 0 ? label : null,
+  }
+}
+
 export async function listCredentials(
   userId: string,
 ): Promise<MaskedCredential[]> {
-  return getDb()
+  const rows = await getDb()
     .select(MASKED_COLUMNS)
     .from(credentials)
     .where(eq(credentials.userId, userId))
     .orderBy(credentials.createdAt)
     .all()
+  return rows.map(toMasked)
 }
 
 export async function createCredential(
@@ -104,7 +126,80 @@ export async function createCredential(
     })
     .returning(MASKED_COLUMNS)
     .all()
-  return row
+  return toMasked(row)
+}
+
+/**
+ * Updates the plaintext metadata a user controls: the display label and,
+ * for API keys, which account the key was generated from.
+ *
+ * Both live in `meta_data`, which is plaintext JSON by design (TRD §4), so
+ * no migration is needed and nothing secret goes near it. `account_name`
+ * is the same generic key the Ray registry populates for OAuth rows, so
+ * the Account column renders identically for both kinds of credential.
+ *
+ * Read-modify-write, so provider metadata (account_id and friends)
+ * survives an edit. Passing an empty string clears a field.
+ */
+export interface CredentialMetaPatch {
+  label?: string
+  accountName?: string
+}
+
+export async function updateCredentialMeta(
+  id: string,
+  userId: string,
+  patch: CredentialMetaPatch,
+): Promise<MaskedCredential | null> {
+  const db = getDb()
+  const current = await db
+    .select({ metaData: credentials.metaData })
+    .from(credentials)
+    .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))
+    .get()
+  if (!current) return null
+
+  const meta = { ...(current.metaData ?? {}) }
+  const apply = (key: string, value: string | undefined) => {
+    if (value === undefined) return
+    const trimmed = value.trim()
+    if (trimmed.length > 0) meta[key] = trimmed
+    else delete meta[key]
+  }
+  apply("label", patch.label)
+  apply("account_name", patch.accountName)
+
+  const [row] = await db
+    .update(credentials)
+    .set({ metaData: meta, updatedAt: Date.now() })
+    .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))
+    .returning(MASKED_COLUMNS)
+    .all()
+  return row ? toMasked(row) : null
+}
+
+/**
+ * Rotates the stored secret. A fresh IV is generated for the new value —
+ * reusing the record's existing IV under the same key would be GCM nonce
+ * reuse, which is catastrophic rather than merely untidy.
+ */
+export async function updateCredentialSecret(
+  id: string,
+  userId: string,
+  accessToken: string,
+): Promise<MaskedCredential | null> {
+  const encrypted = await encrypt(accessToken)
+  const [row] = await getDb()
+    .update(credentials)
+    .set({
+      accessToken: encrypted.ciphertext,
+      iv: encrypted.iv,
+      updatedAt: Date.now(),
+    })
+    .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))
+    .returning(MASKED_COLUMNS)
+    .all()
+  return row ? toMasked(row) : null
 }
 
 export async function deleteCredential(

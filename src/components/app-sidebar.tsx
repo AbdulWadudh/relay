@@ -34,6 +34,15 @@ import { cn } from "@/lib/utils"
 
 const NAV = [
   {
+    href: "/runs",
+    label: "Runs",
+    icon: Queue01Icon,
+    idle: "hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600",
+    active:
+      "data-active:bg-amber-600 data-active:text-white dark:data-active:bg-amber-600",
+    soon: false,
+  },
+  {
     href: "/vault",
     label: "Vault",
     icon: VaultIcon,
@@ -55,15 +64,6 @@ const NAV = [
     idle: "hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600",
     active:
       "data-active:bg-violet-600 data-active:text-white dark:data-active:bg-violet-600",
-    soon: false,
-  },
-  {
-    href: "/queue",
-    label: "Queue",
-    icon: Queue01Icon,
-    idle: "hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600",
-    active:
-      "data-active:bg-amber-600 data-active:text-white dark:data-active:bg-amber-600",
     soon: false,
   },
   {
@@ -96,7 +96,7 @@ export function AppSidebar({
               size="lg"
               className="group/logo transition-colors duration-200 hover:bg-muted"
               onClick={closeOnMobile}
-              render={<Link href="/vault" />}
+              render={<Link href="/runs" />}
             >
               <Image
                 src={config.assets.logo}

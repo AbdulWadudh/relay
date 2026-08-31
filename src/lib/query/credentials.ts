@@ -9,7 +9,7 @@ import {
 
 import { apiFetch } from "@/lib/query/http"
 import { credentialKeys } from "@/lib/query/keys"
-import type { CredentialInput } from "@/lib/schemas"
+import type { CredentialInput, CredentialUpdateInput } from "@/lib/schemas"
 import type { MaskedCredential } from "@/lib/vault"
 
 /**
@@ -86,6 +86,36 @@ export function useDeleteCredential() {
     onSettled: (_data, _error, id) => {
       queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
       queryClient.removeQueries({ queryKey: credentialKeys.detail(id) })
+    },
+  })
+}
+
+export interface UpdateCredentialVariables {
+  id: string
+  input: CredentialUpdateInput
+}
+
+/** Rename and/or rotate a secret. Responses stay masked. */
+export function useUpdateCredential() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, input }: UpdateCredentialVariables) => {
+      const { credential } = await apiFetch<{ credential: MaskedCredential }>(
+        `/credentials/${id}`,
+        { method: "PATCH", body: JSON.stringify(input) },
+      )
+      return credential
+    },
+    onSuccess: (credential) => {
+      queryClient.setQueryData<MaskedCredential[]>(
+        credentialKeys.list(),
+        (previous) =>
+          previous?.map((row) => (row.id === credential.id ? credential : row)),
+      )
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
     },
   })
 }

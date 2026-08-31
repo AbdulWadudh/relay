@@ -57,6 +57,9 @@ export function QueryStatusBarSkeleton({ entity }: { entity: string }) {
         <Spinner className="size-3.5" />
         Loading {entity}…
       </span>
+      {/* Reserves the refresh button's footprint, which is always present
+          once loaded, so the row does not shift. */}
+      <Skeleton className="size-8 rounded-md" />
     </div>
   )
 }
@@ -84,7 +87,10 @@ export function QueryStatusBar({
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
-  const showRefresh = !isFetching && (isStale || isError)
+  // Always offered, on every list backed by the database — a refresh that
+  // only appears once the data happens to be stale is a control the user
+  // cannot rely on finding. Disabled (not removed) while a fetch is in
+  // flight so the row's geometry never changes.
 
   return (
     <div className={STATUS_ROW}>
@@ -105,17 +111,16 @@ export function QueryStatusBar({
         </span>
       )}
 
-      {showRefresh ? (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onRefresh}
-          aria-label={`Refresh ${entity}`}
-          className="transition-all duration-200 hover:scale-110 hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600"
-        >
-          <HugeiconsIcon icon={RefreshIcon} strokeWidth={1.5} />
-        </Button>
-      ) : null}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={onRefresh}
+        disabled={isFetching}
+        aria-label={`Refresh ${entity}`}
+        className="transition-all duration-200 hover:scale-110 hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600"
+      >
+        <HugeiconsIcon icon={RefreshIcon} strokeWidth={1.5} />
+      </Button>
     </div>
   )
 }

@@ -51,7 +51,7 @@ function RunTitle({ run }: { run: RunSummary }) {
       <span className="flex min-w-0 items-center gap-2">
         <SourceIcon source={run.source} />
         <Link
-          href={`/queue/${run.id}`}
+          href={`/runs/${run.id}`}
           className="truncate font-medium underline-offset-4 transition-colors duration-200 hover:text-amber-700 hover:underline dark:hover:text-amber-400"
         >
           {run.title ?? run.sourceLabel}

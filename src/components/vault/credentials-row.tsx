@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/tooltip"
 import { AddConnectionDialog } from "@/components/vault/add-connection-dialog"
 import { DeleteCredential } from "@/components/vault/delete-credential"
+import { EditCredentialDialog } from "@/components/vault/edit-credential-dialog"
 import {
   type ProviderIconWithVariant,
   providerIcon,
@@ -48,6 +49,11 @@ export function accountNameFor(credential: MaskedCredential): string | null {
 
 export function accountEmailFor(credential: MaskedCredential): string | null {
   return metaString(credential, "account_email")
+}
+
+/** The user's own label if set, otherwise the provider's name. */
+export function displayName(credential: MaskedCredential): string {
+  return credential.label ?? providerLabel(credential.provider)
 }
 
 export function ProviderTile({ provider }: { provider: string }) {
@@ -95,9 +101,10 @@ export function RowActions({ credential }: { credential: MaskedCredential }) {
           </TooltipContent>
         </Tooltip>
       ) : null}
+      <EditCredentialDialog credential={credential} />
       <DeleteCredential
         credentialId={credential.id}
-        providerLabel={providerLabel(credential.provider)}
+        providerLabel={credential.label ?? providerLabel(credential.provider)}
       />
     </div>
   )

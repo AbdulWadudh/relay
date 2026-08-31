@@ -12,7 +12,7 @@ import { listRuns } from "@/lib/runs"
 
 export const dynamic = "force-dynamic"
 
-export const metadata = { title: "Queue" }
+export const metadata = { title: "Runs" }
 
 /**
  * Seeds the cache the client hydrates into, reading the database directly
@@ -42,7 +42,7 @@ export default async function QueuePage() {
 
   return (
     <>
-      <ShellHeader title="Queue">
+      <ShellHeader title="Runs">
         <NewRunDialog />
       </ShellHeader>
       <ShellContent>

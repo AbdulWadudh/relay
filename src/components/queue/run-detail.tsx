@@ -92,7 +92,7 @@ export function RunDetail({ runId }: { runId: string }) {
                   // WCAG 2.2 minimum pointer target (24px) — the default
                   // icon-sm (32px) towered over a 20px badge.
                   className="size-6 transition-all duration-200 hover:scale-110 hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600"
-                  render={<Link href="/queue" />}
+                  render={<Link href="/runs" />}
                 />
               }
             >

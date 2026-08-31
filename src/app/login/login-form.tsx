@@ -30,7 +30,7 @@ export default function LoginForm() {
       setError(result.error.message ?? "Unable to authenticate")
       return
     }
-    router.push("/vault")
+    router.push("/runs")
     router.refresh()
   }
 
@@ -39,7 +39,7 @@ export default function LoginForm() {
     setPending(true)
     const result = await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/vault",
+      callbackURL: "/runs",
     })
     if (result.error) {
       setPending(false)
@@ -50,13 +50,13 @@ export default function LoginForm() {
   return (
     <div>
       <div className="mb-8">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
+        <p className="font-mono text-emerald-400 text-xs uppercase tracking-[0.2em]">
           Welcome to Relay
         </p>
-        <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight">
+        <h1 className="mt-3 font-heading font-semibold text-3xl tracking-tight">
           {mode === "signin" ? "Sign in to Relay" : "Create your account"}
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-muted-foreground text-sm">
           {mode === "signin"
             ? "Pick up where your last run left off."
             : "Start turning videos into structured, sourced notes."}
@@ -74,7 +74,7 @@ export default function LoginForm() {
         <Google className="size-5" aria-hidden data-icon="inline-start" />
         Continue with Google
       </Button>
-      <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="my-6 flex items-center gap-3 text-muted-foreground text-xs">
         <div className="h-px flex-1 bg-border" />
         <span>or use email</span>
         <div className="h-px flex-1 bg-border" />
@@ -118,7 +118,7 @@ export default function LoginForm() {
           />
         </div>
         {error && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-destructive text-sm">
             {error}
           </p>
         )}
@@ -132,7 +132,7 @@ export default function LoginForm() {
       </form>
       <button
         type="button"
-        className="mt-6 block w-full text-center text-sm text-muted-foreground hover:text-foreground"
+        className="mt-6 block w-full text-center text-muted-foreground text-sm hover:text-foreground"
         onClick={() => {
           setMode(mode === "signin" ? "signup" : "signin")
           setError("")

@@ -14,6 +14,7 @@ import {
   accountEmailFor,
   accountNameFor,
   dateFormat,
+  displayName,
   ProviderTile,
   RowActions,
   TypeBadge,
@@ -80,7 +81,7 @@ export function CredentialsTable({
               <div className="grid min-w-0 flex-1 leading-tight">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium">
-                    {providerLabel(credential.provider)}
+                    {displayName(credential)}
                   </span>
                   <TypeBadge type={credential.type} />
                 </div>
@@ -128,7 +129,7 @@ export function CredentialsTable({
                   <div className="flex items-center gap-3">
                     <ProviderTile provider={credential.provider} />
                     <span className="font-medium">
-                      {providerLabel(credential.provider)}
+                      {displayName(credential)}
                     </span>
                   </div>
                 </TableCell>
