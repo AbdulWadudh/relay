@@ -32,6 +32,7 @@ export default function NotFound() {
           alt={config.app.name}
           width={36}
           height={36}
+          preload
           className="size-9 rounded-md transition-transform duration-300 ease-out hover:-rotate-6 hover:scale-110"
         />
       </Link>

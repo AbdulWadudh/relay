@@ -56,7 +56,7 @@ const NAV = [
     idle: "hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600",
     active:
       "data-active:bg-violet-600 data-active:text-white dark:data-active:bg-violet-600",
-    soon: true,
+    soon: false,
   },
   {
     href: "/queue",
@@ -104,6 +104,7 @@ export function AppSidebar({
                 alt={config.app.name}
                 width={36}
                 height={36}
+                preload
                 className="size-9 rounded-md transition-transform duration-300 ease-out group-hover/logo:-rotate-6 group-hover/logo:scale-110"
               />
               <div className="grid flex-1 text-start leading-tight">

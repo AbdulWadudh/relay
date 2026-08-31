@@ -84,12 +84,21 @@ export function trackInteraction(
   }
 }
 
-let initialized = false
+// A module-scoped flag doesn't survive Next.js Fast Refresh in dev — editing
+// any file this module depends on re-evaluates it fresh, resetting the flag
+// while the OpenObserve SDK's own global state (on `window`) persists, which
+// is what triggers its "SDK is loaded more than once" warning. Guarding on
+// `window` instead survives HMR reloads.
+function alreadyInitialized(): boolean {
+  const w = window as unknown as { __relayTelemetryInitialized?: boolean }
+  if (w.__relayTelemetryInitialized) return true
+  w.__relayTelemetryInitialized = true
+  return false
+}
 
 /** Wire global error listeners and the initial page-load beacon. */
 export function initTelemetry() {
-  if (initialized || typeof window === "undefined") return
-  initialized = true
+  if (typeof window === "undefined" || alreadyInitialized()) return
 
   if (
     browserOptions.clientToken &&
