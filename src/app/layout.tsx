@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { JetBrains_Mono, Oxanium, Space_Grotesk } from "next/font/google"
 
 import "./globals.css"
+import { QueryProvider } from "@/components/query-provider"
 import { TelemetryProvider } from "@/components/telemetry-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toast"
@@ -57,9 +58,11 @@ export default function RootLayout({
       <body>
         <ThemeProvider storageKey={config.theme.storageKey}>
           <TelemetryProvider>
-            <TooltipProvider>
-              <Toaster>{children}</Toaster>
-            </TooltipProvider>
+            <QueryProvider>
+              <TooltipProvider>
+                <Toaster>{children}</Toaster>
+              </TooltipProvider>
+            </QueryProvider>
           </TelemetryProvider>
         </ThemeProvider>
       </body>
