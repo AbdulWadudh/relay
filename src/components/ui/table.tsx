@@ -5,10 +5,14 @@ import type * as React from "react"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  // `overflow-x-auto` alone makes the used value of overflow-y `auto` too,
+  // so the row entrance animation's few px of transient height flashed a
+  // vertical scrollbar. Vertical scrolling belongs to the shell's
+  // ScrollArea, so pin this axis shut.
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className="relative w-full overflow-x-auto overflow-y-hidden"
     >
       <table
         data-slot="table"
