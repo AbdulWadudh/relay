@@ -42,7 +42,7 @@
 - **Layout primitives (human decision 2026-08-29):** app chrome uses the ShadCN `Sidebar` (sidebar-07 pattern, icon-collapsible, with `NavUser` profile footer); scrollable panels use ShadCN `ScrollArea` (never raw `overflow-y-auto` divs); multi-pane workbenches use ShadCN `Resizable` panels.
 - **Solid surfaces only (human decision 2026-08-29):** no glass/translucent effects — no `backdrop-blur`, no `bg-popover/70`-style translucent popups. Menus, selects, dialogs are solid `bg-popover`; modal scrims dim without blurring.
 - **Row-scoped actions:** operations on an existing record (reconnect, delete) live in that record's table row, not in the page header; the header holds only creation/first-time actions.
-- **Fixed-viewport shell:** the root viewport NEVER scrolls — `overflow-hidden` on the document root and app shell. Only designated inner panels (`overflow-y-auto`) scroll.
+- **Fixed-viewport shell (dashboard workbench only):** inside the `(dashboard)` route group, the shell never scrolls — `h-svh overflow-hidden` on `SidebarInset` (`src/app/(dashboard)/layout.tsx`). Only the designated inner panel (`ShellContent`'s `ScrollArea`, `src/components/app-shell.tsx`) scrolls. Public pages (landing, login, privacy, terms) are NOT part of this shell and scroll normally via the browser's native document scroll — don't apply `overflow-y-auto`/`overflow-hidden` to `html`/`body` globally, or public pages get a nested double-scrollbar (setting overflow-y on both html and body disables the browser's html→body scroll propagation).
 - **Browser work:** always use `agent-browser` for any browser automation, QA, or screenshotting — never other browser tools.
 
 ## Code Hygiene

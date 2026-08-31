@@ -143,10 +143,15 @@
   h4 {
     @apply font-heading;
   }
-  /* RULES.md: the root viewport never scrolls; only designated inner panels do. */
+  /* Public pages (landing, login, privacy, terms) scroll normally via the
+     browser's native document scroll. min-h-full (not h-full) lets body grow
+     past one viewport for long content instead of clipping it at a fixed
+     height; the dashboard workbench's own "root never scrolls" rule
+     (RULES.md) is enforced independently by `h-svh overflow-hidden` on
+     SidebarInset (src/app/(dashboard)/layout.tsx), not by this global rule. */
   html,
   body {
-    @apply h-full overflow-x-hidden overflow-y-auto;
+    @apply min-h-full overflow-x-hidden;
   }
 }
 
