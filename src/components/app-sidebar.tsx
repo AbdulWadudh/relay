@@ -23,6 +23,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import config from "@/config"
 import { cn } from "@/lib/utils"
@@ -82,6 +83,10 @@ export function AppSidebar({
   ...props
 }: { user: ProfileUser } & React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+  const { isMobile, setOpenMobile } = useSidebar()
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false)
+  }
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -91,6 +96,7 @@ export function AppSidebar({
             <SidebarMenuButton
               size="lg"
               className="group/logo transition-colors duration-200 hover:bg-muted"
+              onClick={closeOnMobile}
               render={<Link href="/vault" />}
             >
               <Image
@@ -131,6 +137,7 @@ export function AppSidebar({
                     isActive={active}
                     disabled={item.soon}
                     aria-disabled={item.soon}
+                    onClick={item.soon ? undefined : closeOnMobile}
                     className={cn(
                       "group/nav h-11 gap-3 px-3 text-[15px] transition-all duration-200 [&_svg]:size-5",
                       item.soon
