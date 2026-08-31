@@ -1,8 +1,8 @@
 # Relay
 
-Self-hosted bridge from short-form video (Instagram Reels, YouTube Shorts) to structured Notion pages — evidence-grounded extraction, BYOK, fully local media processing.
+Self-hosted pipeline that turns short-form video (Instagram Reels, YouTube Shorts) into rich, evidence-grounded Markdown content — BYOK, fully local media processing.
 
-Relay downloads media with host `yt-dlp`/`ffmpeg`, transcribes and translates audio through your own AI provider keys, routes content through dynamic extraction agents that must cite timestamped transcript evidence for every claim, and publishes structured pages to connected destinations through Rays.
+Relay downloads media with host `yt-dlp`/`ffmpeg`, transcribes and translates audio through your own AI provider keys, routes content through dynamic extraction agents that must cite timestamped transcript evidence for every claim, and publishes the resulting Markdown content to connected destinations through Rays.
 
 ## Stack
 

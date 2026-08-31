@@ -76,7 +76,7 @@ All routes are mounted at `/api/v1/*`.
   4. Calls Whisper endpoint to obtain raw transcript and timestamped English translation.
   5. Routes payload to selected (or dynamically synthesized) Agent schema.
   6. Enforces evidence citation verification.
-  7. Decrypts the Notion Ray token and publishes formatted page to the target Notion database.
+  7. Renders the extracted, evidence-grounded content as rich Markdown, decrypts the target Ray's token, and publishes it to the connected destination (Notion Ray today) in that destination's native format.
   8. Deletes local temp media files.
 
 ---
@@ -106,7 +106,7 @@ All routes are mounted at `/api/v1/*`.
 - Implement CRUD routes for System and Human agents.
 - Add JSON schema validation utilities for agent output structures.
 
-### Task 4: Relay Media Engine & Notion Sync
+### Task 4: Relay Media Engine & Markdown Publishing
 - Implement `yt-dlp` and `ffmpeg` execution pipeline with error trapping to OpenObserve.
 - Build dual-transcription handler (Roman English + Translated English).
-- Build Evidence Verification layer and Notion API publishing client.
+- Build Evidence Verification layer and rich Markdown publishing client (Notion Ray today).

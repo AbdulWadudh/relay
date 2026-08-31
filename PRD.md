@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD) - Relay
 
 ## 1. Executive Summary
-**Relay** is an open-source, self-hosted web application that acts as an intelligent bridge between short-form video content (Instagram Reels, YouTube Shorts) and Notion. It locally extracts media via `yt-dlp` and `ffmpeg`, transcribes/translates multilingual audio using user-provided API keys (BYOK), routes content through customizable extraction agents (System-built and Human-built), verifies all claims with timestamped evidence quotes, and syncs structured knowledge pages directly to connected Notion databases through Rays.
+**Relay** is an open-source, self-hosted web application that turns short-form video content (Instagram Reels, YouTube Shorts) into rich, evidence-grounded Markdown content. It locally extracts media via `yt-dlp` and `ffmpeg`, transcribes/translates multilingual audio using user-provided API keys (BYOK), routes content through customizable extraction agents (System-built and Human-built), verifies all claims with timestamped evidence quotes, and publishes the resulting Markdown content to connected destinations (Notion today) through Rays.
 
 ---
 
@@ -14,7 +14,7 @@
 ---
 
 ## 3. Target User & Use Cases
-- **Curators & Researchers:** Archiving how-tos, travel guides, tutorials, and technical breakdowns into a structured Notion second brain.
+- **Curators & Researchers:** Archiving how-tos, travel guides, tutorials, and technical breakdowns as structured Markdown content in their second brain (e.g. Notion).
 - **Home Cooks & Makers:** Converting fast-paced recipe or DIY reels into structured checklists, ingredient tables, and step-by-step instructions.
 - **Power Users:** Developers and tinkerers who want full control over their API tokens, prompts, and local media processing.
 
@@ -40,10 +40,10 @@
 - **Dynamic Schema Synthesizer:** Fallback agent that dynamically generates a bespoke schema and extraction prompt for novel categories.
 - **Evidence Verification Layer:** Every extracted property, ingredient, or step must include an `evidence` object containing `timestamp_start`, `timestamp_end`, and `transcript_quote`.
 
-### 4.4 BYOK Vault & Notion Integration (P0)
-- **Encrypted Credential Vault:** Secure at-rest storage (AES-256-GCM) for third-party AI provider keys and Notion Ray tokens.
+### 4.4 BYOK Vault & Publishing Rays (P0)
+- **Encrypted Credential Vault:** Secure at-rest storage (AES-256-GCM) for third-party AI provider keys and Ray destination tokens.
 - **Notion Ray:** Native OAuth 2.0 authorization flow (`/api/v1/rays/oauth/notion/callback`) with workspace selection and database mapping.
-- **Structured Page Publishing:** Automated block and property layout creation in Notion with toggleable evidence callouts.
+- **Rich Markdown Publishing:** The evidence-grounded Markdown content extracted from each video is laid out into the target destination's native format (e.g. Notion blocks and properties, with toggleable evidence callouts) via its Ray.
 
 ### 4.5 Observability & UI (P0)
 - **Full-Stack Telemetry:** OpenObserve integration for client Real User Monitoring (RUM) and backend error/execution logging.
@@ -61,5 +61,5 @@
 
 ## 6. Success Metrics
 1. **100% Grounding:** Every extracted entity maps to an exact transcript quote and timestamp range.
-2. **Sub-30s Processing:** End-to-end execution (URL ingestion to Notion page creation) completes in under 30 seconds for standard <60s clips.
+2. **Sub-30s Processing:** End-to-end execution (URL ingestion to published Markdown content) completes in under 30 seconds for standard <60s clips.
 3. **Zero Plaintext Token Exposure:** API keys and Ray tokens are never logged or exposed in plaintext.
