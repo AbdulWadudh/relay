@@ -1,7 +1,343 @@
 # LLM Execution State - Relay
 
-- **Current Phase:** **Ollama (local+cloud), provider-ordering UI and per-phase models complete, UNCOMMITTED. Session Auth is PAUSED mid-Phase-1** (storage + vocabulary landed; capture service not started). Session Auth Phase 0 (YouTube GVS 403 fix) also complete and uncommitted — see the section immediately below and `SESSION_AUTH.md`. Before that: Tasks 4.4, 4.5 and 4.6 complete and COMMITTED (human approved the push on 2026-09-01, together with the Docker/Coolify work). The pipeline runs end to end for BOTH sources — verified on a real Instagram Reel after instaloader replaced yt-dlp for that source.
+- **Current Phase:** **Production outage FIXED and deployed (commit `580f0e1`).** Session Auth Phases 4 and 5 plus Gemini extraction are complete but UNCOMMITTED and awaiting approval. Phases 0-3 are committed; `1104047` (Phase 3) reached production for the first time with this deploy. Next: the real human sign-in — now actually possible, because the capture service had never run in production at all. Then the Phase 6 instaloader decision, which is gated on it.
 - **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**, **Task 4.1: Media Ingest**, **Task 4.2: Run Persistence & Queue**, **Task 4.3: Transcription**, **Task 4.4: Agent Routing & Extraction**, **Task 4.5: Evidence Verification**, **Task 4.6: Document Tree & Notion Publish**
+
+## Task 6 — deploy readiness (2026-09-02) — PARTLY DONE, one item needs a decision
+
+### DONE: the capture service can now actually run in a container
+
+See the outage section above. Before this, capture had never executed in
+production at all, and even once it did it could not have opened a browser
+(`xauth`, `chromium-sandbox`, seccomp). All three fixed and verified by
+launching a real sandboxed Chromium inside the container.
+
+### DONE: a dedicated CAPTURE_INTERNAL_TOKEN
+
+Already correct and now confirmed against the live compose: both `relay`
+and `capture` take `${CAPTURE_INTERNAL_TOKEN:?generate one with openssl
+rand -hex 32}`, so compose REFUSES to start without it and the VAULT_KEY
+fallback in `src/config` is unreachable in a deploy. Verified behaviourally
+that the control plane rejects a request without it (`401`), and that the
+comparison is constant-time (`src/lib/capture/server.ts`).
+
+### DONE: yt-dlp bump cadence, with a real acceptance test
+
+`bun run verify:ytdlp` (`scripts/verify-ytdlp.ts`). It reproduces the §1.1
+measurement rather than checking that yt-dlp merely runs: for each fixture
+it tries the DEFAULT client and then each client in
+`config.media.ytDlpFallbacks`, doing a REAL media fetch — a `--simulate`
+check would pass while every real run 403s, which is the whole trap §1.1
+documents. Exits non-zero if any fixture is unreachable by every client.
+
+Run it against the pinned version and the candidate before touching
+`YT_DLP_VERSION`; yt-dlp warns once a build is >90 days old, and that
+warning is the trigger.
+
+First run, on the pinned `2026.03.17`, reproduces §1.1 exactly:
+
+```
+chain:  default -> web_embedded -> mweb -> tv_simply
+PASS  dQw4w9WgXcQ    default=403  web_embedded=OK(11552KB)
+PASS  9bZkp7q19f0    default=403  web_embedded=OK(3897KB)
+PASS  n5t23nvU_t0    default=403  web_embedded=OK(1175KB)
+PASS  T-1iAFMZunY    default=OK(577KB)
+PASS  MGIovezvFSQ    default=OK(719KB)
+PASS  afZpm4LVjG0    default=OK(154KB)
+note: never needed or never worked -> mweb, tv_simply
+PASSED: all 6 fixtures reachable.
+```
+
+Still 3 of 6 failing on the default client — the fallback chain is load
+bearing, not legacy. `mweb`/`tv_simply` are untested in practice because
+`web_embedded` always wins first; they are insurance, not dead config.
+
+### DONE: a silent failure in CAPTURE_PUBLIC_URL
+
+`config.capture.publicUrl` used `??`, but docker-compose passes
+`CAPTURE_PUBLIC_URL: '${CAPTURE_PUBLIC_URL}'`, which expands to an EMPTY
+STRING when the variable is unset in Coolify rather than being absent. `??`
+only catches null/undefined, so the empty string sailed through and
+`src/server/capture.ts` handed the browser a RELATIVE `/stream?ticket=...`
+— which resolves against the app's own origin, so the socket opens against
+Next.js, which cannot upgrade it. Now `||`. Demonstrated both ways before
+and after.
+
+### NOT DONE: the public wss:// route — needs a hostname decision
+
+`CAPTURE_PUBLIC_URL` is still unset in Coolify and the `capture` service
+uses `expose:` only, so there is NO public route and the browser cannot
+reach `/stream`. Capture therefore still cannot complete a sign-in in
+production even though the service now runs.
+
+What it needs: a public host (the server has a `*.k79.quest` wildcard;
+`relay.k79.quest` and `relay-db.k79.quest` are the existing pattern)
+pointed at `capture:3002`, with `CAPTURE_PUBLIC_URL` set to that ORIGIN —
+no path, no trailing `/stream`.
+
+**The trap to avoid:** Coolify renders a domain into Caddy's `handle_path`,
+which STRIPS the matched prefix. A path-scoped domain like
+`https://host/stream:3002` would forward `/stream` to the service as `/`,
+which does not match the `/stream` route and falls through to the
+token-gated control plane — a `401` that looks like an auth bug. Either
+route the host without a path (control endpoints stay reachable but remain
+token-gated), or use `handle` rather than `handle_path` via explicit
+labels. Not yet verified which Coolify emits for a path-scoped domain.
+
+
+## PRODUCTION OUTAGE — a Dockerfile stage boundary (2026-09-02) — FIXED, COMMITTED `580f0e1`, DEPLOYED
+
+The app was `exited:unhealthy` in Coolify and served Cloudflare 525.
+
+### What the evidence said
+
+`restart_count: 10`, `last_restart_type: "crash"`, `max_restart_count: 10`,
+`last_online_at: 22:30:39` against a deploy that FINISHED at 22:28:53. So:
+the build was fine, the app started fine, then something crash-looped ten
+times and Coolify stopped the whole resource — taking the healthy web
+container down with it. Every other app on the host was healthy.
+
+### Root cause: three instructions in the wrong stage
+
+`COPY package.json/src/scripts/...`, `EXPOSE 3000` and the
+`db:migrate && next start` CMD were at the END of the Dockerfile, which is
+**after** `FROM runtime AS capture`. Every instruction following a `FROM`
+belongs to that stage, so all three belonged to `capture`. Verified by
+building each stage:
+
+| Stage | Before the fix |
+| --- | --- |
+| `runtime` | `CMD ["/usr/local/bin/bun"]` (base-image default), `/app` held `node_modules` only — no src, no package.json. An unusable stage. |
+| `capture` | `CMD ["sh","-c","bun run db:migrate && exec bun --bun next start ..."]` — a stage keeps only its LAST CMD, so `bun scripts/capture.ts` was overridden. |
+
+Consequences, all silent:
+
+1. `relay` and `worker` declare no build `target`, so Docker built the LAST
+   stage — `capture`. **Both have been shipping the 3.3GB Chromium image**,
+   running as the `capture` user. That is also the only reason they worked,
+   since the real CMD lived there.
+2. **The capture service has NEVER run in production.** It was a second
+   Next.js server. Its healthcheck probes `:3002/health`, so it was
+   permanently unhealthy, and it ran `bun run db:migrate` concurrently with
+   `relay` on every start — the exact concurrent-migration race recorded
+   below as a past outage cause. That crash-loops, Coolify counts restarts
+   at the RESOURCE level, hits 10, and stops everything.
+
+This also explains why "capture is unproven in production" stayed true: it
+was never executing.
+
+### The fix
+
+The COPY/EXPOSE/CMD block moved above the capture stage; `relay` and
+`worker` pin `target: runtime`; capture's `CMD` is now the file's last line
+with a comment saying why it must stay there.
+
+### Capture could not have launched a browser anyway
+
+Two packages `--no-install-recommends` drops, both measured by running the
+stage:
+
+- **`xauth`** — `xvfb-run` shells out to it, and without it every launch
+  died at `xvfb-run: error: xauth command not found`. The build's smoke
+  test ran `Xvfb -help`, which passed while the real launcher was broken;
+  it now tests `xvfb-run` itself.
+- **`chromium-sandbox`** — Debian splits Chromium's setuid helper into its
+  own package. Without it: `No usable sandbox!`, the message that makes
+  people reach for `--no-sandbox`.
+
+Then Docker's default seccomp profile denied `clone(CLONE_NEWUSER)`
+(`Failed to move to new namespace ... Operation not permitted`). The
+capture service now runs `seccomp:unconfined` with `cap_drop: ALL`, which
+was verified sufficient — the sandbox starts with ZERO capabilities.
+
+**Why that is the safer half of the trade, not a downgrade:** Chromium
+installs its OWN seccomp-bpf filter on every renderer, and that policy is
+tighter for this workload than Docker's generic default. The untrusted
+third-party page content stays confined either way; relaxing the
+container-level filter is what allows Chromium to apply its own. The
+alternative, `--no-sandbox`, would run renderers with the container's full
+privileges.
+
+### Verified in a container, not asserted
+
+`runtime` builds slim with the correct CMD and no Chromium. `capture` boots
+(`Capture server listening`), `/health` returns `{"status":"ok"}`, an
+unauthenticated control call is `401`, and `POST /sessions` launched a real
+headful sandboxed Chromium — **13 processes, zero sandbox / namespace /
+xauth errors**.
+
+### A wrong turn, recorded because the reflex was wrong
+
+The first hypothesis was that `createRedis()` never attached an `error`
+listener, so an ioredis connection blip would crash the process. **Tested
+and false**: ioredis registers its own fallback, prints
+`[ioredis] Unhandled error event`, and the process SURVIVES. A listener was
+added anyway — it routes those errors to the structured logger instead of
+raw stderr — but it is NOT the outage cause and must not be recorded as one.
+
+
+## Session Auth Phase 5 — budgets and fairness (2026-09-02) — AWAITING APPROVAL
+
+Three locks, none of which can FAIL a run. Over budget is a "later", not a
+"never": the job is delayed and `relay_runs` keeps the row at `queued`.
+All of it lives in `src/lib/queue/admission.ts`, checked by the worker
+before `processRun`.
+
+### 1. Per-user slot — fairness
+
+`config.queue.concurrency` is one global number, so one user submitting 20
+URLs occupied every slot. BullMQ OSS has no job groups and its `limiter` is
+global rather than per-key, so this is a Dragonfly semaphore:
+`SET {relay:user:<id>}:slot:<i> <runId> NX PX <ttl>`, tried across
+`perUserConcurrency` slots. The `PX` TTL (30 min) is the crash net — a
+worker killed mid-run releases by expiry instead of wedging that user.
+
+**The knob is real, not decorative.** An earlier cut hard-coded a single
+slot while exposing `perUserConcurrency` in config, which would have been a
+setting that silently did nothing.
+
+### 2. Per-credential jar lock — correctness, and why it is SEPARATE
+
+Two runs sharing one cookie jar both write the rotated jar back on exit,
+and the loser can invalidate a live session. `SESSION_AUTH.md` §5.4 handles
+this by noting that raising `perUserConcurrency` above 1 requires re-keying
+the semaphore onto the credential — a comment someone has to remember.
+
+It is now structural instead: a cookie-bearing run takes a SECOND lock on
+`{relay:cred:<id>}:lock`, so the guarantee holds at any concurrency. An
+anonymous run takes neither that lock nor a budget charge, because it
+touches nobody's account. Its refusal reason is `jar_busy`, distinct from
+`user_busy` — at concurrency 1 they look identical, but they are different
+problems the moment the knob moves.
+
+### 3. Per-credential rate budget — 10/hour, 50/day
+
+Keyed on the CREDENTIAL, not the user: the account is what gets flagged,
+and a user may hold several. Implemented as an exact ROLLING window (a ZSET
+of request timestamps), not a fixed bucket — a fixed hourly bucket lets a
+user spend the whole budget at :59 and the whole next one at :00, which is
+exactly the burst shape that gets an account flagged. The rolling window
+also makes "when does room appear?" exact: the moment the oldest entry ages
+out. Both windows are checked before either is charged, so a run the daily
+cap rejects does not spend an hourly token.
+
+### How the deferral works
+
+`job.moveToDelayed(retryAt, token)` then `throw new DelayedError()`. The
+worker holds a lock on the job while processing, so `moveToDelayed` needs
+the token to release it, and `DelayedError` is what stops BullMQ from then
+completing or failing the job. **A deferral does not consume an attempt** —
+verified, not assumed.
+
+### Verified against real Dragonfly and the real worker
+
+- **User slot:** run A admitted; run B refused `user_busy` with a 2000 ms
+  retry while A held it; B admitted the moment A released.
+- **Jar lock is independent:** at `QUEUE_PER_USER_CONCURRENCY=2` two
+  anonymous runs were both admitted, but two runs sharing one credential
+  were not — the second came back `jar_busy`, and was admitted once the
+  first released. At the default of 1 the user slot would have masked this,
+  which is why the test raises it.
+- **Rate budget:** with the default 10/hour, runs 1-10 admitted and 11 and
+  12 came back `rate_budget` with `retryIn≈60min`.
+- **Worker defers without burning an attempt:** the user's only slot was
+  held by a foreign owner, then a run enqueued. `jobState=delayed`,
+  `attemptsMade=0`, `runStatus=queued`, and the worker logged `Run deferred
+  reason=user_busy` three times at 2 s intervals. On release the run
+  executed ONCE (`attemptsMade=1`) and the slot was returned — 0 stray
+  admission keys left in Dragonfly.
+- **Rate budget through the worker**, started with `SOCIAL_RATE_PER_HOUR=1`
+  and a cookie credential present: run 1 spent the token and ran
+  (`attemptsMade=1`, `SESSION_EXPIRED` — Phase 4 again, via the real
+  worker); run 2 `jobState=delayed attemptsMade=0 runStatus=queued`,
+  `job.delay=3595873` (~60 min).
+
+### Cost, and the one thing to watch
+
+A `user_busy` deferral re-polls every `QUEUE_DEFER_MS` (2 s), so a queued
+run costs one admission check every 2 s while it waits. That is the design
+in §5.4 and is fine on one VPS; it is the first thing to revisit if the
+queue ever gets deep, because it is per queued run, not per worker. A
+`rate_budget` deferral does NOT spin — its retry is up to an hour out.
+
+
+## Session Auth Phase 4 — `SESSION_EXPIRED` (2026-09-02) — AWAITING APPROVAL
+
+A dead jar used to fail as `SOURCE_UNAVAILABLE` ("this isn't publicly
+downloadable"), sending the user to investigate a video that was fine. It now
+fails as `SESSION_EXPIRED`, once, and the Vault row offers Reconnect.
+
+### What shipped
+
+- `IngestErrorCode` gains `SESSION_EXPIRED` (`src/lib/media/errors.ts`).
+- `downloadWithYtDlp` branches on `cookiesPath && UNAVAILABLE.test(stderr)`.
+  The message is OURS and never carries stderr — `lastLine()` puts 400 chars of
+  raw stderr into the user-visible `run.error`, so a tool that ever echoed a
+  cookie into stderr would land it in the run record.
+- **The `CLIENT_REFUSED` (403) branch moved AHEAD of the login-shaped branch.**
+  A 403 means the same thing with or without a jar (the GVS/SABR case of §1.1),
+  so it must never be reported as a dead session.
+- `isPermanent` promotes it, so BullMQ raises `UnrecoverableError` instead of
+  burning the attempt budget on a jar that is dead the same way twice.
+- Reject bookkeeping in `additional_data` via `recordSessionOutcome`
+  (`src/lib/vault-secrets.ts`): a rejection increments `reject_count` and sets
+  `last_rejected_at`; a success resets to 0 and sets `last_verified_at`.
+- `MASKED_COLUMNS` now SELECTS `additional_data` but `toMasked` reduces it to a
+  single derived `stale` boolean and drops the object. The raw counter never
+  reaches the API; anything added to `additional_data` later stays off the wire
+  by default rather than by someone remembering to omit it.
+- Vault row: an amber Reconnect action (`text-amber-700 dark:text-amber-300`,
+  per the light-mode contrast rule) plus an "Expired" badge, both gated on
+  `stale`. Row-scoped per `RULES.md:60`.
+- `config.social.staleAfterRejects` (default 2) + `SOCIAL_STALE_AFTER_REJECTS`.
+
+### A real bug this found — write-back on a FAILED download
+
+`persistRotation` ran in a `finally`, so it persisted the jar yt-dlp left
+behind **even when the download failed**. Measured 2026-09-02 with
+`--cookies` on a failing fetch: yt-dlp rewrites the jar on every exit, and the
+file it leaves after a failure is the anonymous cookie set that request
+received — the original `SID` is simply not in it. So a failed run overwrote
+the stored credential with the product of a request that did not work.
+Write-back is now gated on success; a failure keeps the last jar that worked.
+
+**Not settled, and it matters for Task 4:** the `SID` in that test was bogus
+(`deadbeef`), so YouTube most likely cleared it server-side. Whether a jar
+holding a REAL session survives yt-dlp's rewrite is still unmeasured. Check it
+during the first real sign-in — if a valid session cookie also disappears,
+rotation write-back is not a freshness feature but a destructive one.
+
+### Verified for real, not asserted
+
+- **Classification**, against real yt-dlp on `youtube.com/shorts/aBcDeFgHiJk`
+  ("This video is unavailable", no 403):
+  - no jar  -> `SOURCE_UNAVAILABLE`, permanent=true
+  - with jar -> `SESSION_EXPIRED`, permanent=true, message
+    *"Your YouTube session has expired. Reconnect it in the Vault..."*
+- **One attempt, not two**, through the real queue with the worker running
+  (`config.queue.attempts` is 2). Worker log:
+  `"code":"SESSION_EXPIRED","permanent":true` then
+  `"attempts_made":1,"msg":"Run job failed"`.
+- **Bookkeeping**, against the real DB with a scratch cookie credential:
+  round 1 -> `{"reject_count":1,...}`, API `stale=false`;
+  round 2 -> `{"reject_count":2,...}`, API `stale=true`. Deleted afterwards.
+- **Browser**, via a minted+signed `auth_sessions` cookie, at 1280 dark, 1280
+  light and 380 mobile: Session + Expired badges and the Reconnect action all
+  render, nothing truncates on mobile, the amber icon reads on white. Clicking
+  Reconnect produced a real `Capture session started` in the log — the dialog
+  is wired; its stream cannot render inside a headless automation browser,
+  which is Phase 2 behaviour and not new.
+
+### Not covered by this phase
+
+`source.label` names one ITEM ("YouTube Short"), so the platform name in the
+message comes from `providerLabel(source.source)` — a social credential's
+`provider` IS the media source id (§2.4), so no mapping table was needed.
+
+Instagram still routes to instaloader, which ignores the jar entirely, so
+`SESSION_EXPIRED` is currently reachable only on the yt-dlp path. That is
+correct today and is what Phase 6 decides.
+
 
 ## Session Auth Phase 2 — capture service (2026-09-02)
 
@@ -77,7 +413,101 @@ by real yt-dlp with no format error.
 - `CAPTURE_PUBLIC_URL` needs a real wss:// route in Coolify; only `/stream`
   should be exposed, never the control endpoints.
 
-## TODO: enable Gemini for extraction (logged 2026-09-02, human decision)
+## Gemini wired for extraction (2026-09-02) — AWAITING APPROVAL
+
+Closes the TODO below. Gemini had a key in the vault but no `ChatProvider`
+entry, so `chatProvider("gemini")` was null and it never appeared in the
+order list.
+
+### What shipped
+
+- Registry entry on the OpenAI-COMPATIBLE surface
+  (`https://generativelanguage.googleapis.com/v1beta/openai`), so it needs
+  no special client.
+- A `capabilities` fallback. Its rows really are
+  `{id, object, owned_by, display_name}` — no context, no features, no
+  `created` — so without one, `structured` is false for every model and
+  chat.ts would never send `response_format: json_schema`.
+  `contextLength: 32_768` is a conservative FLOOR, not a claim about any
+  model's real window.
+- `versionScore(id)` in models.ts, a sibling of `parameterCount`, used as
+  the LAST tiebreaker — below `created`, above `id.localeCompare`. Below
+  `created` on purpose: where a provider publishes real dates they are the
+  better recency signal, so this only engages for catalogs that publish
+  none. It rejects dates (`-04-2026`) and sizes (`-26b`), and takes the
+  FIRST version token because that is the family version.
+- Placed after Groq in `EXTRACTION_ORDER`. Groq is MEASURED at ~5s; Gemini
+  is not timed, so it does not displace it. Only the default — a saved user
+  order wins and new providers are appended, not promoted.
+
+### The ranking damage was worse than this file recorded
+
+The note below predicted retired `gemini-2.5-*` models sorting ahead of
+`3.6`. Measured, the top four were actually `gemma-4-31b-it`,
+`antigravity-preview-05-2026`, `aqa`, `deep-research-max-preview-04-2026` —
+alphabetical order put three NON-CHAT models ahead of every Gemini model,
+so all four `MAX_CANDIDATES` were garbage. After `versionScore` the top
+four are `gemma-4-31b-it`, `gemini-3.7-flash`, `gemini-3.6-flash`,
+`gemini-3.5-flash` — all live, all verified schema-valid at 1.6-2.9 s.
+
+### No regression, proven rather than assumed
+
+Groq, OpenRouter and Ollama Cloud were ranked with the shipped comparator
+and with the pre-`versionScore` one, and the FULL ordered lists diffed:
+**IDENTICAL** for all three. They publish real `created` values, so the new
+tiebreaker is never reached.
+
+### Two real bugs found on the way, both fixed
+
+1. **A 5xx killed the whole extraction.** `disposition`
+   (`src/lib/extraction/chat.ts`) fell through to `"fail"` for any status
+   it did not name, so one transient `503` on the top candidate ended a run
+   with three usable models queued behind it — observed live on
+   `gemini-3.7-flash`. Now `>= 500` is `"next-model"`. Not
+   `"next-provider"`: a busy model is not a busy provider, and if they all
+   503 the pass moves on by itself. Verified — a later run logged
+   `skipped=[models/gemini-3.7-flash]` and answered on 3.6.
+2. **`isolate()` could not strip an UNTERMINATED trailing fence.**
+   `src/lib/extraction/validate.ts` short-circuited on
+   `body.startsWith("{")` and returned the body verbatim, so a model that
+   emits a valid object followed by a bare closing ``` (measured:
+   `gemma-4-31b-it`) failed to parse on the backtick. It now always slices
+   first `{` to last `}`, the same way leading prose was already handled.
+   Checked against 8 cases including balanced fences, leading and trailing
+   prose, nested braces and a `}` inside a string.
+
+### A wrong turn worth recording
+
+An earlier cut of this work added a provider-level `excludes` regex and
+used it to drop `gemma-*`, on the evidence that gemma replied *"no schema
+was provided in the prompt"* three times running. **That evidence was a bug
+in the verification harness, not in gemma.** `runChat` takes the RAW JSON
+Schema and wraps it itself (`chat.ts:197` -> `client.ts:80`); the harness
+passed an already-wrapped `{name, schema}`, which double-wrapped into a
+schema with no `type`. Gemma was describing the broken schema accurately.
+
+Re-tested with the exact production payload, `gemma-4-31b-it` and
+`gemma-4-26b-a4b-it` honoured the schema **6 times out of 6**, and through
+the real `runChat` path 3 of 3 with no skips. The `excludes` mechanism was
+REMOVED along with the exclusion — with its only justification gone it was
+speculative machinery, and it had come uncomfortably close to permanently
+hiding a working model on a false measurement.
+
+**The lesson, since it will recur:** when a model claims the request was
+malformed, check the request before blaming the model.
+
+### One state change to be aware of
+
+Forcing the order to Gemini for the live test required writing the
+`extraction_order` user setting and restoring it. The restore wrote the
+RESOLVED list, so the stored row is now
+`["ollama-cloud","groq","openrouter","ollama","gemini","openai"]` where it
+previously omitted the trailing two. `resolveExtractionOrder` appends
+missing providers anyway, so the effective order is unchanged — but the row
+is now explicit rather than inferred.
+
+
+## RESOLVED: enable Gemini for extraction (logged 2026-09-02, human decision)
 
 Gemini has a key in the vault but is deliberately hidden from the extraction
 order list, because `chatProvider("gemini")` is null — it has no entry in
