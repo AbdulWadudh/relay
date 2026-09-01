@@ -45,7 +45,14 @@ function asObject(value: unknown): Record<string, unknown> | null {
 function isolate(raw: string): string {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
   const body = (fenced ? fenced[1] : raw).trim()
-  if (body.startsWith("{")) return body
+  // Sliced from the first `{` to the last `}` even when the body ALREADY
+  // starts with `{`. The previous short-circuit on `startsWith` returned
+  // such a body verbatim, so anything trailing the object survived into
+  // JSON.parse. Measured 2026-09-02: gemma-4-31b-it answers with a valid
+  // object followed by a bare closing ``` and no opening fence, which the
+  // fence regex above cannot match — the object was well-formed and the
+  // parse failed on the backtick. Trailing junk is now dropped the same
+  // way leading prose already was.
   const open = body.indexOf("{")
   const close = body.lastIndexOf("}")
   return open !== -1 && close > open ? body.slice(open, close + 1) : body

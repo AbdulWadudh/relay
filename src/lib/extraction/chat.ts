@@ -113,6 +113,14 @@ function disposition(
   // 413 — the request exceeds THIS provider's size limit, which its
   // other models share.
   if (error.status === 413) return "next-provider"
+  // 5xx — the model is overloaded or broken on the provider's side, which
+  // says nothing about our request or about the other candidates. This
+  // fell through to "fail", so ONE transient 503 killed a run that had
+  // three usable models queued behind it. Measured 2026-09-02: Gemini
+  // returned 503 for its top candidate while the others answered fine.
+  // Not "next-provider" — a busy model is not a busy provider, and if
+  // every model does 503 the pass moves on by itself.
+  if (error.status >= 500) return "next-model"
   return "fail"
 }
 

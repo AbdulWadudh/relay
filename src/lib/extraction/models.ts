@@ -36,6 +36,48 @@ export function parameterCount(id: string): number {
   return largest
 }
 
+/**
+ * A version segment: a number that follows a NAME and is followed by a
+ * separator or the end. `gemini-3.6-flash` -> 3.6, `llama-3.3-70b` -> 3.3.
+ *
+ * The trailing `(?=[-_.]|$)` is what keeps parameter sizes out: in
+ * `gemma-4-26b` the `-26` is followed by `b`, so only the `-4` matches.
+ * The lookbehind keeps it anchored to a name, so the `2025` in
+ * `...-10-2025` cannot match on its own (it follows a digit).
+ */
+const VERSION_TOKEN = /(?<=[a-z])-(\d+(?:\.\d+)?)(?=[-_.]|$)/gi
+
+/**
+ * The version a model id advertises, or 0 when it advertises none.
+ *
+ * Exists because `rankModels`' last resort was `id.localeCompare`, which
+ * is alphabetical and therefore sorts `2.5` BEFORE `3.6`. On a catalog
+ * that publishes no `created` — Gemini's does not — that is the ONLY
+ * ordering left, so retired models sort to the front and every candidate
+ * can be spent on ids that 404.
+ *
+ * A heuristic, and only ever consulted AFTER every real signal (capability,
+ * context, size, `created`) has tied. It does not need to be right about
+ * every id; it needs to beat alphabetical order, which carries no meaning
+ * at all.
+ *
+ * The FIRST version-shaped token wins, because that is the family version:
+ * `gemini-2.5-computer-use-preview-10-2025` is a 2.5 model, not a 10.
+ */
+export function versionScore(id: string): number {
+  for (const match of id.matchAll(VERSION_TOKEN)) {
+    const raw = match[1]
+    const rest = id.slice((match.index ?? 0) + match[0].length)
+    // `-04-2026` is a release date. Without this, `deep-research-preview-
+    // 04-2026` scores 4 and outranks every real Gemini model.
+    if (/^-\d{4}(?!\d)/.test(rest)) continue
+    if (/^\d{4}$/.test(raw)) continue
+    const value = Number(raw)
+    if (Number.isFinite(value)) return value
+  }
+  return 0
+}
+
 function asArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v) => typeof v === "string") : []
 }
@@ -184,6 +226,12 @@ export function rankModels(
       return b.contextLength - a.contextLength
     }
     if (a.created !== b.created) return b.created - a.created
+    // Deliberately BELOW `created`: where a provider publishes real dates
+    // they are the better recency signal, so this only engages for the
+    // catalogs that publish none. Above `localeCompare`, which is
+    // alphabetical and would put 2.5 ahead of 3.6.
+    const version = versionScore(b.id) - versionScore(a.id)
+    if (version !== 0) return version
     return a.id.localeCompare(b.id)
   })
 }

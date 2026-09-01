@@ -92,8 +92,8 @@ export async function resolveExtractionOrder(
  * What the settings UI renders: this user's order, narrowed to providers
  * they can ACTUALLY use.
  *
- * A provider qualifies when it is registered in the chat registry (some
- * catalog entries, e.g. Gemini, have no extraction endpoint) AND either it
+ * A provider qualifies when it is registered in the chat registry (not
+ * every AI_KEY_PROVIDERS entry has a chat endpoint) AND either it
  * needs no credential (local Ollama) or the user has stored a key for it.
  *
  * Listing the rest would be a lie: reordering a provider you have no key

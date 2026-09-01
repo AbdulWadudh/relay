@@ -116,6 +116,35 @@ const providers: Partial<Record<AiKeyProviderId, ChatProvider>> = {
     freeOnly: false,
     minContext: 16_384,
   },
+  gemini: {
+    id: "gemini",
+    /**
+     * Google's OpenAI-COMPATIBLE surface, not the native
+     * `generativelanguage` REST API — so it needs no special client.
+     * Verified 2026-09-02 against a live key: `GET /models` returns 200
+     * with an OpenAI-shaped list, and `POST /chat/completions` with
+     * `response_format: json_schema` returns schema-valid JSON.
+     */
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    modelsPath: "/models",
+    // The catalog publishes no pricing at all, so there is nothing to
+    // filter on; what a key may call is decided by the Google account.
+    freeOnly: false,
+    minContext: 16_384,
+    /**
+     * Its rows are `{id, object, owned_by, display_name}` — no context, no
+     * feature list, and no `created`. Without a fallback, `structured`
+     * would be false for every model and chat.ts would never send
+     * `response_format: json_schema`, silently dropping to loose JSON mode
+     * on an API that implements schema-constrained decoding properly.
+     *
+     * `contextLength` is a conservative FLOOR, not a claim about any one
+     * model's real window (Gemini's are far larger). It only has to clear
+     * `minContext` and give the ranker a value to sort on; ranking caps
+     * the signal at SUFFICIENT_CONTEXT anyway.
+     */
+    capabilities: { json: true, structured: true, contextLength: 32_768 },
+  },
   openai: {
     id: "openai",
     baseUrl: "https://api.openai.com/v1",
@@ -148,6 +177,12 @@ const providers: Partial<Record<AiKeyProviderId, ChatProvider>> = {
 export const EXTRACTION_ORDER: readonly AiKeyProviderId[] = [
   "ollama",
   "groq",
+  // Behind Groq, which is MEASURED at ~5s. Gemini's flash tier is expected
+  // to be quick, but nothing here has timed it, so it does not get to
+  // displace the one provider that has been. This is only the DEFAULT — a
+  // saved user order wins, and `resolveExtractionOrder` appends newly
+  // added providers rather than reshuffling what someone already chose.
+  "gemini",
   "ollama-cloud",
   "openrouter",
   "openai",
