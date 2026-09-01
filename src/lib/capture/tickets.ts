@@ -1,5 +1,5 @@
 import config from "@/config"
-import { getRedis } from "@/lib/queue/connection"
+import { createRedis } from "@/lib/queue/connection"
 
 /**
  * Single-use tickets authorising the screencast socket
@@ -25,13 +25,25 @@ export interface TicketClaims {
   sessionId: string
 }
 
+/**
+ * A dedicated client with the offline queue ON. ioredis connects lazily, so
+ * the first command after process start races the socket; with the queue
+ * off that throws and the very first sign-in after a deploy fails. Buffering
+ * for a few milliseconds is the right trade for a ticket read.
+ */
+let client: ReturnType<typeof createRedis> | null = null
+function redis() {
+  client ??= createRedis({ enableOfflineQueue: true })
+  return client
+}
+
 function key(ticket: string): string {
   return `${config.cache.prefix}:capture:ticket:${ticket}`
 }
 
 export async function issueTicket(claims: TicketClaims): Promise<string> {
   const ticket = crypto.randomUUID()
-  await getRedis().set(
+  await redis().set(
     key(ticket),
     JSON.stringify(claims),
     "PX",
@@ -50,12 +62,11 @@ export async function redeemTicket(
 ): Promise<TicketClaims | null> {
   if (!ticket || ticket.length > 64) return null
 
-  const redis = getRedis()
   let raw: string | null
   try {
     // GETDEL is Redis 6.2+ and supported by Dragonfly. Falling back to
     // GET-then-DEL would reintroduce the race this exists to close.
-    raw = await redis.getdel(key(ticket))
+    raw = await redis().getdel(key(ticket))
   } catch {
     return null
   }

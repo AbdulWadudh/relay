@@ -101,6 +101,12 @@ export const config = {
     /** Where the BROWSER connects. Must be reachable from the client. */
     publicUrl: process.env.CAPTURE_PUBLIC_URL ?? "ws://127.0.0.1:3002",
     /**
+     * Where the NEXT.JS APP reaches the capture service's control plane.
+     * Server-to-server, so in compose this is the service name — distinct
+     * from `publicUrl`, which the end user's browser has to resolve.
+     */
+    internalUrl: process.env.CAPTURE_INTERNAL_URL ?? "http://127.0.0.1:3002",
+    /**
      * Headful Chromium is ~300-500MB each and the deploy target is one
      * VPS. Two fits with headroom for a concurrent download + ffmpeg
      * spike; drop to 1 on a 2GB box.

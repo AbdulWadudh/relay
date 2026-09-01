@@ -10,12 +10,20 @@ import config from "@/config"
  * into a thrown exception that kills the worker instead of a reconnect.
  */
 
-export function createRedis(): IORedis {
+export function createRedis(
+  options: { enableOfflineQueue?: boolean } = {},
+): IORedis {
   return new IORedis(config.queue.url, {
     maxRetriesPerRequest: null,
     // The API process should surface a dead queue as a failed enqueue
     // rather than buffering writes that silently never land.
-    enableOfflineQueue: false,
+    //
+    // Capture tickets opt OUT of that (see src/lib/capture/tickets.ts): the
+    // client connects lazily, so the FIRST command after a process start
+    // would otherwise throw "Stream isn't writeable" before the socket is
+    // ready — which made the first sign-in after every deploy fail. A
+    // ticket read is not a job enqueue; waiting a few ms beats failing.
+    enableOfflineQueue: options.enableOfflineQueue ?? false,
   })
 }
 
