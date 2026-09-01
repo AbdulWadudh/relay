@@ -130,9 +130,11 @@ export function RunsTable() {
         <RunsEmpty />
       ) : (
         <>
-          {/* Narrow viewports get a stacked card per run — a 5-column table
-              can't fit, matching the Vault and Agents lists. */}
-          <div className="flex flex-col gap-3 sm:hidden">
+          {/* Cards below lg, not sm: a tablet is wide enough to render the
+              5-column table but not wide enough to fit it, so it used to
+              overflow into a horizontal scrollbar. The skeleton switches at
+              the same breakpoint or the layout jumps on load. */}
+          <div className="flex flex-col gap-3 lg:hidden">
             {rows.map((run) => (
               <div
                 key={run.id}
@@ -157,7 +159,7 @@ export function RunsTable() {
             ))}
           </div>
 
-          <div className="hidden rounded-lg border sm:block">
+          <div className="hidden rounded-lg border lg:block">
             {/* Fixed layout: every column except Source is sized to its own
                 content, so Source absorbs all remaining width. Auto layout
                 shared the space evenly and left the titles truncated to a

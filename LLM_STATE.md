@@ -3,6 +3,80 @@
 - **Current Phase:** **Ollama (local+cloud), provider-ordering UI and per-phase models complete, UNCOMMITTED. Session Auth is PAUSED mid-Phase-1** (storage + vocabulary landed; capture service not started). Session Auth Phase 0 (YouTube GVS 403 fix) also complete and uncommitted — see the section immediately below and `SESSION_AUTH.md`. Before that: Tasks 4.4, 4.5 and 4.6 complete and COMMITTED (human approved the push on 2026-09-01, together with the Docker/Coolify work). The pipeline runs end to end for BOTH sources — verified on a real Instagram Reel after instaloader replaced yt-dlp for that source.
 - **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**, **Task 4.1: Media Ingest**, **Task 4.2: Run Persistence & Queue**, **Task 4.3: Transcription**, **Task 4.4: Agent Routing & Extraction**, **Task 4.5: Evidence Verification**, **Task 4.6: Document Tree & Notion Publish**
 
+## Session Auth Phase 2 — capture service (2026-09-02)
+
+Built and committed in four slices. The whole flow works end to end from a
+cold start; what has NOT happened is a real human sign-in with real
+credentials, which is the only thing left to prove.
+
+### Architecture, and why it is a third process
+
+`scripts/capture.ts` runs alongside the web app and the worker. Two reasons,
+neither stylistic: **Next.js route handlers cannot upgrade a request to a
+WebSocket** (`hono/vercel`'s `handle()` returns a Response), and the
+concurrency cap is only enforceable if exactly ONE process owns the map of
+live browsers. Next.js would run several workers, each with its own idea.
+
+### Security, all verified behaviourally rather than asserted
+
+- **The CDP port is unauthenticated** — whoever reaches it owns the browser.
+  Bound to loopback on an ephemeral port, never published, never logged.
+- **Chromium's sandbox is ON.** The Docker stage creates an unprivileged
+  `capture` user to sandbox into; running as root is exactly what pushes
+  people to `--no-sandbox`, which would put a renderer exploit on the host.
+- **Socket auth is three checks**: Origin matches the app, the ticket
+  redeems exactly once (atomic GETDEL, 60s), and the named session belongs
+  to the ticket's user. Ownership is re-checked on every message too.
+- **Navigation is fenced** to the provider's domains. Unfenced, an
+  authenticated user could steer a server-side browser into the VPS's
+  private network — SSRF with a keyboard attached.
+- **Every socket frame is Zod-validated** before reaching CDP; malformed
+  frames are dropped silently rather than echoed (an echo is an oracle).
+- **The browser is spawned with a stripped env**, so `VAULT_KEY` and the
+  database token never enter a process rendering third-party pages.
+- Probed: control plane 401 without/with wrong token; `/stream` 401 on
+  absent, garbage and oversized tickets; bad provider 400, not a crash.
+
+### Three real bugs, all found by testing rather than review
+
+1. **`--user-data-dir` was RELATIVE.** Chrome resolves that against its own
+   cwd, popped a "cannot read and write to its data directory" dialog on the
+   host, and fell back to another profile — which risks the capture browser
+   touching the operator's real Chrome profile and its cookies. Caught only
+   because the human screenshotted the dialog; the smoke test had reported
+   six green checks. Now absolute, created up front, and the test asserts
+   Chrome actually POPULATED our profile rather than only that it was
+   cleaned up.
+2. **The first sign-in after every deploy would have failed.** ioredis
+   connects lazily and the shared client sets `enableOfflineQueue:false`, so
+   the first `redeemTicket` after a process start issued GETDEL before the
+   socket was ready and threw. Tickets now use their own client with the
+   offline queue ON — a ticket read is not a job enqueue.
+3. **A failed ticket orphaned a live browser.** The session is created
+   before the ticket is minted, so a Redis blip left ~400MB running with
+   nothing able to connect, burning a slot until the sweeper ran 90s later.
+   The route now tears it down explicitly. Observed, including the follow-on
+   capacity rejection of the next request.
+
+### Verified
+
+Cold start of both processes: first session 201, first socket connected, 58
+frames streamed from the real Instagram login page under ack backpressure,
+the same ticket REJECTED on reuse, session disposed to 0 on socket close.
+Separately: the sweeper reclaims an orphan (reason `idle`); real Chrome
+launches, attaches, streams, exposes `Storage.getCookies`, and is torn down
+with its profile removed; the Netscape jar the serializer produces is parsed
+by real yt-dlp with no format error.
+
+### NOT yet done
+
+- **A real human sign-in and harvest.** Everything up to "the jar would be
+  written" is proven; storing an actual Instagram/YouTube session is not.
+- Phases 3-6: authenticated downloads, session lifecycle (`SESSION_EXPIRED`),
+  per-credential budgets and per-user fairness, instaloader consolidation.
+- `CAPTURE_PUBLIC_URL` needs a real wss:// route in Coolify; only `/stream`
+  should be exposed, never the control endpoints.
+
 ## TODO: enable Gemini for extraction (logged 2026-09-02, human decision)
 
 Gemini has a key in the vault but is deliberately hidden from the extraction

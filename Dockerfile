@@ -100,6 +100,40 @@ RUN set -eux; \
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 
+# ------------------------------------------------------------- capture ---
+# The session-capture service (SESSION_AUTH.md §2) is its OWN stage layered
+# on the runtime, not part of it. Chromium plus Xvfb is roughly 400MB, and
+# only this one process ever executes it — baking it into `runtime` would
+# make the web and worker images carry 400MB they never run.
+#
+# Headful under Xvfb is deliberate: Instagram fingerprints `--headless=new`
+# aggressively, which is the whole reason a real display is needed.
+FROM runtime AS capture
+ARG DEBIAN_FRONTEND=noninteractive
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      chromium xvfb fonts-liberation fonts-noto-color-emoji; \
+    rm -rf /var/lib/apt/lists/*; \
+    chromium --version; \
+    Xvfb -help >/dev/null 2>&1 || true
+
+# Chromium's sandbox is kept ON (src/lib/capture/chromium.ts), and it needs
+# an unprivileged user to sandbox INTO — running as root is what forces
+# people to reach for --no-sandbox. `capture` owns the data dir because that
+# is where per-session browser profiles are written.
+RUN useradd --create-home --shell /usr/sbin/nologin capture \
+    && mkdir -p /app/data \
+    && chown -R capture:capture /app/data
+USER capture
+
+ENV CHROMIUM_PATH=chromium \
+    XVFB_RUN_PATH=xvfb-run \
+    CAPTURE_USE_XVFB=true
+
+EXPOSE 3002
+CMD ["bun", "scripts/capture.ts"]
+
 # One image runs three things, and each needs a different slice of the repo:
 # `next start` reads .next/, next.config.ts and public/; `db:migrate` reads
 # drizzle.config.ts, drizzle/ and src/config; `bun scripts/worker.ts` reads

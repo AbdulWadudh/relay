@@ -20,7 +20,7 @@ export function CredentialsTableSkeleton() {
     <div className="flex flex-col gap-2">
       <QueryStatusBarSkeleton entity="credentials" />
 
-      <div className="flex flex-col gap-3 sm:hidden">
+      <div className="flex flex-col gap-3 lg:hidden">
         {ROWS.map((row) => (
           <div key={row} className="rounded-lg border p-4">
             <div className="flex items-start gap-3">
@@ -38,7 +38,7 @@ export function CredentialsTableSkeleton() {
         ))}
       </div>
 
-      <div className="hidden rounded-lg border sm:block">
+      <div className="hidden rounded-lg border lg:block">
         <Table>
           <TableHeader>
             <TableRow>

@@ -22,7 +22,7 @@ export function AgentsTableSkeleton() {
     <div className="flex flex-col gap-2">
       <QueryStatusBarSkeleton entity="agents" />
 
-      <div className="flex flex-col gap-3 sm:hidden">
+      <div className="flex flex-col gap-3 lg:hidden">
         {ROWS.map((row) => (
           <div key={row} className="rounded-lg border p-4">
             <div className="grid gap-2">
@@ -37,7 +37,7 @@ export function AgentsTableSkeleton() {
         ))}
       </div>
 
-      <div className="hidden rounded-lg border sm:block">
+      <div className="hidden rounded-lg border lg:block">
         <Table>
           <TableHeader>
             <TableRow>

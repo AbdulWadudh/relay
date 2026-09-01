@@ -147,10 +147,11 @@ export function AgentsTable() {
         <AgentsEmpty />
       ) : (
         <>
-          {/* Narrow viewports can't fit a 4-column table — a stacked card
-              per agent reads far better than a squeezed or horizontally
-              scrolling grid, matching the Vault credentials list. */}
-          <div className="flex flex-col gap-3 sm:hidden">
+          {/* Cards below lg, not sm: a tablet is wide enough to render the
+              table but not wide enough to fit it, so it used to overflow
+              into a horizontal scrollbar. The skeleton switches at the
+              same breakpoint or the layout jumps on load. */}
+          <div className="flex flex-col gap-3 lg:hidden">
             {rows.map((agent) => (
               <div
                 key={agent.id}
@@ -177,7 +178,7 @@ export function AgentsTable() {
             ))}
           </div>
 
-          <div className="hidden rounded-lg border sm:block">
+          <div className="hidden rounded-lg border lg:block">
             <Table>
               <TableHeader>
                 <TableRow>

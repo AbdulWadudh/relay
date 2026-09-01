@@ -22,7 +22,7 @@ export function RunsTableSkeleton() {
     <div className="flex flex-col gap-2">
       <QueryStatusBarSkeleton entity="runs" />
 
-      <div className="flex flex-col gap-3 sm:hidden">
+      <div className="flex flex-col gap-3 lg:hidden">
         {ROWS.map((row) => (
           <div key={row} className="rounded-lg border p-4">
             <div className="flex items-start justify-between gap-3">
@@ -40,7 +40,7 @@ export function RunsTableSkeleton() {
         ))}
       </div>
 
-      <div className="hidden rounded-lg border sm:block">
+      <div className="hidden rounded-lg border lg:block">
         <Table className="min-w-[44rem] table-fixed">
           <TableHeader>
             <TableRow>

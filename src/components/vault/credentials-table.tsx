@@ -66,11 +66,11 @@ export function CredentialsTable({
         isError={isError}
         onRefresh={() => refetch()}
       />
-      {/* Narrow viewports can't fit a 6-column table — a stacked card per
-          credential reads far better than a squeezed or horizontally
-          scrolling grid. Provider is the thing that matters most at a
-          glance, so it leads the card (icon + name), not the account. */}
-      <div className="flex flex-col gap-3 sm:hidden">
+      {/* Cards below lg, not sm: a tablet is wide enough to render the
+              table but not wide enough to fit it, so it used to overflow
+              into a horizontal scrollbar. The skeleton switches at the
+              same breakpoint or the layout jumps on load. */}
+      <div className="flex flex-col gap-3 lg:hidden">
         {rows.map((credential) => (
           <div
             key={credential.id}
@@ -107,7 +107,7 @@ export function CredentialsTable({
         ))}
       </div>
 
-      <div className="hidden rounded-lg border sm:block">
+      <div className="hidden rounded-lg border lg:block">
         <Table>
           <TableHeader>
             <TableRow>
