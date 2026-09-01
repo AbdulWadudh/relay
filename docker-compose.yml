@@ -23,6 +23,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    # Container logs are unbounded by default and the deploy target is a
+    # single VPS; Coolify's scheduled cleanup prunes images, not log files.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
@@ -50,14 +57,47 @@ services:
   # a request handler. Builds from the same Dockerfile as `relay` rather
   # than reusing a shared tag: Coolify rewrites every service's image to
   # <resource-uuid>_<service>:<sha>, so a hand-pinned `relay-app:latest`
-  # would not exist at deploy time. Docker's layer cache makes the second
-  # build nearly free since the layers are identical.
+  # would not exist at deploy time.
+  #
+  # The NEXT_PUBLIC build args are repeated here even though the worker
+  # never serves a browser bundle. They are baked into ENV in the builder
+  # stage, so a service that omits them produces a different cache key and
+  # Docker recompiles the whole Next.js app a second time. Passing the same
+  # values makes this build a cache hit against the one above.
   worker:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
+        NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID: ${NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID:-relay-app}
+        NEXT_PUBLIC_OPENOBSERVE_SITE: ${NEXT_PUBLIC_OPENOBSERVE_SITE}
+        NEXT_PUBLIC_OPENOBSERVE_ORG: ${NEXT_PUBLIC_OPENOBSERVE_ORG}
+        NEXT_PUBLIC_OPENOBSERVE_SERVICE: ${NEXT_PUBLIC_OPENOBSERVE_SERVICE:-relay-app}
+        NEXT_PUBLIC_OPENOBSERVE_VERSION: ${NEXT_PUBLIC_OPENOBSERVE_VERSION:-0.1.0}
     restart: unless-stopped
     command: ["bun", "scripts/worker.ts"]
+    # yt-dlp, ffmpeg and instaloader are spawned as children of this
+    # process. Bun as PID 1 does not reap orphaned grandchildren, so without
+    # an init the container accumulates zombies one run at a time.
+    init: true
+    # `restart` only covers a worker that exits; this covers one that is
+    # still alive but no longer consuming, and is what Coolify reports.
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - "fetch('http://127.0.0.1:${QUEUE_HEALTH_PORT:-3001}/').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       NODE_ENV: production
       VAULT_KEY: ${VAULT_KEY}
@@ -65,10 +105,14 @@ services:
       DATABASE_TOKEN: ${DATABASE_TOKEN}
       REDIS_URL: redis://dragonfly:6379
       QUEUE_CONCURRENCY: ${QUEUE_CONCURRENCY:-2}
+      QUEUE_HEALTH_PORT: ${QUEUE_HEALTH_PORT:-3001}
       OPENOBSERVE_URL: ${OPENOBSERVE_URL}
       OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
       OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
     depends_on:
+      # Not a runtime dependency — the worker only needs Dragonfly and the
+      # database. It waits because `relay` runs `db:migrate` on start, and a
+      # worker that picks up a job against an unmigrated schema fails it.
       relay:
         condition: service_healthy
       dragonfly:
@@ -81,8 +125,12 @@ services:
   # scripts build key names at runtime, which Dragonfly rejects by default
   # with "script tried accessing undeclared key" — every job fails on the
   # first enqueue without it.
+  #
+  # Pinned, not `:latest`: Coolify pulls on every deploy, so a floating tag
+  # means the queue backend can change underneath a deploy that only
+  # touched app code.
   dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1
     restart: unless-stopped
     command:
       - "--default_lua_flags=allow-undeclared-keys"
@@ -96,6 +144,11 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - dragonfly_data:/data
 
@@ -107,6 +160,11 @@ services:
       PORT: 4983
       STORE_PATH: /app
       MASTERPASS: "${STUDIO_PASSWORD:?generate one with openssl rand -base64 24}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       relay:
         condition: service_healthy

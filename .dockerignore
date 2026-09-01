@@ -1,10 +1,27 @@
-.git
-.next
+# Rebuilt inside the image — copying them in would both bloat the build
+# context and risk a host-platform artefact overwriting the Linux one.
 node_modules
+.next
+*.tsbuildinfo
+
+# Never leaves the developer's machine.
+.git
+.env
+.env.*
+!.env.example
+
+# Local SQLite database and media scratch space.
 data
 *.db
 *.db-shm
 *.db-wal
-.env
-.env.*
-!.env.example
+
+# Tooling and documentation: read by people, not by the build.
+.claude
+.gstack
+.qa
+.vscode
+.idea
+*.md
+Dockerfile
+docker-compose.yml
