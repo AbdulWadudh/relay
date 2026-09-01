@@ -2,7 +2,6 @@
 
 import * as React from "react"
 
-import { Button } from "@/components/ui/button"
 import {
   Field,
   FieldDescription,
@@ -10,37 +9,54 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
-import { type AiKeyProviderId, KEYED_AI_PROVIDERS } from "@/lib/providers"
+import { ProviderPicker } from "@/components/vault/provider-picker"
+import { type AiKeyProviderId, providerLabel } from "@/lib/providers"
 import { useCreateCredential } from "@/lib/query/credentials"
 
 /**
- * BYOK key entry, lifted out of the old standalone dialog so it can sit in
- * the "API key" tab (src/components/vault/add-credential-dialog.tsx).
+ * BYOK key entry for the "API key" tab.
  *
- * Only KEYED providers are offered — a keyless one like local Ollama has no
- * key to paste and would be a dead option.
+ * Renders a real <form> with an id, so the dialog's shared footer can
+ * submit it from outside the panel via the button's `form` attribute — no
+ * lifted field state, and Enter submits the way a form should.
+ *
+ * Progressive disclosure: the key and account fields appear once a provider
+ * is chosen. An empty "sk-..." box before Relay knows which service it
+ * belongs to asks the second question first.
  */
 
-export function ApiKeyForm({ onDone }: { onDone: () => void }) {
+export interface ApiKeyFormState {
+  canSubmit: boolean
+  pending: boolean
+}
+
+export function ApiKeyForm({
+  formId,
+  onStateChange,
+  onStored,
+}: {
+  formId: string
+  onStateChange: (state: ApiKeyFormState) => void
+  onStored: () => void
+}) {
   const createCredential = useCreateCredential()
   const [provider, setProvider] = React.useState<AiKeyProviderId | null>(null)
   const [apiKey, setApiKey] = React.useState("")
   const [account, setAccount] = React.useState("")
-  const pending = createCredential.isPending
-  const invalid = !provider || apiKey.trim().length === 0
 
-  async function submit() {
-    if (invalid || pending || !provider) return
+  const canSubmit = Boolean(provider) && apiKey.trim().length > 0
+  const pending = createCredential.isPending
+
+  // The footer button lives outside this component, so it needs to be told
+  // when it may be pressed.
+  React.useEffect(() => {
+    onStateChange({ canSubmit, pending })
+  }, [canSubmit, pending, onStateChange])
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault()
+    if (!canSubmit || pending || !provider) return
     try {
       await createCredential.mutateAsync({
         type: "api_key",
@@ -57,78 +73,63 @@ export function ApiKeyForm({ onDone }: { onDone: () => void }) {
       setProvider(null)
       setApiKey("")
       setAccount("")
-      onDone()
+      onStored()
     } catch {
       toast.add({ type: "error", title: "Could not store the key" })
     }
   }
 
   return (
-    <>
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="vault-provider">Provider</FieldLabel>
-          <Select
-            items={KEYED_AI_PROVIDERS.map((p) => ({
-              label: p.label,
-              value: p.id,
-            }))}
-            value={provider}
-            onValueChange={(value) => setProvider(value as AiKeyProviderId)}
-          >
-            <SelectTrigger id="vault-provider" className="w-full">
-              <SelectValue placeholder="Select a provider" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {KEYED_AI_PROVIDERS.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="vault-key">API key</FieldLabel>
-          <Input
-            id="vault-key"
-            type="password"
-            autoComplete="off"
-            placeholder="sk-..."
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-          />
-          <FieldDescription>
-            Used server-side only for transcription and extraction calls.
-          </FieldDescription>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="vault-account">Account (optional)</FieldLabel>
-          <Input
-            id="vault-account"
-            autoComplete="off"
-            placeholder="e.g. abdul@example.com"
-            maxLength={120}
-            value={account}
-            onChange={(e) => setAccount(e.target.value)}
-          />
-          <FieldDescription>
-            Which account this key was generated from, so you can tell two keys
-            for the same provider apart.
-          </FieldDescription>
-        </Field>
-      </FieldGroup>
-      <div className="flex justify-end gap-2 pt-4">
-        <Button variant="outline" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button onClick={submit} disabled={invalid || pending}>
-          {pending ? <Spinner data-icon="inline-start" /> : null}
-          Store key
-        </Button>
-      </div>
-    </>
+    <form id={formId} onSubmit={submit}>
+      <ProviderPicker
+        value={provider}
+        onChange={(id) => setProvider(id as AiKeyProviderId)}
+      />
+
+      {provider ? (
+        <div className="fade-in slide-in-from-top-1 animate-in pt-4 duration-300 motion-reduce:animate-none">
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="vault-key">
+                {providerLabel(provider)} API key
+              </FieldLabel>
+              <Input
+                id="vault-key"
+                type="password"
+                autoComplete="off"
+                placeholder="sk-..."
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+              <FieldDescription>
+                Encrypted with AES-256-GCM before it is stored, and used
+                server-side only.
+              </FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="vault-account">
+                Account (optional)
+              </FieldLabel>
+              <Input
+                id="vault-account"
+                autoComplete="off"
+                placeholder="e.g. abdul@example.com"
+                maxLength={120}
+                value={account}
+                onChange={(e) => setAccount(e.target.value)}
+              />
+              <FieldDescription>
+                Which account this key came from, so two keys for the same
+                provider are tellable apart.
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+        </div>
+      ) : (
+        <p className="pt-6 text-center text-muted-foreground text-sm">
+          Choose a provider to continue.
+        </p>
+      )}
+    </form>
   )
 }

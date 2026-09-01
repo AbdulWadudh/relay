@@ -2,7 +2,7 @@
 
 import { RefreshIcon, VaultIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-
+import { ProviderMark } from "@/components/provider-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,15 +18,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { AddConnectionDialog } from "@/components/vault/add-connection-dialog"
+import { AddCredentialDialog } from "@/components/vault/add-credential-dialog"
 import { DeleteCredential } from "@/components/vault/delete-credential"
 import { EditCredentialDialog } from "@/components/vault/edit-credential-dialog"
-import {
-  type ProviderIconWithVariant,
-  providerIcon,
-  providerIconVariant,
-  providerLabel,
-} from "@/lib/providers"
+import { providerLabel } from "@/lib/providers"
+import { cn } from "@/lib/utils"
 import type { MaskedCredential } from "@/lib/vault"
 
 /** Presentational pieces of a vault row, split out of credentials-table. */
@@ -57,20 +53,32 @@ export function displayName(credential: MaskedCredential): string {
 }
 
 export function ProviderTile({ provider }: { provider: string }) {
-  const Icon = providerIcon(provider) as ProviderIconWithVariant | null
-  return Icon ? (
-    <Icon variant={providerIconVariant(provider)} className="size-8 shrink-0" />
-  ) : null
+  return <ProviderMark provider={provider} className="size-8" />
+}
+
+/**
+ * Exhaustive over `credentials.type` on purpose. It was an oauth/else
+ * ternary, so the new `cookie` type fell through and a captured social
+ * session rendered as "API key" — the wrong thing entirely, and invisible
+ * until a session actually existed. `Record<CredentialType, …>` makes the
+ * next added type a compile error instead.
+ */
+const TYPE_BADGE: Record<
+  MaskedCredential["type"],
+  { label: string; className: string }
+> = {
+  oauth: { label: "OAuth", className: "bg-violet-600" },
+  api_key: { label: "API key", className: "bg-emerald-600" },
+  cookie: { label: "Session", className: "bg-fuchsia-600" },
 }
 
 export function TypeBadge({ type }: { type: MaskedCredential["type"] }) {
-  return type === "oauth" ? (
-    <Badge className="shrink-0 border-transparent bg-violet-600 text-white">
-      OAuth
-    </Badge>
-  ) : (
-    <Badge className="shrink-0 border-transparent bg-emerald-600 text-white">
-      API key
+  const badge = TYPE_BADGE[type]
+  return (
+    <Badge
+      className={cn("shrink-0 border-transparent text-white", badge.className)}
+    >
+      {badge.label}
     </Badge>
   )
 }
@@ -128,7 +136,7 @@ export function VaultEmpty({ configuredIds }: { configuredIds: string[] }) {
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <AddConnectionDialog configuredIds={configuredIds} />
+        <AddCredentialDialog configuredIds={configuredIds} />
       </EmptyContent>
     </Empty>
   )

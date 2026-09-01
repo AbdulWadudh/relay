@@ -21,7 +21,6 @@ import {
   VaultEmpty,
 } from "@/components/vault/credentials-row"
 import { CredentialsTableSkeleton } from "@/components/vault/credentials-table-skeleton"
-import { providerLabel } from "@/lib/providers"
 import { useCredentials } from "@/lib/query/credentials"
 
 export function CredentialsTable({

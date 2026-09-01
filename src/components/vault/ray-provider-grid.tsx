@@ -1,86 +1,13 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
-import {
-  type ProviderIconWithVariant,
-  RAY_PROVIDERS,
-  type RayProviderInfo,
-} from "@/lib/providers"
-import { cn } from "@/lib/utils"
+import { ProviderCard } from "@/components/vault/provider-card"
+import { RAY_PROVIDERS } from "@/lib/providers"
 
 /**
- * Ray destinations, one card each, for the "Ray" tab of the add-credential
- * dialog. Available + configured cards launch the generic
- * /rays/oauth/:provider flow; available but unconfigured cards say what is
- * missing; the rest show "Soon".
+ * Ray destinations, for the "Ray" tab. A card is only live when the
+ * provider is both implemented AND has its client id/secret configured —
+ * those are different failures, so they say different things.
  */
-
-function RayCard({
-  provider,
-  configured,
-  index,
-}: {
-  provider: RayProviderInfo
-  configured: boolean
-  index: number
-}) {
-  const enabled = provider.available && configured
-  const Icon = provider.icon as ProviderIconWithVariant
-  const body = (
-    <>
-      <Icon
-        variant={provider.iconVariant}
-        className="size-10 shrink-0 transition-transform duration-300 ease-out group-hover/card:-rotate-3 group-hover/card:scale-110"
-      />
-      <span className="grid flex-1 gap-1 text-start leading-snug">
-        <span className="flex items-center gap-2 font-medium text-base">
-          {provider.label}
-          {!provider.available ? (
-            <Badge className="border-transparent bg-amber-600 text-[10px] text-white">
-              Soon
-            </Badge>
-          ) : !configured ? (
-            <Badge className="border-transparent bg-red-600 text-[10px] text-white">
-              Needs setup
-            </Badge>
-          ) : null}
-        </span>
-        <span className="text-muted-foreground text-sm">
-          {provider.description}
-        </span>
-      </span>
-    </>
-  )
-
-  const base =
-    "group/card fade-in slide-in-from-bottom-2 flex w-full animate-in items-center gap-4 rounded-xl border fill-mode-both p-4 text-start transition-all duration-200"
-
-  if (enabled) {
-    return (
-      <a
-        href={`/api/v1/rays/oauth/${provider.id}`}
-        style={{ animationDelay: `${index * 70}ms` }}
-        className={cn(base, "active:scale-[0.98]", provider.accent)}
-      >
-        {body}
-      </a>
-    )
-  }
-  return (
-    <div
-      style={{ animationDelay: `${index * 70}ms` }}
-      className={cn(base, "cursor-not-allowed opacity-60")}
-      title={
-        provider.available
-          ? `Set the ${provider.label} Ray client id/secret in .env.local first`
-          : `${provider.label} support is on the roadmap`
-      }
-    >
-      {body}
-    </div>
-  )
-}
-
 export function RayProviderGrid({
   configuredIds,
 }: {
@@ -88,14 +15,36 @@ export function RayProviderGrid({
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {RAY_PROVIDERS.map((provider, index) => (
-        <RayCard
-          key={provider.id}
-          provider={provider}
-          configured={configuredIds.includes(provider.id)}
-          index={index}
-        />
-      ))}
+      {RAY_PROVIDERS.map((provider, index) => {
+        const configured = configuredIds.includes(provider.id)
+        return (
+          <ProviderCard
+            key={provider.id}
+            id={provider.id}
+            label={provider.label}
+            description={provider.description}
+            index={index}
+            badge={
+              !provider.available
+                ? { text: "Soon", className: "border-transparent bg-amber-600" }
+                : !configured
+                  ? {
+                      text: "Needs setup",
+                      className: "border-transparent bg-red-600",
+                    }
+                  : undefined
+            }
+            disabledReason={
+              !provider.available
+                ? `${provider.label} support is on the roadmap`
+                : !configured
+                  ? `Set the ${provider.label} Ray client id/secret in .env.local first`
+                  : undefined
+            }
+            href={`/api/v1/rays/oauth/${provider.id}`}
+          />
+        )
+      })}
     </div>
   )
 }

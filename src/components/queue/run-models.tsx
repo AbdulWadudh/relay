@@ -1,10 +1,5 @@
-import {
-  type ProviderIconWithVariant,
-  providerAccent,
-  providerIcon,
-  providerIconVariant,
-  providerLabel,
-} from "@/lib/providers"
+import { ProviderMark } from "@/components/provider-mark"
+import { providerLabel } from "@/lib/providers"
 import { cn } from "@/lib/utils"
 
 /**
@@ -110,18 +105,9 @@ function ProviderChip({ provider }: { provider?: string }) {
   if (!provider) {
     return <span className="text-muted-foreground text-xs">No provider</span>
   }
-  const Icon = providerIcon(provider) as ProviderIconWithVariant | null
-  const variant = providerIconVariant(provider)
-  const accent = providerAccent(provider)
   return (
     <span className="inline-flex items-center gap-2 rounded-md border border-border px-2 py-1">
-      {Icon ? (
-        <Icon
-          className={cn("size-4 shrink-0", variant ? accent.chip : undefined)}
-          variant={variant}
-          aria-hidden
-        />
-      ) : null}
+      <ProviderMark provider={provider} className="size-4" />
       <span className="font-medium text-xs">{providerLabel(provider)}</span>
     </span>
   )

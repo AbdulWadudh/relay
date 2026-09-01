@@ -7,15 +7,9 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import * as React from "react"
-
+import { ProviderMark } from "@/components/provider-mark"
 import { Button } from "@/components/ui/button"
-import {
-  type ProviderIconWithVariant,
-  providerAccent,
-  providerIcon,
-  providerIconVariant,
-  providerLabel,
-} from "@/lib/providers"
+import { providerAccent, providerLabel } from "@/lib/providers"
 import { cn } from "@/lib/utils"
 
 /**
@@ -51,8 +45,6 @@ export const ProviderOrderRow = React.forwardRef<
   ref,
 ) {
   const accent = providerAccent(id)
-  const Icon = providerIcon(id) as ProviderIconWithVariant | null
-  const variant = providerIconVariant(id)
   const label = providerLabel(id)
   const first = index === 0
   const last = index === total - 1
@@ -81,13 +73,7 @@ export const ProviderOrderRow = React.forwardRef<
         aria-hidden
       />
 
-      {Icon ? (
-        <Icon
-          className={cn("size-5 shrink-0", variant ? accent.chip : undefined)}
-          variant={variant}
-          aria-hidden
-        />
-      ) : null}
+      <ProviderMark provider={id} className="size-5" />
 
       <span className="min-w-0 flex-1 truncate font-medium text-sm">
         {label}
