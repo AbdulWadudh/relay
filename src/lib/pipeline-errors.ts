@@ -32,8 +32,14 @@ export { UnrecoverableError }
 export function isPermanent(error: unknown): boolean {
   if (error instanceof MediaBinaryError) return true
   if (error instanceof MediaIngestError) {
+    // SESSION_EXPIRED belongs here for the same reason as the other two: a
+    // jar that was rejected once is rejected identically on the retry, so
+    // retrying only spends the attempt budget to reach the same message
+    // later (SESSION_AUTH.md §4.3). Only a reconnect fixes it.
     return (
-      error.code === "SOURCE_UNSUPPORTED" || error.code === "SOURCE_UNAVAILABLE"
+      error.code === "SOURCE_UNSUPPORTED" ||
+      error.code === "SOURCE_UNAVAILABLE" ||
+      error.code === "SESSION_EXPIRED"
     )
   }
   // A missing key won't appear during a backoff. A model that failed

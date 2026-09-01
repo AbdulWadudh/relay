@@ -5,6 +5,7 @@ import { lastLine, MediaIngestError } from "@/lib/media/errors"
 import { downloadWithInstaloader } from "@/lib/media/instaloader"
 import type { ParsedSource } from "@/lib/media/sources"
 import { logger } from "@/lib/observability/logger"
+import { providerLabel } from "@/lib/providers"
 
 /**
  * The download step (TRD §3 step 2): media into the run's temp directory,
@@ -166,12 +167,10 @@ async function downloadWithYtDlp(
 
   if (!attempt.ok) {
     const { stderr } = attempt
-    if (UNAVAILABLE.test(stderr)) {
-      throw new MediaIngestError(
-        "SOURCE_UNAVAILABLE",
-        `This ${source.label} isn't publicly downloadable — it may be private, age-restricted, removed, or require a signed-in session.`,
-      )
-    }
+    // Checked BEFORE the login-shaped branch below. A 403 that survived
+    // every fallback client is the GVS/SABR refusal of §1.1 — it means the
+    // same thing whether or not a jar was supplied, so it must never be
+    // reported as an expired session.
     if (CLIENT_REFUSED.test(stderr)) {
       // Every configured client refused. That is deterministic, so it is
       // classified permanent (src/lib/pipeline-errors.ts) instead of being
@@ -179,6 +178,27 @@ async function downloadWithYtDlp(
       throw new MediaIngestError(
         "SOURCE_UNAVAILABLE",
         `Could not fetch the media for this ${source.label} — the source refused every available client (HTTP 403). This often clears on its own; if it persists, the yt-dlp version may need updating.`,
+      )
+    }
+    if (UNAVAILABLE.test(stderr)) {
+      // The one bit of state that separates a dead video from a dead
+      // session (SESSION_AUTH.md §4.3): we sent a signed-in jar and were
+      // still told to log in. The message is OURS — `lastLine` puts 400
+      // chars of raw stderr into the user-visible run.error, and a tool
+      // that ever echoed a cookie into stderr would land it there.
+      if (cookiesPath) {
+        throw new MediaIngestError(
+          "SESSION_EXPIRED",
+          // `source.label` names one ITEM ("YouTube Short"); the thing
+          // the user reconnects is the PLATFORM, which is what
+          // providerLabel resolves a MediaSourceId to (a social
+          // credential's provider IS the source id — SESSION_AUTH.md §2.4).
+          `Your ${providerLabel(source.source)} session has expired. Reconnect it in the Vault to keep processing this source.`,
+        )
+      }
+      throw new MediaIngestError(
+        "SOURCE_UNAVAILABLE",
+        `This ${source.label} isn't publicly downloadable — it may be private, age-restricted, removed, or require a signed-in session.`,
       )
     }
     // Include the exit code when stderr is empty — a bare "yt-dlp failed"

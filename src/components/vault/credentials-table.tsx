@@ -17,6 +17,7 @@ import {
   displayName,
   ProviderTile,
   RowActions,
+  StaleBadge,
   TypeBadge,
   VaultEmpty,
 } from "@/components/vault/credentials-row"
@@ -82,7 +83,10 @@ export function CredentialsTable({
                   <span className="truncate font-medium">
                     {displayName(credential)}
                   </span>
-                  <TypeBadge type={credential.type} />
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <StaleBadge credential={credential} />
+                    <TypeBadge type={credential.type} />
+                  </div>
                 </div>
                 {accountNameFor(credential) ? (
                   <span className="truncate text-muted-foreground text-xs">
@@ -139,7 +143,10 @@ export function CredentialsTable({
                     )}
                 </TableCell>
                 <TableCell>
-                  <TypeBadge type={credential.type} />
+                  <div className="flex items-center gap-1.5">
+                    <TypeBadge type={credential.type} />
+                    <StaleBadge credential={credential} />
+                  </div>
                 </TableCell>
                 <TableCell className="font-mono text-muted-foreground text-xs">
                   {credential.expiresAt

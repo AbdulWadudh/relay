@@ -2,6 +2,7 @@
 
 import { RefreshIcon, VaultIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
+import * as React from "react"
 import { ProviderMark } from "@/components/provider-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { AddCredentialDialog } from "@/components/vault/add-credential-dialog"
+import { ConnectSessionDialog } from "@/components/vault/connect-session-dialog"
 import { DeleteCredential } from "@/components/vault/delete-credential"
 import { EditCredentialDialog } from "@/components/vault/edit-credential-dialog"
 import { providerLabel } from "@/lib/providers"
@@ -83,9 +85,61 @@ export function TypeBadge({ type }: { type: MaskedCredential["type"] }) {
   )
 }
 
+/**
+ * Shown only once the jar has been rejected `staleAfterRejects` times in a
+ * row (SESSION_AUTH.md §4.3) — a healthy session needs no call to action,
+ * and a single transient checkpoint should not nag. Row-scoped per
+ * RULES.md:60: this operates on an existing record, so it lives in the
+ * record's own row rather than the page header.
+ */
+function ReconnectSession({ credential }: { credential: MaskedCredential }) {
+  const [open, setOpen] = React.useState(false)
+  const label = providerLabel(credential.provider)
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-amber-700 transition-all duration-200 hover:-translate-y-px hover:bg-amber-600 hover:text-white dark:text-amber-300 dark:hover:bg-amber-600"
+              aria-label={`Reconnect ${label}`}
+              onClick={() => setOpen(true)}
+            />
+          }
+        >
+          <HugeiconsIcon icon={RefreshIcon} strokeWidth={1.5} />
+        </TooltipTrigger>
+        <TooltipContent>
+          Session expired — sign in to {label} again
+        </TooltipContent>
+      </Tooltip>
+      <ConnectSessionDialog
+        provider={credential.provider}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </>
+  )
+}
+
+/** Sits beside the type badge so the row explains itself without a hover. */
+export function StaleBadge({ credential }: { credential: MaskedCredential }) {
+  if (!credential.stale) return null
+  return (
+    <Badge className="shrink-0 border-transparent bg-amber-600 text-white">
+      Expired
+    </Badge>
+  )
+}
+
 export function RowActions({ credential }: { credential: MaskedCredential }) {
   return (
     <div className="flex items-center justify-end gap-1">
+      {credential.type === "cookie" && credential.stale ? (
+        <ReconnectSession credential={credential} />
+      ) : null}
       {credential.type === "oauth" ? (
         <Tooltip>
           <TooltipTrigger

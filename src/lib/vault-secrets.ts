@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm"
 import { decrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
 import { type CredentialType, credentials } from "@/lib/db/schema"
+import { logger } from "@/lib/observability/logger"
 
 /**
  * Type-scoped secret reads (SESSION_AUTH.md §3.6).
@@ -69,4 +70,89 @@ export async function getSecretByType(
     expiresAt: row.expiresAt,
     additionalData: row.additionalData,
   }
+}
+
+/**
+ * Staleness bookkeeping for a social session (SESSION_AUTH.md §4.3).
+ *
+ * Lives in `additional_data`, which is deliberately absent from
+ * `MASKED_COLUMNS` (src/lib/vault.ts) — the raw counter is operational
+ * state, never something the API hands to a browser. The Vault reads only
+ * the derived "is this stale" bit.
+ *
+ * Read-modify-write rather than a SQL increment so any other keys a future
+ * caller parks in `additional_data` survive. Best-effort by design: a
+ * failed write costs a nag, never a run, so it never throws.
+ */
+export async function recordSessionOutcome(
+  credentialId: string,
+  userId: string,
+  outcome: "accepted" | "rejected",
+): Promise<void> {
+  try {
+    const db = getDb()
+    const row = await db
+      .select({ additionalData: credentials.additionalData })
+      .from(credentials)
+      .where(
+        and(eq(credentials.id, credentialId), eq(credentials.userId, userId)),
+      )
+      .get()
+    if (!row) return
+
+    const current = row.additionalData ?? {}
+    const previous =
+      typeof current.reject_count === "number" ? current.reject_count : 0
+    const next =
+      outcome === "rejected"
+        ? {
+            ...current,
+            reject_count: previous + 1,
+            last_rejected_at: Date.now(),
+          }
+        : // A success is proof the jar is alive, so the counter resets
+          // outright — two rejections a month apart are not a trend.
+          { ...current, reject_count: 0, last_verified_at: Date.now() }
+
+    await db
+      .update(credentials)
+      .set({ additionalData: next })
+      .where(
+        and(eq(credentials.id, credentialId), eq(credentials.userId, userId)),
+      )
+      .run()
+  } catch (error) {
+    logger.warn("Could not record social session outcome", {
+      credential_id: credentialId,
+      outcome,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+/**
+ * Just the id, without decrypting anything (SESSION_AUTH.md §5.3).
+ *
+ * The rate budget runs on every job pickup and only needs to know WHICH
+ * account a run would spend against. `getSecretByType` would decrypt the
+ * whole jar to answer that, putting cookie material in memory on a code
+ * path that has no business holding it.
+ */
+export async function getCredentialIdByType(
+  provider: string,
+  userId: string,
+  type: CredentialType,
+): Promise<string | null> {
+  const row = await getDb()
+    .select({ id: credentials.id })
+    .from(credentials)
+    .where(
+      and(
+        eq(credentials.userId, userId),
+        eq(credentials.provider, provider),
+        eq(credentials.type, type),
+      ),
+    )
+    .get()
+  return row?.id ?? null
 }

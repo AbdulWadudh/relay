@@ -72,6 +72,32 @@ export const config = {
     attempts: Number(process.env.QUEUE_ATTEMPTS ?? 2),
     backoffMs: Number(process.env.QUEUE_BACKOFF_MS ?? 5000),
     healthPort: Number(process.env.QUEUE_HEALTH_PORT ?? 3001),
+    /**
+     * How many runs ONE user may have executing at once, enforced by a
+     * Dragonfly semaphore because BullMQ OSS has no job groups and its
+     * `limiter` is global rather than per-key (SESSION_AUTH.md §5.4).
+     *
+     * Fairness is the visible benefit — with `concurrency: 2` global, one
+     * user submitting 20 URLs would otherwise occupy both slots. But it is
+     * also CORRECTNESS: two runs sharing one cookie jar both write the
+     * rotated jar back on exit, and the loser's clobber can invalidate a
+     * live session. Serializing per user serializes per credential, since
+     * a credential belongs to exactly one user.
+     *
+     * ⚠ If this is ever raised above 1, the semaphore key MUST move from
+     * the user id to the credential id for cookie-bearing runs, or that
+     * clobber comes back.
+     */
+    perUserConcurrency: Number(process.env.QUEUE_PER_USER_CONCURRENCY ?? 1),
+    /**
+     * Crash-safety net on the semaphore, not a runtime budget: a worker
+     * killed mid-run releases its slot by expiry instead of wedging that
+     * user forever. Must exceed the longest plausible run — sized off the
+     * 328.7 s worst case observed in LLM_STATE with a wide margin.
+     */
+    userSlotTtlMs: Number(process.env.QUEUE_USER_SLOT_TTL_MS ?? 1_800_000),
+    /** How long a run waits before re-checking a busy user slot. */
+    deferMs: Number(process.env.QUEUE_DEFER_MS ?? 2000),
   },
   llm: {
     timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 120000),
@@ -98,8 +124,21 @@ export const config = {
      * a request to a WebSocket, and a live browser is long-lived state a
      * request handler cannot own (SESSION_AUTH.md §2.1). */
     port: Number(process.env.CAPTURE_PORT ?? 3002),
-    /** Where the BROWSER connects. Must be reachable from the client. */
-    publicUrl: process.env.CAPTURE_PUBLIC_URL ?? "ws://127.0.0.1:3002",
+    /**
+     * Where the BROWSER connects — an ORIGIN with no path, because
+     * `src/server/capture.ts` appends `/stream` and the client then appends
+     * `?ticket=`. In a deploy this is a public `wss://` host.
+     *
+     * `||`, NOT `??`. docker-compose passes `CAPTURE_PUBLIC_URL:
+     * '${CAPTURE_PUBLIC_URL}'`, which expands to an EMPTY STRING when the
+     * variable is unset in Coolify rather than being absent — and `??`
+     * only catches null/undefined. The empty string would sail through and
+     * hand the browser a relative `/stream?ticket=...`, which resolves
+     * against the APP's own origin: the socket would open against Next.js,
+     * which cannot upgrade it, and the sign-in would fail with nothing in
+     * any log pointing at a missing env var.
+     */
+    publicUrl: process.env.CAPTURE_PUBLIC_URL || "ws://127.0.0.1:3002",
     /**
      * Where the NEXT.JS APP reaches the capture service's control plane.
      * Server-to-server, so in compose this is the service name — distinct
@@ -153,6 +192,37 @@ export const config = {
      * trades that for disk I/O. Prefer shm_size on the service.
      */
     smallShm: process.env.CAPTURE_SMALL_SHM === "true",
+  },
+  /**
+   * Lifecycle of a CAPTURED session once it is in use, as opposed to
+   * `capture` above, which governs the browser that produces one
+   * (SESSION_AUTH.md §5.3, §5.5).
+   */
+  social: {
+    /**
+     * Consecutive SESSION_EXPIRED rejections before the Vault row offers
+     * "Reconnect". Two, not one: a single transient checkpoint should not
+     * nag a user whose session is in fact fine. Any success resets it.
+     */
+    staleAfterRejects: Number(process.env.SOCIAL_STALE_AFTER_REJECTS ?? 2),
+    /**
+     * Rolling-window download budget for ONE captured session, keyed on the
+     * credential id rather than the user — the ACCOUNT is what gets
+     * flagged, and a user could hold several (SESSION_AUTH.md §5.3).
+     *
+     * Each yt-dlp fetch is several requests; anonymous Instagram tolerates
+     * low hundreds of requests/hour before throttling. 10 downloads/hour
+     * keeps us about an order of magnitude under, and well inside what a
+     * human browsing Reels generates.
+     */
+    ratePerHour: Number(process.env.SOCIAL_RATE_PER_HOUR ?? 10),
+    /**
+     * Catches the slow burn an hourly cap misses — 10/hr sustained would
+     * be 240/day, which looks nothing like a person. 50/day is far more
+     * than a curator saves, so it should never bind in practice; it exists
+     * to stop a runaway loop.
+     */
+    ratePerDay: Number(process.env.SOCIAL_RATE_PER_DAY ?? 50),
   },
   ollama: {
     /**

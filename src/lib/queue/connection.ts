@@ -1,6 +1,7 @@
 import IORedis from "ioredis"
 
 import config from "@/config"
+import { logger } from "@/lib/observability/logger"
 
 /**
  * Redis/Dragonfly connections for BullMQ (Task 4.2).
@@ -13,7 +14,7 @@ import config from "@/config"
 export function createRedis(
   options: { enableOfflineQueue?: boolean } = {},
 ): IORedis {
-  return new IORedis(config.queue.url, {
+  const client = new IORedis(config.queue.url, {
     maxRetriesPerRequest: null,
     // The API process should surface a dead queue as a failed enqueue
     // rather than buffering writes that silently never land.
@@ -25,6 +26,23 @@ export function createRedis(
     // ticket read is not a job enqueue; waiting a few ms beats failing.
     enableOfflineQueue: options.enableOfflineQueue ?? false,
   })
+
+  // NOT COSMETIC — this listener is what keeps the process alive.
+  //
+  // An ioredis client is an EventEmitter, and an EventEmitter that emits
+  // `error` with NO listener THROWS, which in a server takes the whole
+  // process down. ioredis emits `error` on every ordinary connection blip
+  // (ECONNREFUSED while Dragonfly restarts, ECONNRESET, a dropped socket)
+  // and then reconnects by itself, so the only thing the missing listener
+  // ever bought was turning a recoverable blip into a dead container.
+  //
+  // Attached HERE rather than at each call site so it cannot be forgotten:
+  // every client in the codebase is built by this function, and only the
+  // BullMQ Worker used to register one of its own.
+  client.on("error", (error: Error) => {
+    logger.error("Redis connection error", { error: error.message })
+  })
+  return client
 }
 
 // Cached on globalThis so Next.js dev-mode HMR doesn't leak a socket per

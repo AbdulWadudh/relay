@@ -7,6 +7,14 @@
 export type IngestErrorCode =
   | "SOURCE_UNSUPPORTED"
   | "SOURCE_UNAVAILABLE"
+  /**
+   * A login-shaped refusal on a download that DID supply the user's jar
+   * (SESSION_AUTH.md §4.3). Same stderr as SOURCE_UNAVAILABLE, opposite
+   * remedy: the item is probably fine and the session is dead, so the user
+   * is sent to the Vault to reconnect rather than to inspect the video.
+   * Its message is always ours — it never carries stderr.
+   */
+  | "SESSION_EXPIRED"
   | "DOWNLOAD_FAILED"
   | "EXTRACT_FAILED"
 

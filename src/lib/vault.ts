@@ -1,5 +1,7 @@
 import { and, eq, sql } from "drizzle-orm"
 
+import config from "@/config"
+
 import { decrypt, encrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
 import { type CredentialType, credentials } from "@/lib/db/schema"
@@ -22,16 +24,30 @@ export interface MaskedCredential {
   provider: string
   expiresAt: number | null
   metaData: Record<string, unknown> | null
+  /**
+   * A social session the downloader has been told to log in for
+   * `config.social.staleAfterRejects` times running (SESSION_AUTH.md §4.3).
+   * The raw counter it derives from stays server-side — the browser gets
+   * the one bit it needs to render "Reconnect", not the bookkeeping.
+   */
+  stale: boolean
   createdAt: number
   updatedAt: number
 }
 
+/**
+ * `additional_data` is selected but NEVER emitted — `toMasked` reduces it
+ * to `stale` and drops the object. Anything added to it (reject counts,
+ * timestamps, browser versions) therefore stays out of the API by default
+ * rather than by someone remembering to omit it.
+ */
 const MASKED_COLUMNS = {
   id: credentials.id,
   type: credentials.type,
   provider: credentials.provider,
   expiresAt: credentials.expiresAt,
   metaData: credentials.metaData,
+  additionalData: credentials.additionalData,
   createdAt: credentials.createdAt,
   updatedAt: credentials.updatedAt,
 }
@@ -42,16 +58,21 @@ type MaskedRow = {
   provider: string
   expiresAt: number | null
   metaData: Record<string, unknown> | null
+  additionalData: Record<string, unknown>
   createdAt: number
   updatedAt: number
 }
 
 /** Lifts the user-chosen label out of plaintext meta_data. */
 function toMasked(row: MaskedRow): MaskedCredential {
-  const label = row.metaData?.label
+  const { additionalData, ...rest } = row
+  const label = rest.metaData?.label
+  const rejects = additionalData?.reject_count
   return {
-    ...row,
+    ...rest,
     label: typeof label === "string" && label.length > 0 ? label : null,
+    stale:
+      typeof rejects === "number" && rejects >= config.social.staleAfterRejects,
   }
 }
 

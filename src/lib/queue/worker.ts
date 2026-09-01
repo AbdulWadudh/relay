@@ -1,10 +1,12 @@
-import { Worker } from "bullmq"
+import { DelayedError, Worker } from "bullmq"
 
 import config from "@/config"
 import { logger } from "@/lib/observability/logger"
 import { processRun } from "@/lib/pipeline"
+import { admitRun } from "@/lib/queue/admission"
 import { createRedis } from "@/lib/queue/connection"
 import type { RunJobData } from "@/lib/queue/runs-queue"
+import { getRunForWorker } from "@/lib/runs"
 
 /**
  * The run worker (Task 4.2). Runs in its own process — see scripts/worker.ts
@@ -18,8 +20,35 @@ import type { RunJobData } from "@/lib/queue/runs-queue"
 export function startRunWorker(): Worker<RunJobData> {
   const worker = new Worker<RunJobData>(
     config.queue.name,
-    async (job) => {
-      await processRun(job.data.runId)
+    async (job, token) => {
+      const run = await getRunForWorker(job.data.runId)
+      // No row means the run was deleted between enqueue and pickup.
+      // Admission has nothing to meter; processRun classifies it.
+      if (!run) return await processRun(job.data.runId)
+
+      const admission = await admitRun(run)
+      if (!admission.ok) {
+        // DELAYED, never failed (SESSION_AUTH.md §5.3): a busy slot or a
+        // spent budget is a "later", not a "never". This does not consume
+        // an attempt, and `relay_runs` keeps the row honest at `queued`.
+        //
+        // The worker holds a lock on the job while processing, so
+        // moveToDelayed needs the token to release it, and DelayedError is
+        // what stops BullMQ from then completing or failing the job.
+        logger.info("Run deferred", {
+          run_id: job.data.runId,
+          reason: admission.reason,
+          retry_at: admission.retryAt,
+        })
+        await job.moveToDelayed(admission.retryAt, token)
+        throw new DelayedError()
+      }
+
+      try {
+        await processRun(job.data.runId)
+      } finally {
+        await admission.release()
+      }
     },
     {
       connection: createRedis(),
