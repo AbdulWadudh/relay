@@ -93,8 +93,11 @@ export const ProviderOrderRow = React.forwardRef<
         {label}
       </span>
 
+      {/* Hidden on narrow screens: at 380px the badge plus both buttons
+          squeezed the provider name down to "Olla…", and the name matters
+          more than a label whose meaning the top position already carries. */}
       {first ? (
-        <span className="shrink-0 rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground text-xs">
+        <span className="hidden shrink-0 rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground text-xs sm:inline-block">
           Tried first
         </span>
       ) : null}

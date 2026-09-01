@@ -84,6 +84,16 @@ function SortableProvider({
 export function ProviderOrderCard() {
   const { data: order, isPending, isError } = useExtractionOrder()
   const save = useSaveExtractionOrder()
+  /**
+   * dnd-kit derives `aria-describedby` from a module-level counter, which
+   * runs independently on the server and in the browser — the two disagree
+   * and React reports a hydration mismatch. Attaching the sortable
+   * behaviour only after mount makes the server HTML and the first client
+   * render identical; the drag attributes then arrive as an ordinary
+   * update. The markup is the same either way, so nothing moves.
+   */
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
 
   const sensors = useSensors(
     // The whole row is draggable, so a generous threshold is what keeps a
@@ -146,6 +156,21 @@ export function ProviderOrderCard() {
           <p className="py-4 text-destructive text-sm">
             Could not load your provider order.
           </p>
+        ) : !mounted ? (
+          // Same rows, same classes — only the drag wiring is absent.
+          <ol className="flex flex-col gap-2">
+            {items.map((id, index) => (
+              <ProviderOrderRow
+                key={id}
+                id={id}
+                index={index}
+                total={items.length}
+                onMove={move}
+                isDragging={false}
+                dragProps={{}}
+              />
+            ))}
+          </ol>
         ) : (
           <DndContext
             sensors={sensors}

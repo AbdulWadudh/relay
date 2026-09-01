@@ -3,6 +3,49 @@
 - **Current Phase:** **Ollama (local+cloud), provider-ordering UI and per-phase models complete, UNCOMMITTED. Session Auth is PAUSED mid-Phase-1** (storage + vocabulary landed; capture service not started). Session Auth Phase 0 (YouTube GVS 403 fix) also complete and uncommitted — see the section immediately below and `SESSION_AUTH.md`. Before that: Tasks 4.4, 4.5 and 4.6 complete and COMMITTED (human approved the push on 2026-09-01, together with the Docker/Coolify work). The pipeline runs end to end for BOTH sources — verified on a real Instagram Reel after instaloader replaced yt-dlp for that source.
 - **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**, **Task 4.1: Media Ingest**, **Task 4.2: Run Persistence & Queue**, **Task 4.3: Transcription**, **Task 4.4: Agent Routing & Extraction**, **Task 4.5: Evidence Verification**, **Task 4.6: Document Tree & Notion Publish**
 
+## TODO: enable Gemini for extraction (logged 2026-09-02, human decision)
+
+Gemini has a key in the vault but is deliberately hidden from the extraction
+order list, because `chatProvider("gemini")` is null — it has no entry in
+`src/lib/extraction/providers.ts`. It is NOT a limitation; it was never wired.
+
+Verified against the live API with the user's own key:
+- `GET https://generativelanguage.googleapis.com/v1beta/openai/models` → **200**, 53 models.
+- `POST .../chat/completions` with `models/gemini-3.6-flash` and a
+  `response_format: json_schema` → **200**, returned schema-valid JSON.
+
+Three things it needs, and the third is the non-obvious one:
+1. A `ChatProvider` entry (`baseUrl: https://generativelanguage.googleapis.com/v1beta/openai`).
+2. A `capabilities` fallback — its rows are `{id, object, owned_by, display_name}`
+   only: no context length, no feature list, and **no `created`**.
+3. **Version-aware ranking.** The catalog still lists retired `gemini-2.5-*`
+   models (`"no longer available to new users"`, 404 on use). With no size in
+   the id and no `created` to sort on, `rankModels` falls through to
+   `id.localeCompare`, which puts `2.5` BEFORE `3.6` — so all four
+   MAX_CANDIDATES could burn on dead models before reaching a live one.
+   Parsing a version out of the id (a sibling of `parameterCount`) is the
+   generic fix, and would also help `llama-3.3` vs `llama-3.1`.
+
+## Browser verification (2026-09-02) — the gap is now closed
+
+Previously unverified because agent-browser could not authenticate. Solved by
+minting an `auth_sessions` row and signing the cookie with better-auth's own
+`makeSignature` (`better-auth/crypto`) — the raw token is rejected, the cookie
+is `${token}.${hmac}`. Recorded here because it is the only way to drive the
+authenticated UI in a browser.
+
+Checked at 1280×900 dark, 1280×900 light, and 380×844 mobile. **Two real bugs
+this caught, both now fixed:**
+
+1. **Hydration mismatch in `ProviderOrderCard`.** dnd-kit derives
+   `aria-describedby` from a module-level counter that runs independently on
+   server and client, so React reported a mismatch on every load. The sortable
+   behaviour is now attached only after mount — identical markup either way, so
+   nothing moves.
+2. **"Ollama Cloud" truncated to "Olla…" at 380px.** The "Tried first" badge
+   plus both arrow buttons squeezed the provider name out. The badge is now
+   `hidden sm:inline-block`; the top position already carries its meaning.
+
 ## Ollama (local + cloud), provider ordering UI, per-phase models (2026-09-02) — UNCOMMITTED
 
 Human asked for Ollama during Session Auth Phase 1; approved dnd-kit and a new
@@ -31,9 +74,9 @@ Human asked for Ollama during Session Auth Phase 1; approved dnd-kit and a new
 - **gemma4:12b is a thinking model.** With a small `max_tokens` it spends the
   budget on `reasoning` and returns EMPTY content — exactly the failure at
   LLM_STATE.md:20. Safe here only because `llm/client.ts` sends no `max_tokens`.
-- **NOT VERIFIED: a full pipeline run on LOCAL Ollama.** Two attempts were
-  claimed by a stale worker and ran on Groq. Proven for local: provider ordering,
-  catalog ranking selecting gemma4:12b, and schema-valid JSON from `/v1`.
+- **LOCAL Ollama full-pipeline verification: SKIPPED (human decision 2026-09-02).**
+  Cloud is the path in use. Proven for local: provider ordering, catalog ranking
+  selecting gemma4:12b, and schema-valid JSON from `/v1` — but never a full run.
 - **402 IS PER-MODEL ON OLLAMA CLOUD, NOT PER-ACCOUNT.** The ranker picked
   `mistral-large-3:675b` → 402 "requires a subscription", and `disposition()`
   read 402 with OpenRouter's account-wide meaning and abandoned the whole
