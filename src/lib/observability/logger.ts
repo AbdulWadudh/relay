@@ -1,7 +1,7 @@
 import { Writable } from "node:stream"
 import type { MiddlewareHandler } from "hono"
 import type pinoDefault from "pino"
-import type { Logger } from "pino"
+import type { DestinationStream, Logger } from "pino"
 
 import config from "@/config"
 
@@ -94,14 +94,40 @@ class OpenObserveStream extends Writable {
 }
 
 const openObserveStream = openObserveConfig ? new OpenObserveStream() : null
+
+/**
+ * Appends to a local file so the web app, the worker and the capture
+ * service can be read together instead of across three terminals.
+ *
+ * `append: true` matters — the three processes start at different times and
+ * a truncating open would erase whichever started first. `mkdir: true`
+ * saves a first-run failure on a clean checkout. A failure to open the file
+ * must never take the process down, so it degrades to stdout only.
+ */
+function fileStream(): DestinationStream | null {
+  const dest = config.observability.logFile
+  if (!dest) return null
+  try {
+    return pino.destination({ dest, append: true, mkdir: true, sync: false })
+  } catch (error) {
+    console.error("[observability] could not open log file:", error)
+    return null
+  }
+}
+
+// Opened ONCE — calling fileStream() per array slot would open two
+// independent handles onto the same file and interleave their writes.
+const logFileStream = fileStream()
+
+const streams = [
+  { stream: process.stdout },
+  ...(logFileStream ? [{ stream: logFileStream }] : []),
+  ...(openObserveStream ? [{ stream: openObserveStream }] : []),
+]
+
 const pinoLogger: Logger = pino(
-  { level: "debug", base: { service: "relay-api" } },
-  openObserveStream
-    ? pino.multistream([
-        { stream: process.stdout },
-        { stream: openObserveStream },
-      ])
-    : process.stdout,
+  { level: "debug", base: { service: config.observability.service } },
+  streams.length > 1 ? pino.multistream(streams) : process.stdout,
 )
 
 export function ingest(stream: string, event: LogEventInput) {

@@ -119,6 +119,34 @@ export const config = {
      * client acknowledges the last, so the stream self-throttles.
      */
     frame: { format: "jpeg", quality: 60 },
+    /**
+     * SECURITY DOWNGRADE, off by default. This browser renders third-party
+     * pages, so disabling Chromium's sandbox puts a renderer exploit on the
+     * host. Only turn it on where the container genuinely cannot run the
+     * sandbox, and prefer fixing the container instead (run as non-root, or
+     * give it the Chromium seccomp profile).
+     */
+    noSandbox: process.env.CAPTURE_NO_SANDBOX === "true",
+    /**
+     * Shared secret for the control endpoints the Next.js app calls on the
+     * capture service (create / harvest / cancel).
+     *
+     * Loopback is not available here: app and capture are separate
+     * containers, so those calls cross the compose network. Only `/stream`
+     * is meant to be publicly reachable — the reverse proxy must not expose
+     * the control paths, and this token is the second lock behind that.
+     *
+     * Defaults to the vault key so a single-host dev setup works with no
+     * extra configuration, while still never being empty.
+     */
+    internalToken:
+      process.env.CAPTURE_INTERNAL_TOKEN ?? process.env.VAULT_KEY ?? "",
+    /**
+     * Fallback for hosts where `shm_size` cannot be raised. Docker's default
+     * 64MB /dev/shm makes Chromium tabs crash; `--disable-dev-shm-usage`
+     * trades that for disk I/O. Prefer shm_size on the service.
+     */
+    smallShm: process.env.CAPTURE_SMALL_SHM === "true",
   },
   ollama: {
     /**
@@ -211,6 +239,18 @@ export const config = {
     redirectPath: "/api/v1/rays/oauth/notion/callback",
   },
   observability: {
+    /**
+     * Local log file, so all three processes (web, worker, capture) can be
+     * read in one place without tailing three terminals.
+     *
+     * Inside `data/`, which is gitignored — logs are operational data, and
+     * although this codebase never logs a secret (see the redaction list in
+     * src/lib/observability/logger.ts), a log file is still not something to
+     * commit. Set to "" to disable and log to stdout only.
+     */
+    logFile: process.env.LOG_FILE ?? "./data/logs/relay.log",
+    /** Which process wrote a line — all three share the one file. */
+    service: process.env.SERVICE_NAME ?? "relay-api",
     url: process.env.OPENOBSERVE_URL ?? "",
     org: process.env.OPENOBSERVE_ORG ?? "default",
     token: process.env.OPENOBSERVE_TOKEN ?? "",

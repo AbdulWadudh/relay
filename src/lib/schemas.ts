@@ -120,6 +120,56 @@ export const extractionOrderSchema = z.object({
 
 export type ExtractionOrderInput = z.infer<typeof extractionOrderSchema>
 
+/**
+ * Messages the browser may send over the capture socket.
+ *
+ * That socket drives a REAL browser holding a soon-to-exist session, so
+ * every frame off it is untrusted input and is validated here before it
+ * reaches CDP (RULES.md: Zod at the boundary — a WebSocket frame is a
+ * boundary just as much as a request body).
+ *
+ * The unions are closed and the coordinates are bounded, so a malformed or
+ * hostile frame cannot be handed to `Input.dispatch*` raw.
+ */
+const MAX_VIEWPORT_PX = 8192
+
+export const captureInputSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("mouse"),
+    event: z.enum([
+      "mousePressed",
+      "mouseReleased",
+      "mouseMoved",
+      "mouseWheel",
+    ]),
+    x: z.number().min(0).max(MAX_VIEWPORT_PX),
+    y: z.number().min(0).max(MAX_VIEWPORT_PX),
+    button: z.enum(["none", "left", "middle", "right"]).default("none"),
+    clickCount: z.number().int().min(0).max(3).default(0),
+    deltaX: z.number().min(-MAX_VIEWPORT_PX).max(MAX_VIEWPORT_PX).default(0),
+    deltaY: z.number().min(-MAX_VIEWPORT_PX).max(MAX_VIEWPORT_PX).default(0),
+    modifiers: z.number().int().min(0).max(15).default(0),
+  }),
+  z.object({
+    type: z.literal("key"),
+    event: z.enum(["keyDown", "keyUp", "char"]),
+    // Bounded so a single frame cannot paste an unbounded string.
+    key: z.string().max(32).optional(),
+    code: z.string().max(32).optional(),
+    text: z.string().max(8).optional(),
+    windowsVirtualKeyCode: z.number().int().min(0).max(255).optional(),
+    modifiers: z.number().int().min(0).max(15).default(0),
+  }),
+  // Frame acknowledgement — this is the screencast's backpressure.
+  z.object({ type: z.literal("ack"), sessionId: z.number().int().min(0) }),
+])
+
+export type CaptureInput = z.infer<typeof captureInputSchema>
+
+export const captureStartSchema = z.object({
+  label: z.string().trim().max(80).optional(),
+})
+
 export const rayCallbackSchema = z.object({
   code: z.string().min(1),
   state: z.string().min(1),
