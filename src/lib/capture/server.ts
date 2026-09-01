@@ -48,8 +48,13 @@ function tokenOk(header: string | null): boolean {
   const a = new TextEncoder().encode(header)
   const b = new TextEncoder().encode(expected)
   if (a.length !== b.length) return false
+  // Reduce over entries rather than indexing, so there is no
+  // possibly-undefined access to assert away — and crucially the loop still
+  // runs to completion for every byte, which is the whole point.
   let diff = 0
-  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!
+  a.forEach((byte, i) => {
+    diff |= byte ^ (b[i] ?? 0)
+  })
   return diff === 0
 }
 

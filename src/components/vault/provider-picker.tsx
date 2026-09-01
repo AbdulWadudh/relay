@@ -41,10 +41,10 @@ export function ProviderPicker({
         const active = value === provider.id
 
         return (
-          // biome-ignore lint/a11y/useSemanticElements: an <input type="radio">
-          // cannot contain a card layout. WAI-ARIA's radio group pattern is
-          // exactly button+role="radio" inside role="radiogroup", which is
-          // what this is.
+          // An <input type="radio"> cannot contain a card layout, and
+          // WAI-ARIA's radio group pattern is exactly button+role="radio"
+          // inside role="radiogroup" — which is what this is.
+          // biome-ignore lint/a11y/useSemanticElements: see above
           <button
             key={provider.id}
             type="button"

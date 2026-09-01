@@ -1,4 +1,4 @@
-import { MEDIA_SOURCES, type MediaSourceId } from "@/lib/media/sources"
+import type { MediaSourceId } from "@/lib/media/sources"
 
 /**
  * Capture provider registry (SESSION_AUTH.md §2.4).
@@ -95,12 +95,5 @@ const providers: Partial<Record<MediaSourceId, CaptureProvider>> = {
 export function captureProvider(name: string): CaptureProvider | null {
   return (
     (providers as Record<string, CaptureProvider | undefined>)[name] ?? null
-  )
-}
-
-/** Source ids that can be captured — drives the Vault's social cards. */
-export function capturableIds(): MediaSourceId[] {
-  return MEDIA_SOURCES.map((source) => source.id).filter(
-    (id) => providers[id] !== undefined,
   )
 }

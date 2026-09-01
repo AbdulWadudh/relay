@@ -37,7 +37,7 @@ const MODE_LABEL: Record<string, string> = {
   synthesized: "created by this run",
 }
 
-export function phasesFrom(additionalData: Record<string, unknown>): Phase[] {
+function phasesFrom(additionalData: Record<string, unknown>): Phase[] {
   const transcript = (additionalData.transcript ?? {}) as Record<
     string,
     unknown

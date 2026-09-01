@@ -2,6 +2,7 @@ import { $ } from "bun"
 
 import config from "@/config"
 import { type BinaryVersions, ensureMediaBinaries } from "@/lib/media/binaries"
+import { withSourceCookies } from "@/lib/media/cookies"
 import { download } from "@/lib/media/download"
 import { lastLine, MediaIngestError } from "@/lib/media/errors"
 import {
@@ -92,7 +93,11 @@ async function extractAudio(mediaPath: string, dir: string): Promise<string> {
   return audioPath
 }
 
-async function ingest(url: string, dir: string): Promise<IngestedAudio> {
+async function ingest(
+  url: string,
+  dir: string,
+  userId: string,
+): Promise<IngestedAudio> {
   const source = parseSourceUrl(url)
   if (!source) {
     throw new MediaIngestError(
@@ -105,7 +110,12 @@ async function ingest(url: string, dir: string): Promise<IngestedAudio> {
   await $`mkdir -p ${dir}`.quiet()
 
   const downloadStart = performance.now()
-  const { mediaPath, info } = await download(source, dir)
+  // The jar exists only for the duration of the download, and only if the
+  // user has connected this source (src/lib/media/cookies.ts).
+  const { mediaPath, info } = await withSourceCookies(
+    { source, userId, dir },
+    (cookies) => download(source, dir, cookies?.path ?? null),
+  )
   const downloadMs = Math.round(performance.now() - downloadStart)
 
   const extractStart = performance.now()
@@ -149,12 +159,12 @@ async function purge(dir: string, runId: string): Promise<void> {
  * valid for the duration of the callback.
  */
 export async function withIngestedAudio<T>(
-  input: { url: string; runId: string },
+  input: { url: string; runId: string; userId: string },
   consume: (audio: IngestedAudio) => Promise<T>,
 ): Promise<T> {
   const dir = runDir(input.runId)
   try {
-    const audio = await ingest(input.url, dir)
+    const audio = await ingest(input.url, dir, input.userId)
     logger.info("Media ingested", {
       run_id: input.runId,
       source: audio.source.source,

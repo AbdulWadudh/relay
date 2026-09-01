@@ -85,11 +85,17 @@ export interface DownloadResult {
 export async function download(
   source: ParsedSource,
   dir: string,
+  /**
+   * The user's signed-in jar, when they have connected this source. Null
+   * means anonymous, which is exactly the behaviour that shipped before
+   * session capture existed (SESSION_AUTH.md §4.2).
+   */
+  cookiesPath?: string | null,
 ): Promise<DownloadResult> {
   if (source.source === "instagram") {
     return await downloadWithInstaloader(source, dir)
   }
-  return await downloadWithYtDlp(source, dir)
+  return await downloadWithYtDlp(source, dir, cookiesPath ?? null)
 }
 
 async function runYtDlp(
@@ -97,6 +103,7 @@ async function runYtDlp(
   dir: string,
   pathFile: string,
   extractorArgs: string | null,
+  cookiesPath: string | null,
 ): Promise<YtDlpAttempt> {
   // `--print-to-file` APPENDS. A line left by a previous attempt would be
   // read as this attempt's output, so the file is cleared each time.
@@ -121,6 +128,9 @@ async function runYtDlp(
     "after_move:%(filepath)s",
     pathFile,
     ...(extractorArgs ? ["--extractor-args", extractorArgs] : []),
+    // Read-write: yt-dlp writes the rotated jar back here on exit, which
+    // src/lib/media/cookies.ts persists.
+    ...(cookiesPath ? ["--cookies", cookiesPath] : []),
     source.canonicalUrl,
   ]
   const result = await $`${config.media.ytDlpPath} ${args}`.nothrow().quiet()
@@ -134,6 +144,7 @@ async function runYtDlp(
 async function downloadWithYtDlp(
   source: ParsedSource,
   dir: string,
+  cookiesPath: string | null,
 ): Promise<DownloadResult> {
   const pathFile = `${dir}/source.path`
 
@@ -141,7 +152,7 @@ async function downloadWithYtDlp(
   // and for every source but YouTube it is the only thing tried. Fallbacks
   // engage ONLY on a 403, so a private or deleted item still fails once
   // rather than being re-fetched under three more clients.
-  let attempt = await runYtDlp(source, dir, pathFile, null)
+  let attempt = await runYtDlp(source, dir, pathFile, null, cookiesPath)
   for (const extractorArgs of config.media.ytDlpFallbacks[source.source] ??
     []) {
     if (attempt.ok || !CLIENT_REFUSED.test(attempt.stderr)) break
@@ -150,7 +161,7 @@ async function downloadWithYtDlp(
       item_id: source.itemId,
       extractor_args: extractorArgs,
     })
-    attempt = await runYtDlp(source, dir, pathFile, extractorArgs)
+    attempt = await runYtDlp(source, dir, pathFile, extractorArgs, cookiesPath)
   }
 
   if (!attempt.ok) {
