@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm"
 
 import { decrypt, encrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
-import { credentials } from "@/lib/db/schema"
+import { type CredentialType, credentials } from "@/lib/db/schema"
 import type { CredentialInput } from "@/lib/schemas"
 
 /**
@@ -18,7 +18,7 @@ export interface MaskedCredential {
   id: string
   /** User-chosen label, stored in plaintext meta_data (never the secret). */
   label: string | null
-  type: "api_key" | "oauth"
+  type: CredentialType
   provider: string
   expiresAt: number | null
   metaData: Record<string, unknown> | null
@@ -38,7 +38,7 @@ const MASKED_COLUMNS = {
 
 type MaskedRow = {
   id: string
-  type: "api_key" | "oauth"
+  type: CredentialType
   provider: string
   expiresAt: number | null
   metaData: Record<string, unknown> | null

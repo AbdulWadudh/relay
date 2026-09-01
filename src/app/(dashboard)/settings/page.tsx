@@ -1,11 +1,16 @@
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 import { eq } from "drizzle-orm"
 
 import { ShellContent, ShellHeader } from "@/components/app-shell"
 import { ProfileCard } from "@/components/settings/profile-card"
+import { ProviderOrderCard } from "@/components/settings/provider-order-card"
 import { SecurityCard } from "@/components/settings/security-card"
 import { requireSession } from "@/lib/auth-session"
 import { getDb } from "@/lib/db"
 import { authAccounts } from "@/lib/db/schema"
+import { getQueryClient } from "@/lib/query/client"
+import { settingKeys } from "@/lib/query/keys"
+import { getExtractionOrder } from "@/lib/settings"
 
 export const dynamic = "force-dynamic"
 
@@ -20,6 +25,16 @@ export default async function SettingsPage() {
     .all()
   const hasPassword = accounts.some((a) => a.providerId === "credential")
 
+  // Prefetched into the same key the client hydrates, so the provider list
+  // renders at its real length on first paint. Without this the skeleton
+  // would have to guess a row count and the layout would jump when the
+  // actual (filtered) list arrived — RULES.md forbids that.
+  const queryClient = getQueryClient()
+  await queryClient.prefetchQuery({
+    queryKey: settingKeys.extractionOrder(),
+    queryFn: () => getExtractionOrder(session.user.id),
+  })
+
   return (
     <>
       <ShellHeader title="Settings" />
@@ -32,6 +47,9 @@ export default async function SettingsPage() {
               avatar: session.user.image ?? undefined,
             }}
           />
+          <HydrationBoundary state={dehydrate(queryClient)}>
+            <ProviderOrderCard />
+          </HydrationBoundary>
           <SecurityCard hasPassword={hasPassword} />
         </div>
       </ShellContent>

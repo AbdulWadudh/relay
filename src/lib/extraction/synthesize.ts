@@ -120,6 +120,32 @@ function compile(fields: FieldPlan[]): {
   }
 }
 
+/**
+ * A reuse decision from the synthesizer: it was shown the existing agents
+ * and judged that one already covers this category.
+ *
+ * This is the last line of defence against agent sprawl. The router sees
+ * only the transcript and declines when unsure; by this point the
+ * synthesizer has NAMED the category, so it can recognise "this is the
+ * Animals agent" where the router saw an unfamiliar kitten video.
+ *
+ * Lexical similarity cannot do this job — "kitten / milestones" and
+ * "cat / hydration" share essentially no words while being one category,
+ * which is exactly the duplicate pair this exists to stop.
+ */
+interface Reuse {
+  reuse: number
+  reason?: string
+}
+
+function isReuse(value: unknown): value is Reuse {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Number.isInteger((value as Record<string, unknown>).reuse)
+  )
+}
+
 export interface SynthesizedAgent {
   id: string
   name: string
@@ -129,25 +155,71 @@ export interface SynthesizedAgent {
   /** Notion Guides category this agent's pages file under, and its emoji. */
   category: string
   emoji: string
+  /** True when an existing agent was reused rather than a new one built. */
+  reused: boolean
+  /** Why this agent was reused or created — recorded on the run. */
+  reason: string
+}
+
+function describe(row: typeof agents.$inferSelect, index: number): string {
+  const covers = row.additionalData?.covers
+  const scope = typeof covers === "string" && covers ? covers : ""
+  const head = `${index + 1}. ${row.name} — ${row.description}`
+  return scope ? `${head}\n   Covers: ${scope}` : head
+}
+
+function fromExisting(
+  row: typeof agents.$inferSelect,
+  reason: string,
+): SynthesizedAgent {
+  const extra = (row.additionalData ?? {}) as Record<string, unknown>
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    systemPrompt: row.systemPrompt,
+    expectedOutputSchema: row.expectedOutputSchema as SchemaFragment,
+    category: String(extra.category ?? row.name),
+    emoji: String(extra.emoji ?? "📄"),
+    reused: true,
+    reason,
+  }
 }
 
 export async function synthesizeAgent(options: {
   userId: string
   title: string | null
   transcript: string
+  /** Existing routable agents, offered to the model for reuse. */
+  candidates: (typeof agents.$inferSelect)[]
   signal?: AbortSignal
 }): Promise<SynthesizedAgent> {
-  const { userId, title, transcript, signal } = options
+  const { userId, title, transcript, candidates, signal } = options
+  const listing = candidates.map(describe).join("\n")
 
   const run = await runChat({
     userId,
     task: "synthesis",
     system: await promptFor(userId, "schema_synthesizer"),
-    user: `Video title: ${title ?? "(none)"}\n\nTranscript:\n${transcript}`,
+    user: `Existing agents:\n${listing || "(none)"}\n\nVideo title: ${title ?? "(none)"}\n\nTranscript:\n${transcript}`,
     signal,
   })
 
   const parsed = parseModelJson(run.content)
+
+  // Reuse wins over building. Out-of-range indices fall through to
+  // building rather than throwing — a bad number must not fail the run.
+  if (parsed.ok && isReuse(parsed.value)) {
+    const chosen = candidates[parsed.value.reuse - 1]
+    if (chosen) {
+      return fromExisting(
+        chosen,
+        parsed.value.reason?.trim() ||
+          `Reused ${chosen.name}, which already covers this category`,
+      )
+    }
+  }
+
   if (!parsed.ok || !isPlan(parsed.value)) {
     throw new Error("The schema synthesizer did not return a usable plan.")
   }
@@ -196,5 +268,7 @@ export async function synthesizeAgent(options: {
     expectedOutputSchema: row.expectedOutputSchema,
     category: String(extra.category ?? row.name),
     emoji: String(extra.emoji ?? "📄"),
+    reused: false,
+    reason: "No existing agent covered this category; a schema was synthesized",
   }
 }

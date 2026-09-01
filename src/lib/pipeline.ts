@@ -166,6 +166,10 @@ export async function processRun(runId: string): Promise<void> {
             agent_id: extraction.routing.agentId,
             agent_name: extraction.routing.agentName,
             reason: extraction.routing.reason,
+            // Absent when no model was consulted (an explicitly requested
+            // agent), which the run page renders as "no model needed".
+            provider: extraction.routing.provider,
+            model: extraction.routing.model,
           },
           extraction: {
             provider: extraction.provider,

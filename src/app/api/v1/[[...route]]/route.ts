@@ -15,6 +15,7 @@ import { credentialsModule } from "@/server/credentials"
 import { promptsModule } from "@/server/prompts"
 import { raysModule } from "@/server/rays"
 import { relayModule, runsModule } from "@/server/runs"
+import { settingsModule } from "@/server/settings"
 
 /**
  * Hono backend mounted inside the Next.js App Router (TRD §1, §3).
@@ -33,6 +34,7 @@ app.route("/agents", agentsModule)
 app.route("/prompts", promptsModule)
 app.route("/runs", runsModule)
 app.route("/relay", relayModule)
+app.route("/settings", settingsModule)
 
 app.get("/health", async (c) => {
   const db = getDb()

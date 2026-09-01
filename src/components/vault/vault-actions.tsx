@@ -34,7 +34,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { AddConnectionDialog } from "@/components/vault/add-connection-dialog"
-import { AI_KEY_PROVIDERS, type AiKeyProviderId } from "@/lib/providers"
+import { type AiKeyProviderId, KEYED_AI_PROVIDERS } from "@/lib/providers"
 import { useCreateCredential } from "@/lib/query/credentials"
 import { credentialKeys } from "@/lib/query/keys"
 
@@ -106,7 +106,7 @@ function AddCredentialDialog() {
           <Field>
             <FieldLabel htmlFor="vault-provider">Provider</FieldLabel>
             <Select
-              items={AI_KEY_PROVIDERS.map((p) => ({
+              items={KEYED_AI_PROVIDERS.map((p) => ({
                 label: p.label,
                 value: p.id,
               }))}
@@ -118,7 +118,7 @@ function AddCredentialDialog() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {AI_KEY_PROVIDERS.map((p) => (
+                  {KEYED_AI_PROVIDERS.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.label}
                     </SelectItem>

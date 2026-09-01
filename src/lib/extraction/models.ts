@@ -92,11 +92,26 @@ export function normaliseModel(
   }
 }
 
-export function normaliseCatalog(rows: unknown[]): CatalogModel[] {
+/**
+ * `fallback` fills in what a provider's catalog does not advertise (see
+ * ChatProvider.capabilities). Applied ONLY where the row itself said
+ * nothing — a provider that publishes real per-model capabilities always
+ * wins, so this can never overstate a model that declared its own limits.
+ */
+export function normaliseCatalog(
+  rows: unknown[],
+  fallback?: { json: boolean; structured: boolean; contextLength: number },
+): CatalogModel[] {
   const models: CatalogModel[] = []
   for (const row of rows) {
     if (typeof row !== "object" || row === null) continue
     const model = normaliseModel(row as Record<string, unknown>)
+    if (model && fallback) {
+      if (model.contextLength === 0)
+        model.contextLength = fallback.contextLength
+      if (!model.json) model.json = fallback.json
+      if (!model.structured) model.structured = fallback.structured
+    }
     if (model) models.push(model)
   }
   return models

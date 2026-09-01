@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 import { parseSourceUrl, SUPPORTED_SOURCE_LABELS } from "@/lib/media/sources"
-import { PROVIDER_IDS } from "@/lib/providers"
+import { AI_KEY_PROVIDERS, PROVIDER_IDS } from "@/lib/providers"
 
 /**
  * Zod validation schemas (RULES.md: all external input is Zod-validated
@@ -17,7 +17,9 @@ export const telemetryEventSchema = z.looseObject({
 export type TelemetryEvent = z.infer<typeof telemetryEventSchema>
 
 export const credentialInputSchema = z.object({
-  type: z.enum(["api_key", "oauth"]),
+  // Mirrors the `credentials.type` column enum (src/lib/db/schema.ts).
+  // `cookie` is a captured social session jar — SESSION_AUTH.md §3.
+  type: z.enum(["api_key", "oauth", "cookie"]),
   provider: z.enum(PROVIDER_IDS),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1).optional(),
@@ -97,6 +99,26 @@ export const promptUpdateSchema = z.object({
 })
 
 export type PromptUpdateInput = z.infer<typeof promptUpdateSchema>
+
+/**
+ * Provider preference order for the extraction stage.
+ *
+ * Validated against the provider catalog rather than as free strings, so a
+ * typo or an id from an older build is rejected at the boundary instead of
+ * being silently dropped later by `resolveExtractionOrder`. That reconciler
+ * still runs — it handles orders that were VALID when saved and have since
+ * gone stale, which validation here cannot see.
+ */
+const AI_PROVIDER_IDS = AI_KEY_PROVIDERS.map((p) => p.id) as [
+  string,
+  ...string[],
+]
+
+export const extractionOrderSchema = z.object({
+  order: z.array(z.enum(AI_PROVIDER_IDS)).min(1).max(AI_PROVIDER_IDS.length),
+})
+
+export type ExtractionOrderInput = z.infer<typeof extractionOrderSchema>
 
 export const rayCallbackSchema = z.object({
   code: z.string().min(1),

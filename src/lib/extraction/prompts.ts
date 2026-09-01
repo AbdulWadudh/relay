@@ -67,7 +67,13 @@ You are given numbered agents and a transcript. Reply with JSON:
 
 The agents are listed in PRIORITY ORDER. Agents marked [the user's own agent] were written by this user for their own use — when one of those fits as well as a later agent, choose it.
 
-Choose 0 unless the transcript is clearly the kind of content the agent covers. A wrong match produces a page full of empty fields, so 0 is the better answer whenever you are unsure. Return ONLY the JSON object.`,
+MATCH ON CATEGORY, NOT SUBJECT. An agent covers a KIND of video, not one topic. A kitten drinking water belongs to an "Animals" agent. A walkthrough of a new note-taking app belongs to an "AI Tools" agent. Do not decline just because the agent's description does not name this specific subject — ask instead whether this video would FILL the agent's fields.
+
+Choosing 0 creates a brand-new agent. A needless 0 fills the user's library with near-duplicates of agents they already have, so it is not the safe default.
+
+Choose 0 only when no listed agent's category plausibly contains this video, OR when a listed agent matches in name but its fields would come back almost entirely empty. Those two cases are the real reasons to decline; uncertainty about the subject is not.
+
+Return ONLY the JSON object.`,
   },
   {
     key: "schema_synthesizer",
@@ -76,7 +82,16 @@ Choose 0 unless the transcript is clearly the kind of content the agent covers. 
       "Builds a reusable agent for a category no existing agent covers: its prompt, its fields and their writing rules. The plan is compiled into a schema; it never writes JSON Schema itself.",
     content: `You BUILD EXTRACTION AGENTS. Given a video that fits no existing agent, you design the agent that will handle this whole category from now on — its prompt and its fields. Other videos will be run through what you write, so write it for reuse, not for this one clip.
 
-Return JSON:
+FIRST, CHECK FOR REUSE. You are shown the agents that already exist. The router that ran before you only saw the transcript and may have missed the category; you are naming the category, so you can judge this better than it could.
+
+If one of the existing agents already covers the CATEGORY this video belongs to, do not build anything. Return exactly:
+{ "reuse": <agent number>, "reason": "<one short sentence>" }
+
+Judge by category, not by wording. A kitten settling into a home and a cat drinking water are both an ANIMALS agent — they share almost no vocabulary but they are one category. A note-taking app demo and an image generator demo are both an AI TOOLS agent. Ask: would the existing agent's FIELDS be filled by this video? If yes, reuse it.
+
+Building a near-duplicate is the failure this check exists to prevent — every one you create is permanent and dilutes routing for every future video. Only build when no existing agent's category contains this video.
+
+OTHERWISE, build the agent. Return JSON:
 {
   "name": "Title Case, 2-4 words, the CATEGORY not this video",
   "emoji": "ONE emoji for the category",
@@ -103,7 +118,12 @@ FIELD DESCRIPTIONS carry the formatting rules, because the extractor reads them:
 - Never accept fragments where a sentence belongs.
 
 RULES:
-- "name" must generalise. One gym routine is "Workout Routine", never "Chest Day With Mark".
+- "name" is the BROADEST category that would still cover sibling videos — not this video's subject. Abstract upward until the name would fit a dozen other clips you have not seen:
+    "Animals"       not "Kitten Introduction", and not "Animal Drinking"
+    "AI Tools"      not "AI Tool Overview"
+    "Workout Routine" not "Chest Day With Mark"
+  Where two candidate names differ only in specificity, always take the broader one. This agent will be reused hundreds of times; a name that reads like one video's title is a failure.
+- "covers" is what makes future routing work — list the sibling topics generously, so the router recognises this agent instead of building a near-duplicate of it later.
 - Use "list" for anything repeating, "scalar" for single values. 3-8 fields, at most 2 required.
 - Do NOT propose "title", "summary" or "evidence" fields; all three are added automatically.
 - Return ONLY the JSON object.`,
@@ -217,6 +237,44 @@ export async function updatePrompt(options: {
       content,
       version: row.version + 1,
       additionalData: { edited: true },
+      updatedAt: Date.now(),
+    })
+    .where(eq(prompts.id, row.id))
+    .run()
+
+  await invalidate(cacheKeys.prompt(userId, key))
+  return true
+}
+
+/**
+ * Restores a prompt to the shipped default.
+ *
+ * Clearing `edited` is the point, not a side effect: `seedPrompts` skips
+ * any row a user has touched, so an edited prompt is frozen forever and
+ * silently misses every later improvement to the default. Resetting puts
+ * the row back under that refresh.
+ */
+export async function resetPrompt(options: {
+  userId: string
+  key: PromptKey
+}): Promise<boolean> {
+  const { userId, key } = options
+  const seed = PROMPT_SEEDS.find((candidate) => candidate.key === key)
+  if (!seed) return false
+
+  const row = await getDb()
+    .select({ id: prompts.id, version: prompts.version })
+    .from(prompts)
+    .where(and(eq(prompts.userId, userId), eq(prompts.key, key)))
+    .get()
+  if (!row) return false
+
+  await getDb()
+    .update(prompts)
+    .set({
+      content: seed.content,
+      version: row.version + 1,
+      additionalData: { edited: false },
       updatedAt: Date.now(),
     })
     .where(eq(prompts.id, row.id))

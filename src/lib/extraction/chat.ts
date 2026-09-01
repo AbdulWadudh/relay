@@ -1,12 +1,14 @@
+import config from "@/config"
 import { catalogFor } from "@/lib/extraction/catalog"
 import { rankModels } from "@/lib/extraction/models"
 import {
+  type ChatProvider,
   type ChatTask,
   chatProvider,
-  chatProviderIds,
 } from "@/lib/extraction/providers"
 import { chatCompletion, LlmError } from "@/lib/llm/client"
 import { logger } from "@/lib/observability/logger"
+import { resolveExtractionOrder } from "@/lib/settings"
 import { getAccessToken } from "@/lib/vault"
 
 /**
@@ -81,7 +83,10 @@ export interface ChatRun {
  * reason to try the NEXT model. A rejected key is a reason to abandon the
  * whole provider. Anything else is a genuine fault and is rethrown.
  */
-function disposition(error: unknown): "next-model" | "next-provider" | "fail" {
+function disposition(
+  error: unknown,
+  provider: ChatProvider,
+): "next-model" | "next-provider" | "fail" {
   // A timeout is an AbortError, not an LlmError — the model never
   // answered, so the next candidate gets a turn.
   if (error instanceof Error && error.name === "TimeoutError") {
@@ -98,10 +103,16 @@ function disposition(error: unknown): "next-model" | "next-provider" | "fail" {
   if (error.status === 401 || error.status === 403) return "next-provider"
   if (error.status === 400 || error.status === 404) return "next-model"
   if (error.status === 429) return "next-model"
-  // 402 — OpenRouter's "insufficient credits", which every free model on
-  // that account will also return. 413 — the request exceeds THIS
-  // provider's size limit, which its other models share.
-  if (error.status === 402 || error.status === 413) return "next-provider"
+  // 402 — meaning depends on how the provider bills. OpenRouter's is
+  // account-wide "insufficient credits", so every model behind the key
+  // fails too. Ollama Cloud gates PER MODEL and leaves the free ones
+  // usable, so there it is just the next candidate's turn.
+  if (error.status === 402) {
+    return provider.billing === "per-model" ? "next-model" : "next-provider"
+  }
+  // 413 — the request exceeds THIS provider's size limit, which its
+  // other models share.
+  if (error.status === 413) return "next-provider"
   return "fail"
 }
 
@@ -127,11 +138,23 @@ async function attemptPass(options: {
   let rateLimitedFor = 0
   let lastError: unknown = null
 
-  for (const id of chatProviderIds()) {
-    const apiKey = await getAccessToken(id, userId)
-    if (!apiKey) continue
+  // The user's own preference order (Settings → Extraction), reconciled
+  // against the code's list and falling back to it. Unregistered ids are
+  // skipped below, so a provider that is off in this deploy costs nothing.
+  for (const id of await resolveExtractionOrder(userId)) {
     const provider = chatProvider(id)
     if (!provider) continue
+    // A keyless provider (local Ollama) has no credential to look up. It
+    // still needs a non-empty bearer because Ollama's OpenAI-compat layer
+    // requires the header and ignores its value — sending the placeholder
+    // keeps the shared HTTP client free of provider special-casing.
+    const apiKey = provider.keyless
+      ? config.ollama.localApiKey
+      : await getAccessToken(id, userId)
+    if (!apiKey) continue
+    // Counts as "the user can run extraction": a keyless provider is
+    // reachable without them configuring anything, so a missing-key error
+    // would be wrong.
     sawKey = true
 
     // Discovered from the provider's own catalog and ranked by advertised
@@ -177,7 +200,7 @@ async function attemptPass(options: {
         lastError = error
         const status = error instanceof LlmError ? error.status : 0
         const reason = error instanceof Error ? error.message : String(error)
-        const next = disposition(error)
+        const next = disposition(error, provider)
         if (next === "fail") throw error
         if (status === 429) {
           rateLimitedFor = Math.max(rateLimitedFor, retryAfterMs(reason))

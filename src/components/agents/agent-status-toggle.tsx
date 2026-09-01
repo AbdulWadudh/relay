@@ -12,7 +12,9 @@ import { useUpdateAgent } from "@/lib/query/agents"
  */
 export function AgentStatusToggle({ agent }: { agent: AgentSummary }) {
   const updateAgent = useUpdateAgent()
-  const editable = agent.type === "human"
+  // Every agent can be switched off, including built-ins — for those it is
+  // the only way to stop routing to them, since deleting one just brings it
+  // back on the next run.
 
   return (
     <Switch
@@ -26,7 +28,7 @@ export function AgentStatusToggle({ agent }: { agent: AgentSummary }) {
           },
         )
       }
-      disabled={updateAgent.isPending || !editable}
+      disabled={updateAgent.isPending}
       aria-label={`${agent.name} active`}
     />
   )

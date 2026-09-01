@@ -35,6 +35,13 @@ export const promptKeys = {
   detail: (key: string) => [...promptKeys.details(), key] as const,
 }
 
+export const settingKeys = {
+  all: ["settings"] as const,
+  details: () => [...settingKeys.all, "detail"] as const,
+  detail: (key: string) => [...settingKeys.details(), key] as const,
+  extractionOrder: () => [...settingKeys.detail("extraction-order")] as const,
+}
+
 export const credentialKeys = {
   all: ["credentials"] as const,
   lists: () => [...credentialKeys.all, "list"] as const,

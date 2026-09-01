@@ -37,6 +37,13 @@ export interface Routing {
   /** Notion Guides category and its emoji, from the agent's own row. */
   category: string
   emoji: string
+  /**
+   * Which model actually made the routing decision. Absent for the
+   * "requested" and cached paths, where no model was consulted at all —
+   * that absence is itself the useful signal on the run page.
+   */
+  provider?: string
+  model?: string
 }
 
 /**
@@ -124,7 +131,12 @@ async function classify(options: {
   title: string | null
   transcript: string
   signal?: AbortSignal
-}): Promise<{ index: number; reason: string }> {
+}): Promise<{
+  index: number
+  reason: string
+  provider: string
+  model: string
+}> {
   const { userId, candidates, title, transcript, signal } = options
   const listing = candidates
     .map((row, index) => {
@@ -144,7 +156,12 @@ async function classify(options: {
 
   const parsed = parseModelJson(run.content)
   if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) {
-    return { index: 0, reason: "Router returned no usable choice" }
+    return {
+      index: 0,
+      reason: "Router returned no usable choice",
+      provider: run.provider,
+      model: run.model,
+    }
   }
   const value = parsed.value as Record<string, unknown>
   const choice = typeof value.choice === "number" ? value.choice : 0
@@ -153,7 +170,12 @@ async function classify(options: {
       ? value.reason.trim()
       : "No reason given"
   const inRange = choice >= 1 && choice <= candidates.length
-  return { index: inRange ? choice : 0, reason }
+  return {
+    index: inRange ? choice : 0,
+    reason,
+    provider: run.provider,
+    model: run.model,
+  }
 }
 
 export async function routeAgent(options: {
@@ -178,7 +200,7 @@ export async function routeAgent(options: {
 
   const candidates = await routableAgents(userId)
   if (candidates.length > 0) {
-    const { index, reason } = await classify({
+    const { index, reason, provider, model } = await classify({
       userId,
       candidates,
       title,
@@ -187,27 +209,35 @@ export async function routeAgent(options: {
     })
     if (index > 0) {
       const chosen = candidates[index - 1]
-      return toRouting(
-        chosen,
-        chosen.type === "human" ? "human" : "system",
-        reason,
-      )
+      return {
+        ...toRouting(
+          chosen,
+          chosen.type === "human" ? "human" : "system",
+          reason,
+        ),
+        provider,
+        model,
+      }
     }
   }
 
+  // The synthesizer sees the same candidates and may hand one back
+  // instead of building: it has named the category by then, so it catches
+  // duplicates the router could not (src/lib/extraction/synthesize.ts).
   const synthesized = await synthesizeAgent({
     userId,
     title,
     transcript,
+    candidates,
     signal,
   })
   return {
-    mode: "synthesized",
+    mode: synthesized.reused ? "system" : "synthesized",
     agentId: synthesized.id,
     agentName: synthesized.name,
     systemPrompt: synthesized.systemPrompt,
     expectedOutputSchema: synthesized.expectedOutputSchema,
-    reason: "No existing agent covered this content; a schema was synthesized",
+    reason: synthesized.reason,
     category: synthesized.category,
     emoji: synthesized.emoji,
   }

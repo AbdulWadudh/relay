@@ -4,6 +4,7 @@ import {
   DuplicateAgentNameError,
   deleteAgent,
   listAgents,
+  setAgentActive,
   updateAgent,
 } from "@/lib/agents"
 import { getRequestSession } from "@/lib/auth-request"
@@ -61,6 +62,25 @@ agentsModule.put("/:id", async (c) => {
       400,
     )
   }
+  // An isActive-ONLY payload is the row's on/off switch, and every agent
+  // has one — including System rows, which are otherwise not writable.
+  // Anything touching a prompt or schema still goes down the human-scoped
+  // path below.
+  const keys = Object.keys(parsed.data)
+  if (keys.length === 1 && keys[0] === "isActive") {
+    const toggled = await setAgentActive(
+      id,
+      session.user.id,
+      parsed.data.isActive === true,
+    )
+    if (!toggled) return c.json({ error: "Agent not found" }, 404)
+    logger.info("Agent activation changed", {
+      agentId: id,
+      is_active: toggled.isActive,
+    })
+    return c.json({ agent: toggled })
+  }
+
   let agent: Awaited<ReturnType<typeof updateAgent>>
   try {
     agent = await updateAgent(id, parsed.data, session.user.id)

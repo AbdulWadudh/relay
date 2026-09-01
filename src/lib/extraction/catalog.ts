@@ -35,7 +35,11 @@ const TTL_MS = 24 * 60 * 60 * 1000
  * written by an older normaliser is missing that field, and ranking on a
  * silently-absent value is worse than refetching.
  */
-const CATALOG_VERSION = 3
+// 4: provider-level capability fallbacks are now folded in at normalise
+// time (ChatProvider.capabilities), so a v3 snapshot of a provider that
+// advertises nothing — Ollama — has zeroed capabilities the ranker would
+// reject. Those snapshots must be refetched, not reused.
+const CATALOG_VERSION = 4
 
 /** Never let a provider outage stall the pipeline on a network read. */
 const FETCH_TIMEOUT_MS = 15_000
@@ -58,7 +62,7 @@ async function fetchModels(
     throw new Error(`Model catalog request failed (${response.status})`)
   }
   const payload = (await response.json()) as { data?: unknown[] }
-  return normaliseCatalog(payload.data ?? [])
+  return normaliseCatalog(payload.data ?? [], provider.capabilities)
 }
 
 /** The credential's own `updated_at`, which is the key-rotation signal. */

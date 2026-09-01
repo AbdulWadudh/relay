@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { DuplicateAgentNameError, nameTaken } from "@/lib/agent-names"
 import { getDb } from "@/lib/db"
 import { agents } from "@/lib/db/schema"
@@ -29,6 +29,15 @@ export interface AgentSummary {
   expectedOutputSchema: Record<string, unknown>
   config: Record<string, unknown>
   isActive: boolean
+  /**
+   * True only for the agents this codebase SEEDS (they carry
+   * additionalData.builtin_key). Synthesized agents are also stored with
+   * type "system" so later runs reuse them, so type alone cannot tell the
+   * two apart — and the difference matters: seedSystemAgents re-inserts a
+   * deleted built-in on the very next run, while a deleted synthesized
+   * agent stays gone.
+   */
+  builtin: boolean
   createdAt: number
 }
 
@@ -42,6 +51,7 @@ function toSummary(row: typeof agents.$inferSelect): AgentSummary {
     expectedOutputSchema: row.expectedOutputSchema,
     config: row.config,
     isActive: Boolean(row.isActive),
+    builtin: typeof row.additionalData?.builtin_key === "string",
     createdAt: row.createdAt,
   }
 }
@@ -121,6 +131,41 @@ export async function updateAgent(
   return row ? toSummary(row) : null
 }
 
+/**
+ * Turns an agent on or off for routing.
+ *
+ * Deliberately NOT scoped to `type = "human"` like the edit path is. A
+ * synthesized agent is stored as "system" so later runs reuse it, and the
+ * two seeded built-ins cannot be deleted at all (they come straight back),
+ * so switching them off is the ONLY way to stop them being routed to.
+ * `seedSystemAgents` never writes `is_active`, so this sticks.
+ *
+ * Only the flag is writable here — prompts and schemas on System rows stay
+ * off-limits, which is the assumption the seeder's refresh relies on.
+ */
+export async function setAgentActive(
+  id: string,
+  userId: string,
+  isActive: boolean,
+): Promise<AgentSummary | null> {
+  const [row] = await getDb()
+    .update(agents)
+    .set({ isActive: isActive ? 1 : 0 })
+    .where(and(eq(agents.id, id), eq(agents.userId, userId)))
+    .returning()
+    .all()
+  return row ? toSummary(row) : null
+}
+
+/**
+ * Deletes any of the user's own agents EXCEPT a seeded built-in.
+ *
+ * Synthesized agents are `type: "system"` too, and the pipeline mints one
+ * every time routing declines — so scoping deletion to "human" made that
+ * sprawl permanent and unremovable. The real dividing line is
+ * `additional_data.builtin_key`, which only seeded definitions carry:
+ * deleting one of those is futile because the next run re-inserts it.
+ */
 export async function deleteAgent(
   id: string,
   userId: string,
@@ -131,7 +176,7 @@ export async function deleteAgent(
       and(
         eq(agents.id, id),
         eq(agents.userId, userId),
-        eq(agents.type, "human"),
+        sql`json_extract(${agents.additionalData}, '$.builtin_key') IS NULL`,
       ),
     )
     .returning({ id: agents.id })

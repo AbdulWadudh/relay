@@ -46,9 +46,18 @@ function TypeBadge({ type }: { type: AgentSummary["type"] }) {
 }
 
 function RowActions({ agent }: { agent: AgentSummary }) {
-  const editable = agent.type === "human"
+  /**
+   * Deletable = anything that is not a SEEDED built-in.
+   *
+   * Human agents and synthesized ones both stay deleted. The two built-ins
+   * do not: `seedSystemAgents` re-inserts a missing definition on the very
+   * next run, so offering Delete there would look like it silently failed.
+   * Deactivating them DOES stick — the seeder never touches `is_active` —
+   * so the switch beside this is the real control for those.
+   */
+  const removable = !agent.builtin
   return (
-    // Delete is disabled rather than omitted on System rows, so the
+    // Delete is disabled rather than omitted on built-in rows, so the
     // column never has a gap where a button should be.
     <div className="flex items-center justify-end gap-1">
       {/* Fixed width so the switch's narrow pill doesn't read as a wider
@@ -57,13 +66,13 @@ function RowActions({ agent }: { agent: AgentSummary }) {
         <AgentStatusToggle agent={agent} />
       </div>
       <AgentFormDialog agent={agent} />
-      {editable ? (
+      {removable ? (
         <DeleteAgent agentId={agent.id} agentName={agent.name} />
       ) : (
         <DisabledActionSlot
           icon={Delete02Icon}
           label={`Remove ${agent.name}`}
-          reason="System agents can't be removed"
+          reason="Built-in agents come back on the next run — switch it off instead"
         />
       )}
     </div>

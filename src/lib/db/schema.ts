@@ -33,7 +33,13 @@ export const credentials = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => authUsers.id, { onDelete: "cascade" }),
-    type: text("type", { enum: ["api_key", "oauth"] }).notNull(),
+    // Plain TEXT on disk with NO check constraint (see
+    // drizzle/0000_jittery_stardust.sql) — this enum is a TypeScript-level
+    // constraint only, so adding a member needs no migration.
+    // `cookie` holds a Netscape cookie jar for a social media source
+    // (SESSION_AUTH.md §3); its `provider` is a MediaSourceId, not an
+    // AI/Ray provider.
+    type: text("type", { enum: ["api_key", "oauth", "cookie"] }).notNull(),
     provider: text("provider").notNull(), // 'openai', 'groq', 'gemini', 'notion'
     accessToken: text("access_token").notNull(), // AES-256-GCM encrypted
     refreshToken: text("refresh_token"), // AES-256-GCM encrypted, nullable
@@ -218,6 +224,8 @@ export type User = typeof authUsers.$inferSelect
 export type NewUser = typeof authUsers.$inferInsert
 export type Credential = typeof credentials.$inferSelect
 export type NewCredential = typeof credentials.$inferInsert
+/** Derived from the column, so the vocabulary has exactly one definition. */
+export type CredentialType = Credential["type"]
 export type Agent = typeof agents.$inferSelect
 export type NewAgent = typeof agents.$inferInsert
 export type RelayRun = typeof relayRuns.$inferSelect

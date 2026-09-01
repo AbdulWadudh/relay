@@ -1,3 +1,4 @@
+import config from "@/config"
 import type { AiKeyProviderId } from "@/lib/providers"
 
 /**
@@ -17,9 +18,88 @@ export interface ChatProvider {
   modelsPath: string
   freeOnly: boolean
   minContext: number
+  /**
+   * No credential is fetched for this provider and no vault lookup runs.
+   * Only local Ollama, which listens on the operator's own machine.
+   */
+  keyless?: boolean
+  /**
+   * Capabilities for providers whose /models endpoint advertises NONE.
+   * Ollama returns only `{id, object, created, owned_by}`.
+   *
+   * Such models are still ELIGIBLE — `rankModels` waives its checks when
+   * nothing in a catalog publishes capabilities. The problem is quieter:
+   * `structured` would be false for every model, so chat.ts would never
+   * send `response_format: json_schema` and would silently fall back to
+   * loose JSON mode — losing schema-constrained decoding that Ollama
+   * actually implements. `contextLength` of 0 also leaves ranking with
+   * nothing to sort on but the size parsed out of the model id.
+   *
+   * These are guarantees of the SERVER, not guesses about a model: Ollama
+   * implements `format` (JSON and JSON-schema constrained decoding)
+   * uniformly for everything it serves — verified 2026-09-01 against
+   * gemma4:12b, which returned schema-valid JSON for a supplied schema.
+   */
+  capabilities?: { json: boolean; structured: boolean; contextLength: number }
+  /**
+   * What a 402 means for this provider.
+   *
+   * "account" (default) — OpenRouter semantics: the ACCOUNT is out of
+   * credit, so every other model behind the same key will fail too and the
+   * whole provider is abandoned.
+   *
+   * "per-model" — Ollama Cloud semantics: THIS MODEL needs a paid plan
+   * while others on the same key are free. Measured 2026-09-01: the ranker
+   * picked `mistral-large-3:675b`, got 402 "this model requires a
+   * subscription", and the account-wide reading threw away a provider that
+   * had six perfectly usable free models left.
+   */
+  billing?: "account" | "per-model"
+}
+
+/** Shared by both Ollama entries — same server, same guarantees. */
+const OLLAMA_CAPABILITIES = {
+  json: true,
+  structured: true,
+  contextLength: config.ollama.contextLength,
 }
 
 const providers: Partial<Record<AiKeyProviderId, ChatProvider>> = {
+  /**
+   * Local Ollama. Registered ONLY when explicitly enabled — being keyless,
+   * an always-registered entry would look "configured" in production and
+   * burn an attempt per run connecting to nothing (src/config).
+   *
+   * `freeOnly: false` because a local catalog has no pricing to filter on;
+   * every model it lists is already on this machine.
+   */
+  ...(config.ollama.localEnabled
+    ? {
+        ollama: {
+          id: "ollama" as const,
+          baseUrl: config.ollama.localBaseUrl,
+          modelsPath: "/models",
+          freeOnly: false,
+          minContext: 16_384,
+          keyless: true,
+          capabilities: OLLAMA_CAPABILITIES,
+        },
+      }
+    : {}),
+  "ollama-cloud": {
+    id: "ollama-cloud",
+    baseUrl: config.ollama.cloudBaseUrl,
+    modelsPath: "/models",
+    // Cloud models are gated by the account's plan, not per-model pricing,
+    // and the catalog advertises none — so nothing to filter on.
+    freeOnly: false,
+    minContext: 16_384,
+    capabilities: OLLAMA_CAPABILITIES,
+    // Only a handful of cloud models are on the free plan; the rest 402
+    // individually. Abandoning the provider on the first one would skip
+    // the free models entirely.
+    billing: "per-model",
+  },
   openrouter: {
     id: "openrouter",
     baseUrl: "https://openrouter.ai/api/v1",
@@ -57,9 +137,18 @@ const providers: Partial<Record<AiKeyProviderId, ChatProvider>> = {
  *
  * OpenRouter stays as the fallback: it carries far more models, so it is
  * what keeps runs working when Groq's 8000 TPM free tier rate-limits.
+ *
+ * LOCAL OLLAMA LEADS WHEN ENABLED — that is the point of turning it on:
+ * keep development off the network and off rate limits. It is absent from
+ * the registry otherwise, and `chatProviderIds()` drops unregistered ids,
+ * so this ordering costs a production deploy nothing.
+ *
+ * Ollama Cloud sits after Groq, which is measured at ~5s and free.
  */
 export const EXTRACTION_ORDER: readonly AiKeyProviderId[] = [
+  "ollama",
   "groq",
+  "ollama-cloud",
   "openrouter",
   "openai",
 ]

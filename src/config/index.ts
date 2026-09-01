@@ -1,6 +1,17 @@
 const PORT = Number(process.env.PORT ?? 3000)
 const BASE_URL = process.env.APP_BASE_URL ?? `http://localhost:${PORT}`
 
+/**
+ * yt-dlp `player_client` values tried, in order, when YouTube refuses the
+ * media fetch on the default client chain. See `media.ytDlpFallbacks`.
+ */
+const YOUTUBE_CLIENTS = (
+  process.env.YT_DLP_YOUTUBE_CLIENTS ?? "web_embedded,mweb,tv_simply"
+)
+  .split(",")
+  .map((client) => client.trim())
+  .filter((client) => client.length > 0)
+
 export const config = {
   app: {
     name: "Relay",
@@ -37,13 +48,6 @@ export const config = {
     keyHex: process.env.VAULT_KEY ?? "",
   },
   links: {
-    /**
-     * Favicon service for link hosts with no bundled brand mark.
-     * `{host}` is substituted. Set FAVICON_SERVICE_URL="" to disable it
-     * entirely and fall back to a generic glyph — the request is made by
-     * the user's browser, so it is a third party seeing which domains
-     * appear in your run data.
-     */
     faviconUrl:
       process.env.FAVICON_SERVICE_URL ??
       "https://icons.duckduckgo.com/ip3/{host}.ico",
@@ -56,66 +60,60 @@ export const config = {
     storageKey: "theme",
   },
   queue: {
-    // Dragonfly speaks the Redis wire protocol; BullMQ reaches it through
-    // ioredis. IMPORTANT: the Dragonfly server must run with
-    // `--default_lua_flags=allow-undeclared-keys` — BullMQ's Lua scripts
-    // build key names dynamically, which Dragonfly rejects by default with
-    // "script tried accessing undeclared key" on the very first job.
     url: process.env.REDIS_URL ?? "redis://127.0.0.1:6379",
     name: "relay-runs",
     /**
      * BullMQ key prefix, hash-tagged on purpose — Dragonfly's documented
      * BullMQ setup, paired with `--cluster_mode=emulated
      * --lock_on_hashtags` on the server.
-     *
-     * This is a THROUGHPUT choice, not a correctness one: measured
-     * locally, an un-tagged prefix still works fine under emulated cluster
-     * mode (single node, so no CROSSSLOT enforcement). The `{...}` tag
-     * pins every key of this queue to one Dragonfly thread, which is what
-     * lets its multi-threaded engine run BullMQ's multi-key Lua scripts
-     * without coordinating across threads.
-     *
-     * If a second queue is added later, give it a DIFFERENT tag so the
-     * queues spread across threads — unless they have parent/child job
-     * dependencies, which must share a tag.
      */
     prefix: "{relay}",
-    // Runs are I/O-bound (download, Whisper, LLM), so a small pool of
-    // concurrent jobs per worker keeps the box responsive.
     concurrency: Number(process.env.QUEUE_CONCURRENCY ?? 2),
     attempts: Number(process.env.QUEUE_ATTEMPTS ?? 2),
     backoffMs: Number(process.env.QUEUE_BACKOFF_MS ?? 5000),
-    /**
-     * Loopback port for the worker's liveness endpoint
-     * (src/lib/queue/health.ts). Never published — the container's own
-     * healthcheck is its only caller, so it must match the port the
-     * healthcheck probes in docker-compose.yml.
-     */
     healthPort: Number(process.env.QUEUE_HEALTH_PORT ?? 3001),
   },
   llm: {
-    /**
-     * Hard ceiling on one chat completion. Free models occasionally accept
-     * a request and never answer; without this the worker sits on that
-     * socket forever and the run never fails over to the next candidate.
-     */
     timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 120000),
   },
-  cache: {
+  ollama: {
     /**
-     * Redis/Dragonfly is the hot cache in front of the database for
-     * pipeline prompts and provider model catalogs (human decision
-     * 2026-09-01). The database stays the source of truth — a cold or
-     * unreachable cache costs a query, never correctness — and every write
-     * invalidates its key rather than waiting for the TTL.
+     * Local Ollama is a DEVELOPMENT convenience and is OFF by default.
      *
-     * Namespaced separately from the BullMQ prefix so flushing one never
-     * takes the other with it.
+     * It is keyless, so if it were always registered it would be
+     * "configured" on every deploy — including production, where nothing
+     * is listening on 11434 — and every extraction would waste an attempt
+     * failing to connect before falling through. Opt in explicitly.
      */
+    localEnabled: process.env.OLLAMA_LOCAL_ENABLED === "true",
+    localBaseUrl: process.env.OLLAMA_LOCAL_URL ?? "http://127.0.0.1:11434/v1",
+    /**
+     * Ollama Cloud speaks the same OpenAI-compatible surface as the local
+     * server — verified 2026-09-01: GET /v1/models returns 200 with an
+     * OpenAI-shaped list, POST /v1/chat/completions returns 401 without a
+     * bearer token. So it needs no special client, only a key in the vault.
+     */
+    cloudBaseUrl: process.env.OLLAMA_CLOUD_URL ?? "https://ollama.com/v1",
+    /**
+     * Ollama's OpenAI-compat layer wants an Authorization header but
+     * ignores its value locally (per Ollama's own docs, which pass the
+     * literal "ollama"). Sending this placeholder keeps the keyless path
+     * from having to special-case the shared HTTP client. NOT a secret.
+     */
+    localApiKey: "ollama",
+    /**
+     * Context window Ollama is SERVING, which is not the model's maximum.
+     * Measured 2026-09-01: gemma4:12b advertises 262144, but a default
+     * `ollama serve` loaded it at 4096 — too small for a transcript plus a
+     * JSON schema. The server default is set by OLLAMA_CONTEXT_LENGTH, so
+     * this value must be kept in step with it; it is what the ranker sees,
+     * because Ollama's /v1/models advertises no context at all.
+     */
+    contextLength: Number(process.env.OLLAMA_CONTEXT_LENGTH ?? 32768),
+  },
+  cache: {
     prefix: "relay:cache",
     promptTtlSeconds: Number(process.env.CACHE_PROMPT_TTL ?? 3600),
-    // Provider catalogs turn over daily, so this is the ceiling on how
-    // long a newly published model stays invisible to the router.
     catalogTtlSeconds: Number(process.env.CACHE_CATALOG_TTL ?? 86400),
   },
   media: {
@@ -128,11 +126,28 @@ export const config = {
     // had already failed on.
     instaloaderPath: process.env.INSTALOADER_PATH ?? "instaloader",
     ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
-    // Per-run scratch space, inside the mounted data volume so a container
-    // restart can't strand artifacts somewhere unmanaged.
+    /**
+     * Ordered `--extractor-args` fallbacks, keyed by media source id
+     * (src/lib/media/sources.ts). Tried in sequence when a download fails
+     * the MEDIA fetch with a 403 — metadata resolves fine, then the CDN
+     * refuses the stream.
+     *
+     * Measured 2026-09-01 on yt-dlp 2026.03.17: the default client chain
+     * 403s on roughly HALF of YouTube items — including ordinary Shorts,
+     * not just music — while `web_embedded`, `mweb` and `tv_simply` each
+     * served every item the default chain lost. `tv`, `android_vr` and
+     * `ios` do NOT work, so this is not simply "any non-default client".
+     *
+     * Which clients YouTube serves is a moving target it changes without
+     * notice, hence env-overridable rather than compiled into the pipeline.
+     * A source with no entry here simply gets no retry.
+     */
+    ytDlpFallbacks: {
+      youtube: YOUTUBE_CLIENTS.map(
+        (client) => `youtube:player_client=${client}`,
+      ),
+    } as Record<string, readonly string[] | undefined>,
     tempDir: process.env.MEDIA_TEMP_DIR ?? "./data/tmp",
-    // Whisper endpoints want small mono audio and cap upload size; these
-    // values are the ffmpeg extraction target.
     audio: {
       format: "mp3",
       codec: "libmp3lame",
@@ -145,8 +160,6 @@ export const config = {
     clientId: process.env.NOTION_CLIENT_ID ?? "",
     clientSecret: process.env.NOTION_CLIENT_SECRET ?? "",
     apiBaseUrl: "https://api.notion.com/v1",
-    // Notion pins behaviour to a dated API version; omitting it makes the
-    // block payloads this app sends subject to silent format changes.
     apiVersion: "2022-06-28",
     timeoutMs: Number(process.env.NOTION_TIMEOUT_MS ?? 20000),
     authorizeUrl: "https://api.notion.com/v1/oauth/authorize",

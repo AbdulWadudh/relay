@@ -4,6 +4,7 @@ import config from "@/config"
 import { lastLine, MediaIngestError } from "@/lib/media/errors"
 import { downloadWithInstaloader } from "@/lib/media/instaloader"
 import type { ParsedSource } from "@/lib/media/sources"
+import { logger } from "@/lib/observability/logger"
 
 /**
  * The download step (TRD §3 step 2): media into the run's temp directory,
@@ -57,6 +58,24 @@ function pruneInfo(raw: unknown): Record<string, unknown> {
 const UNAVAILABLE =
   /private|login|sign in|not available|unavailable|removed|does not exist|age.?restrict/i
 
+/**
+ * A 403 on the MEDIA fetch, after metadata already resolved. This is the
+ * source refusing one particular client rather than the item being gone,
+ * so it is retryable on a different `player_client` — see
+ * `config.media.ytDlpFallbacks`. Deliberately NOT part of UNAVAILABLE: a
+ * 403 that every client returns means something different from a private
+ * or deleted item, and only earns that classification once the fallbacks
+ * are exhausted.
+ */
+const CLIENT_REFUSED = /\b403\b|forbidden/i
+
+interface YtDlpAttempt {
+  ok: boolean
+  /** Last stderr line — the line carrying the actual reason. */
+  stderr: string
+  exitCode: number
+}
+
 export interface DownloadResult {
   /** Absolute path to the downloaded media, in whatever container served. */
   mediaPath: string
@@ -73,11 +92,16 @@ export async function download(
   return await downloadWithYtDlp(source, dir)
 }
 
-async function downloadWithYtDlp(
+async function runYtDlp(
   source: ParsedSource,
   dir: string,
-): Promise<DownloadResult> {
-  const pathFile = `${dir}/source.path`
+  pathFile: string,
+  extractorArgs: string | null,
+): Promise<YtDlpAttempt> {
+  // `--print-to-file` APPENDS. A line left by a previous attempt would be
+  // read as this attempt's output, so the file is cleared each time.
+  await $`rm -f ${pathFile}`.nothrow().quiet()
+
   // A newline inside a Bun `$` template is a command separator, so the
   // invocation stays one line and passes its arguments as an array — each
   // element is escaped into exactly one argv entry.
@@ -96,27 +120,74 @@ async function downloadWithYtDlp(
     "--print-to-file",
     "after_move:%(filepath)s",
     pathFile,
+    ...(extractorArgs ? ["--extractor-args", extractorArgs] : []),
     source.canonicalUrl,
   ]
   const result = await $`${config.media.ytDlpPath} ${args}`.nothrow().quiet()
+  return {
+    ok: result.exitCode === 0,
+    stderr: lastLine(result.stderr.toString()),
+    exitCode: result.exitCode,
+  }
+}
 
-  if (result.exitCode !== 0) {
-    const stderr = lastLine(result.stderr.toString())
+async function downloadWithYtDlp(
+  source: ParsedSource,
+  dir: string,
+): Promise<DownloadResult> {
+  const pathFile = `${dir}/source.path`
+
+  // The default client chain first — it resolves the richest format set,
+  // and for every source but YouTube it is the only thing tried. Fallbacks
+  // engage ONLY on a 403, so a private or deleted item still fails once
+  // rather than being re-fetched under three more clients.
+  let attempt = await runYtDlp(source, dir, pathFile, null)
+  for (const extractorArgs of config.media.ytDlpFallbacks[source.source] ??
+    []) {
+    if (attempt.ok || !CLIENT_REFUSED.test(attempt.stderr)) break
+    logger.warn("Download refused, retrying on a fallback client", {
+      source: source.source,
+      item_id: source.itemId,
+      extractor_args: extractorArgs,
+    })
+    attempt = await runYtDlp(source, dir, pathFile, extractorArgs)
+  }
+
+  if (!attempt.ok) {
+    const { stderr } = attempt
+    if (UNAVAILABLE.test(stderr)) {
+      throw new MediaIngestError(
+        "SOURCE_UNAVAILABLE",
+        `This ${source.label} isn't publicly downloadable — it may be private, age-restricted, removed, or require a signed-in session.`,
+      )
+    }
+    if (CLIENT_REFUSED.test(stderr)) {
+      // Every configured client refused. That is deterministic, so it is
+      // classified permanent (src/lib/pipeline-errors.ts) instead of being
+      // re-run by the queue to fail identically.
+      throw new MediaIngestError(
+        "SOURCE_UNAVAILABLE",
+        `Could not fetch the media for this ${source.label} — the source refused every available client (HTTP 403). This often clears on its own; if it persists, the yt-dlp version may need updating.`,
+      )
+    }
+    // Include the exit code when stderr is empty — a bare "yt-dlp failed"
+    // gives an operator nothing to act on.
     throw new MediaIngestError(
-      UNAVAILABLE.test(stderr) ? "SOURCE_UNAVAILABLE" : "DOWNLOAD_FAILED",
-      UNAVAILABLE.test(stderr)
-        ? `This ${source.label} isn't publicly downloadable — it may be private, age-restricted, removed, or require a signed-in session.`
-        : // Include the exit code when stderr is empty — a bare
-          // "yt-dlp failed" gives an operator nothing to act on.
-          `Could not download this ${source.label}: ${stderr || `yt-dlp exited ${result.exitCode} with no output`}`,
+      "DOWNLOAD_FAILED",
+      `Could not download this ${source.label}: ${stderr || `yt-dlp exited ${attempt.exitCode} with no output`}`,
     )
   }
 
-  const mediaPath = (
-    await Bun.file(pathFile)
-      .text()
-      .catch(() => "")
-  ).trim()
+  const mediaPath =
+    (
+      await Bun.file(pathFile)
+        .text()
+        .catch(() => "")
+    )
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .pop() ?? ""
   if (!mediaPath) {
     throw new MediaIngestError(
       "DOWNLOAD_FAILED",

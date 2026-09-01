@@ -15,6 +15,7 @@ import {
   processingFacts,
   sourceFacts,
 } from "@/components/queue/run-facts"
+import { RunModels } from "@/components/queue/run-models"
 import { RunRawData } from "@/components/queue/run-raw-data"
 import { RunStageTimeline } from "@/components/queue/run-stage-timeline"
 import {
@@ -187,6 +188,10 @@ export function RunDetail({ runId }: { runId: string }) {
           </div>
         </Section>
       ) : null}
+
+      <Section title="Agents & models">
+        <RunModels additionalData={extra} />
+      </Section>
 
       <Section title="Processing">
         <div className="flex flex-col gap-4 rounded-lg border p-5">

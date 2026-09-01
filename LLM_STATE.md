@@ -1,7 +1,164 @@
 # LLM Execution State - Relay
 
-- **Current Phase:** Tasks 4.4, 4.5 and 4.6 complete and COMMITTED (human approved the push on 2026-09-01, together with the Docker/Coolify work). The pipeline runs end to end for BOTH sources — verified on a real Instagram Reel after instaloader replaced yt-dlp for that source.
+- **Current Phase:** **Ollama (local+cloud), provider-ordering UI and per-phase models complete, UNCOMMITTED. Session Auth is PAUSED mid-Phase-1** (storage + vocabulary landed; capture service not started). Session Auth Phase 0 (YouTube GVS 403 fix) also complete and uncommitted — see the section immediately below and `SESSION_AUTH.md`. Before that: Tasks 4.4, 4.5 and 4.6 complete and COMMITTED (human approved the push on 2026-09-01, together with the Docker/Coolify work). The pipeline runs end to end for BOTH sources — verified on a real Instagram Reel after instaloader replaced yt-dlp for that source.
 - **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**, **Task 4.1: Media Ingest**, **Task 4.2: Run Persistence & Queue**, **Task 4.3: Transcription**, **Task 4.4: Agent Routing & Extraction**, **Task 4.5: Evidence Verification**, **Task 4.6: Document Tree & Notion Publish**
+
+## Ollama (local + cloud), provider ordering UI, per-phase models (2026-09-02) — UNCOMMITTED
+
+Human asked for Ollama during Session Auth Phase 1; approved dnd-kit and a new
+`user_settings` table explicitly. **Session Auth is paused mid-Phase-1** (see below).
+
+### Ollama
+
+- **Both modes are OpenAI-compatible, verified 2026-09-01.** Local:
+  `http://127.0.0.1:11434/v1`. Cloud: `https://ollama.com/v1` — `GET /v1/models`
+  returns 200 with an OpenAI-shaped list, `POST /v1/chat/completions` returns 401
+  without a bearer. So cloud is ordinary BYOK and needed no special client.
+- **Local is keyless and OFF by default** (`OLLAMA_LOCAL_ENABLED`). Keyless would
+  otherwise look "configured" in production and burn an attempt per run
+  connecting to nothing. `ChatProvider.keyless` short-circuits the vault lookup
+  and sends Ollama's documented placeholder bearer.
+- **Ollama's `/v1/models` advertises NOTHING** — no context, no features. Added
+  `ChatProvider.capabilities` as a provider-level fallback, applied in
+  `normaliseCatalog` only where the row was silent. CORRECTION to a claim made
+  mid-session: those models are NOT filtered out without it (`rankModels` waives
+  its checks when no model in a catalog publishes capabilities). The real loss is
+  `structured: false`, which silently drops schema-constrained decoding that
+  Ollama does implement. `CATALOG_VERSION` bumped 3→4.
+- **`OLLAMA_CONTEXT_LENGTH` matters and is not the model's max.** gemma4:12b
+  advertises 262144; a default `ollama serve` loaded it at **4096**. Must be set
+  on the server and mirrored in `config.ollama.contextLength`.
+- **gemma4:12b is a thinking model.** With a small `max_tokens` it spends the
+  budget on `reasoning` and returns EMPTY content — exactly the failure at
+  LLM_STATE.md:20. Safe here only because `llm/client.ts` sends no `max_tokens`.
+- **NOT VERIFIED: a full pipeline run on LOCAL Ollama.** Two attempts were
+  claimed by a stale worker and ran on Groq. Proven for local: provider ordering,
+  catalog ranking selecting gemma4:12b, and schema-valid JSON from `/v1`.
+- **402 IS PER-MODEL ON OLLAMA CLOUD, NOT PER-ACCOUNT.** The ranker picked
+  `mistral-large-3:675b` → 402 "requires a subscription", and `disposition()`
+  read 402 with OpenRouter's account-wide meaning and abandoned the whole
+  provider. New `ChatProvider.billing: "account" | "per-model"`. Verified after
+  the fix: `mistral-large-3:675b` 402 → `qwen3.5:397b` 402 → **`gpt-oss:120b`
+  succeeded in 5.0s**. Only ~6 of ~19 cloud models are on the free plan.
+
+### Provider ordering UI
+
+- New `user_settings` table (migration `0006_high_robbie_robertson.sql`, additive:
+  one CREATE TABLE + one unique index) — a per-user key/value store, applied to
+  the remote Turso database.
+- `resolveExtractionOrder` reconciles a saved order against the code's list:
+  unknown ids dropped, new providers appended. A stale preference can never stop
+  extraction. `getExtractionOrder` additionally narrows to providers the user can
+  ACTUALLY use — registered in the chat registry AND (keyless OR has a key).
+  **Gemini has a key but is hidden, correctly: it has no chat-registry entry.**
+- Settings card uses dnd-kit; the WHOLE ROW is draggable. **Move up / Move down
+  buttons are not decoration — WCAG 2.2 AA requires a single-pointer alternative
+  to any drag.** Page server-prefetches so the list renders at its real length
+  (a skeleton would have to guess a row count and shift).
+- Dark hover is `-900`, not `-950`: against a near-black card `-950` is invisible,
+  so dark mode had no equivalent of light mode's `-50` highlight.
+
+### Agent sprawl — FIXED AND MEASURED (2026-09-02)
+
+**The router fix alone solved it. No taxonomy constraint or synthesis cap was
+needed** — that was considered and deliberately NOT built, because the measured
+baseline made it unnecessary complexity.
+
+The blocker was that `agent_router` was `edited=true`, and `seedPrompts` skips
+edited rows — so an edited prompt is frozen forever and misses every later
+improvement. New `resetPrompt()` restores the seed content AND clears `edited`,
+putting the row back under that refresh. Reset to v3, then measured:
+
+| Run | Video | Result |
+| --- | --- | --- |
+| 1 | wildlife facts (the clip that CREATED "Animal Facts") | `mode: system` → Animal Facts |
+| 2 | dog behaviour (different subject entirely) | `mode: system` → Animal Facts |
+
+Agent count held at 3 across both. Run 2 is the real test: it generalised to a
+different animal subject rather than only recognising the clip it was born from.
+Before the fix the same pair would have produced two more agents.
+
+Order of operations mattered — measuring first is what showed the extra
+machinery was unnecessary. Agent library went 7 → 3 after the human deleted the
+narrow ones (delete now works; see below).
+
+### Agent sprawl — the ROUTER was the cause, not the synthesizer
+
+Human reported near-duplicate agents ("Kitten Introduction", "Animal Drinking",
+"AI Tool Overview"). The synthesizer already said "name must generalise". The
+actual cause was the **router prompt**: *"Choose 0 unless … 0 is the better
+answer whenever you are unsure."* Every unsure → 0 → synthesize a new agent.
+Sensible with 2 System agents, corrosive once the library grows. Router now
+matches on CATEGORY not subject and declines only when no category fits or the
+fields would come back empty; synthesizer must pick the broadest reusable name.
+**Existing over-specific agents are NOT merged retroactively** — manual cleanup.
+
+### Per-phase models on the run page
+
+`Routing` now carries `provider`/`model` (absent for an explicitly requested
+agent, rendered as "no model needed" rather than hidden). New
+`src/components/queue/run-models.tsx`. Verified on a real run: Transcription
+groq/whisper-large-v3 · Agent routing ollama-cloud/gpt-oss:120b · Extraction
+ollama-cloud/gpt-oss:120b.
+
+### The stale-worker trap bit THREE times
+
+`pkill -f "scripts/worker.ts"` **does not kill bun on Windows** — it cannot read
+Windows command lines, so the old worker kept claiming jobs and running old code.
+Two "failed" verifications were actually stale workers. Use:
+`Get-CimInstance Win32_Process -Filter "Name='bun.exe'" | Where-Object { $_.CommandLine -match 'worker' } | Stop-Process -Force`
+
+## Session Auth Phase 0 — YouTube's GVS 403 (2026-09-01) — AWAITING APPROVAL
+
+Design doc: **`SESSION_AUTH.md`** (new, repo root). Human approved the doc and said
+"start building" on 2026-09-01. Phase 0 is the first of seven phases and is the
+only one that ships alone, gated on nothing.
+
+**The bug this fixes was found while investigating PO tokens, and it is not the
+bug we thought we had.** `LLM_STATE.md:103` recorded YouTube's "Sign in to confirm
+you're not a bot". That bot check has **decayed** — it no longer reproduces. What
+reproduces instead is `HTTP Error 403: Forbidden` on the **media** fetch, after
+metadata resolves fine.
+
+Measured on yt-dlp 2026.03.17, anonymous, `-f bestaudio/best`:
+
+| Video | default | `web_embedded` | `mweb` | `tv_simply` |
+| --- | --- | --- | --- | --- |
+| `dQw4w9WgXcQ` (music) | ❌ 403 (×2) | ✅ | ✅ | ✅ |
+| `9bZkp7q19f0` (music) | ❌ 403 | ✅ | – | – |
+| `n5t23nvU_t0` (**Short**) | ❌ 403 | ✅ | ✅ | ✅ |
+| `T-1iAFMZunY` / `MGIovezvFSQ` / `afZpm4LVjG0` (Shorts) | ✅ | ✅ | – | – |
+
+- **The default client chain fails 3 of 6 — including an ordinary Short**, not
+  just music. `download.ts` passed no `--extractor-args`, so this was live.
+- **It was also misclassified.** "HTTP Error 403: Forbidden" matches none of the
+  `UNAVAILABLE` patterns, so it fell through to `DOWNLOAD_FAILED`, which is not
+  permanent — BullMQ retried a deterministic failure through the whole attempt
+  budget. Now: fallbacks first, and a 403 that survives *every* client is
+  `SOURCE_UNAVAILABLE`, i.e. permanent.
+- **Cookies would NOT have fixed this**, and neither would PO tokens. The
+  provider's own README says PO tokens "do not guarantee bypassing 403 errors or
+  bot checks"; it also needs Node.js ≥20 or Deno, which RULES.md:14 forbids.
+  Rejected — documented as an escalation in `SESSION_AUTH.md:1.1b`.
+- **`tv`, `android_vr` and `ios` do NOT work** ("page needs to be reloaded",
+  403-on-media, and "requested format is not available" respectively). This is
+  not "any non-default client", which is why the list is env-tunable.
+- **yt-dlp warns its own version is >90 days old** — the `Dockerfile:78` pin is
+  ~5.5 months stale. Risk #8 in the doc; needs a bump cadence, not a floating tag.
+
+**Changed:** `src/config/index.ts` (`media.ytDlpFallbacks`, keyed by source id so
+no source string is hardcoded in flow logic), `src/lib/media/download.ts`
+(`runYtDlp` extracted; 403-only fallback loop; three-way classification),
+`.env.example` (`YT_DLP_YOUTUBE_CLIENTS`).
+
+**Verified:** typecheck 0 errors, biome clean on changed files, `bun run build`
+succeeds, `download.ts` 204 lines (under the 250 cap). Exercised through the
+**real `download()` code path**, not just the CLI: `n5t23nvU_t0` (previously 403)
+now returns a 1.2 MB webm with an intact title, logging exactly one fallback warn
+on `web_embedded`; `T-1iAFMZunY` succeeds on the default client with **zero**
+fallback attempts. **Worker NOT yet restarted and no queued end-to-end run has
+been exercised** — do that before trusting any pipeline behaviour (see the stale
+worker trap below).
 
 ## Instagram Unblocked via instaloader (2026-09-01, human decision)
 

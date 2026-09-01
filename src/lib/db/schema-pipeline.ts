@@ -94,7 +94,39 @@ export const modelCatalog = sqliteTable(
   ],
 )
 
+/**
+ * Per-user preferences (human decision 2026-09-01).
+ *
+ * A narrow key/value store rather than a column per preference: these are
+ * read one at a time by key, never queried across, and a new preference
+ * should not cost a migration. `value` is json-mode TEXT so each key owns
+ * its own shape, validated by that key's Zod schema at the API boundary
+ * rather than by the column.
+ *
+ * NOTHING SECRET GOES HERE — it is plaintext, exactly like `meta_data`.
+ * Secrets belong in `credentials`, encrypted.
+ */
+export const userSettings = sqliteTable(
+  "user_settings",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    // Stable lookup key (e.g. "extraction_order"). One row per user+key.
+    key: text("key").notNull(),
+    value: text("value", { mode: "json" }).$type<unknown>().notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_user_settings_user_key").on(table.userId, table.key),
+  ],
+)
+
 export type ModelCatalog = typeof modelCatalog.$inferSelect
 export type NewModelCatalog = typeof modelCatalog.$inferInsert
 export type Prompt = typeof prompts.$inferSelect
 export type NewPrompt = typeof prompts.$inferInsert
+export type UserSetting = typeof userSettings.$inferSelect
+export type NewUserSetting = typeof userSettings.$inferInsert
