@@ -76,6 +76,50 @@ export const config = {
   llm: {
     timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 120000),
   },
+  capture: {
+    /**
+     * Server-side browser the user drives to sign in to a social source
+     * (SESSION_AUTH.md §2). Runs HEADFUL under Xvfb on Linux — Instagram
+     * fingerprints `--headless=new` aggressively — and directly on a dev
+     * machine that already has a display.
+     */
+    chromiumPath: process.env.CHROMIUM_PATH ?? "chromium",
+    xvfbRunPath: process.env.XVFB_RUN_PATH ?? "xvfb-run",
+    /**
+     * Xvfb is a Linux thing. On Windows/macOS the launcher skips it and
+     * uses the real display, so a developer can exercise capture without
+     * a container. Auto-detected, overridable for the odd Linux box that
+     * already has a display.
+     */
+    useXvfb: process.env.CAPTURE_USE_XVFB
+      ? process.env.CAPTURE_USE_XVFB === "true"
+      : process.platform === "linux",
+    /** Own process, like the worker: Next.js route handlers cannot upgrade
+     * a request to a WebSocket, and a live browser is long-lived state a
+     * request handler cannot own (SESSION_AUTH.md §2.1). */
+    port: Number(process.env.CAPTURE_PORT ?? 3002),
+    /** Where the BROWSER connects. Must be reachable from the client. */
+    publicUrl: process.env.CAPTURE_PUBLIC_URL ?? "ws://127.0.0.1:3002",
+    /**
+     * Headful Chromium is ~300-500MB each and the deploy target is one
+     * VPS. Two fits with headroom for a concurrent download + ffmpeg
+     * spike; drop to 1 on a 2GB box.
+     */
+    maxConcurrent: Number(process.env.CAPTURE_MAX_CONCURRENT ?? 2),
+    /** Hard ceiling. 2FA means fetching a code from a phone. */
+    sessionTtlMs: Number(process.env.CAPTURE_SESSION_TTL_MS ?? 600_000),
+    /** The real reclaimer — an abandoned tab must not hold 500MB. */
+    idleTimeoutMs: Number(process.env.CAPTURE_IDLE_TIMEOUT_MS ?? 90_000),
+    /** Ticket → WebSocket handshake is machine-speed. */
+    ticketTtlMs: Number(process.env.CAPTURE_TICKET_TTL_MS ?? 60_000),
+    viewport: { width: 1280, height: 800 },
+    /**
+     * No frame rate is configured on purpose: CDP's `screencastFrameAck`
+     * IS the backpressure — the next frame is requested only once the
+     * client acknowledges the last, so the stream self-throttles.
+     */
+    frame: { format: "jpeg", quality: 60 },
+  },
   ollama: {
     /**
      * Local Ollama is a DEVELOPMENT convenience and is OFF by default.
