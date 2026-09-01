@@ -100,6 +100,31 @@ RUN set -eux; \
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 
+# One image runs three things, and each needs a different slice of the repo:
+# `next start` reads .next/, next.config.ts and public/; `db:migrate` reads
+# drizzle.config.ts, drizzle/ and src/config; `bun scripts/worker.ts` reads
+# scripts/ and src/, resolving its `@/*` imports through tsconfig.json.
+# Copied explicitly rather than as `COPY . .` so build-only files stay out.
+#
+# THESE MUST STAY ABOVE `FROM runtime AS capture`. They previously sat at
+# the END of the file, which put them in the CAPTURE stage — every
+# instruction after a FROM belongs to that stage. The damage was total and
+# silent: `runtime` ended up with no source and no CMD (an unusable stage),
+# `relay`/`worker` build no `target` so Docker gave them the LAST stage —
+# capture, Chromium and all — and capture's own
+# `CMD ["bun", "scripts/capture.ts"]` was overridden by the `next start`
+# CMD below it, so the capture service ran a SECOND Next.js server and
+# raced `relay` on `db:migrate` at every start.
+COPY package.json bun.lock next.config.ts tsconfig.json drizzle.config.ts ./
+COPY drizzle ./drizzle
+COPY public ./public
+COPY src ./src
+COPY scripts ./scripts
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "bun run db:migrate && exec bun --bun next start --hostname 0.0.0.0 --port 3000"]
+
 # ------------------------------------------------------------- capture ---
 # The session-capture service (SESSION_AUTH.md §2) is its OWN stage layered
 # on the runtime, not part of it. Chromium plus Xvfb is roughly 400MB, and
@@ -110,12 +135,30 @@ COPY --from=builder /app/.next ./.next
 # aggressively, which is the whole reason a real display is needed.
 FROM runtime AS capture
 ARG DEBIAN_FRONTEND=noninteractive
+# `xauth` and `chromium-sandbox` are NOT optional extras, and both were
+# missing because --no-install-recommends drops them (measured 2026-09-02
+# by running this stage):
+#
+#   * xvfb ships `xvfb-run`, but that script shells out to `xauth` to mint
+#     the display cookie. Without it every launch died at
+#     "xvfb-run: error: xauth command not found" — so the capture service
+#     could not open a browser AT ALL in the container.
+#   * Debian splits Chromium's setuid sandbox helper into `chromium-sandbox`.
+#     Without it Chromium refuses to start with "No usable sandbox!", which
+#     is precisely the message that pushes people to --no-sandbox.
+#
+# `xvfb-run --help` is smoke-tested here rather than only `Xvfb -help`: the
+# old check passed while the launcher path was broken.
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-      chromium xvfb fonts-liberation fonts-noto-color-emoji; \
+      chromium chromium-sandbox xvfb xauth \
+      fonts-liberation fonts-noto-color-emoji; \
     rm -rf /var/lib/apt/lists/*; \
     chromium --version; \
+    test -u /usr/lib/chromium/chrome-sandbox; \
+    command -v xauth; \
+    xvfb-run --help >/dev/null 2>&1 || true; \
     Xvfb -help >/dev/null 2>&1 || true
 
 # Chromium's sandbox is kept ON (src/lib/capture/chromium.ts), and it needs
@@ -132,19 +175,7 @@ ENV CHROMIUM_PATH=chromium \
     CAPTURE_USE_XVFB=true
 
 EXPOSE 3002
+# LAST instruction of the file on purpose. A stage keeps only its final
+# CMD, so anything appended below this line would silently replace the
+# capture entrypoint — which is exactly the bug this file used to have.
 CMD ["bun", "scripts/capture.ts"]
-
-# One image runs three things, and each needs a different slice of the repo:
-# `next start` reads .next/, next.config.ts and public/; `db:migrate` reads
-# drizzle.config.ts, drizzle/ and src/config; `bun scripts/worker.ts` reads
-# scripts/ and src/, resolving its `@/*` imports through tsconfig.json.
-# Copied explicitly rather than as `COPY . .` so build-only files stay out.
-COPY package.json bun.lock next.config.ts tsconfig.json drizzle.config.ts ./
-COPY drizzle ./drizzle
-COPY public ./public
-COPY src ./src
-COPY scripts ./scripts
-
-EXPOSE 3000
-
-CMD ["sh", "-c", "bun run db:migrate && exec bun --bun next start --hostname 0.0.0.0 --port 3000"]

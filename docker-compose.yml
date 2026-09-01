@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # EXPLICIT, and load-bearing. With no `target`, Docker builds the LAST
+      # stage in the Dockerfile — which is `capture`, so the web app silently
+      # shipped Chromium and ran as the capture user.
+      target: runtime
       args:
         NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
         NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID: ${NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID:-relay-app}
@@ -74,6 +78,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Same reason as `relay` above: without this it builds the capture
+      # stage and carries ~400MB of Chromium it never executes.
+      target: runtime
       args:
         NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
         NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID: ${NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID:-relay-app}
@@ -155,6 +162,27 @@ services:
     # is the correct fix; CAPTURE_SMALL_SHM is only for hosts that cannot
     # set it, and trades the crash for disk I/O.
     shm_size: 1gb
+    # WHAT THIS BUYS, because it looks alarming out of context.
+    #
+    # Chromium's sandbox needs `clone(CLONE_NEWUSER)`, which Docker's default
+    # seccomp profile denies to any process without CAP_SYS_ADMIN. Measured
+    # 2026-09-02: with the default profile Chromium dies at "Failed to move
+    # to new namespace ... Operation not permitted", and the usual reaction
+    # is to pass --no-sandbox, which is far worse — renderers would then run
+    # with the container's full privileges.
+    #
+    # This is the better half of the trade. Chromium installs its OWN
+    # seccomp-bpf filter on every renderer, and that policy is tighter for
+    # this workload than Docker's generic default. So the untrusted code —
+    # third-party page content — stays confined either way; relaxing the
+    # container-level filter is what lets Chromium apply its own.
+    #
+    # Paired with cap_drop below, which was verified sufficient: the sandbox
+    # starts with ZERO capabilities, so nothing here grants privilege.
+    security_opt:
+      - seccomp:unconfined
+    cap_drop:
+      - ALL
     # Only /stream should ever be routed publicly. The control endpoints are
     # additionally gated by CAPTURE_INTERNAL_TOKEN, but the proxy should not
     # expose them in the first place.
@@ -229,27 +257,6 @@ services:
     volumes:
       - dragonfly_data:/data
 
-  studio:
-    image: ghcr.io/drizzle-team/gateway:1.4.1
-    restart: unless-stopped
-    environment:
-      SERVICE_FQDN_STUDIO_4983: /
-      PORT: 4983
-      STORE_PATH: /app
-      MASTERPASS: "${STUDIO_PASSWORD:?generate one with openssl rand -base64 24}"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    depends_on:
-      relay:
-        condition: service_healthy
-    volumes:
-      - drizzle_gateway:/app
-      - relay_data:/databases
-
 volumes:
   relay_data:
-  drizzle_gateway:
   dragonfly_data:
