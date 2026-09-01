@@ -34,6 +34,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { AddConnectionDialog } from "@/components/vault/add-connection-dialog"
+import { AddSocialDialog } from "@/components/vault/add-social-dialog"
 import { type AiKeyProviderId, KEYED_AI_PROVIDERS } from "@/lib/providers"
 import { useCreateCredential } from "@/lib/query/credentials"
 import { credentialKeys } from "@/lib/query/keys"
@@ -41,6 +42,7 @@ import { credentialKeys } from "@/lib/query/keys"
 export function VaultActions({ configuredIds }: { configuredIds: string[] }) {
   return (
     <>
+      <AddSocialDialog />
       <AddConnectionDialog configuredIds={configuredIds} />
       <AddCredentialDialog />
     </>

@@ -261,14 +261,14 @@ const SOCIAL_DETAIL: Record<
     description: "Sign in so Relay can fetch Reels as you.",
     icon: Instagram,
     iconVariant: undefined,
-    available: false,
+    available: true,
   },
   youtube: {
     label: "YouTube",
     description: "Sign in so Relay can fetch Shorts as you.",
     icon: Youtube,
     iconVariant: undefined,
-    available: false,
+    available: true,
   },
 }
 
@@ -277,8 +277,8 @@ const SOCIAL_DETAIL: Record<
  * credential's `provider` IS the media source id and the download-time
  * lookup needs no mapping table (SESSION_AUTH.md §2.4).
  *
- * `available: false` until the capture service exists — it renders the
- * same "Soon" card an unimplemented Ray does.
+ * `available` gates the card: a source with no entry in
+ * src/lib/capture/providers.ts cannot be signed into and renders "Soon".
  */
 export const SOCIAL_PROVIDERS: readonly SocialProviderInfo[] =
   MEDIA_SOURCES.map((source) => ({
