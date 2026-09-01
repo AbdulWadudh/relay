@@ -1,5 +1,11 @@
 import { Hono } from "hono"
-import { createAgent, deleteAgent, listAgents, updateAgent } from "@/lib/agents"
+import {
+  createAgent,
+  DuplicateAgentNameError,
+  deleteAgent,
+  listAgents,
+  updateAgent,
+} from "@/lib/agents"
 import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
 import { agentInputSchema, agentUpdateSchema } from "@/lib/schemas"
@@ -29,7 +35,16 @@ agentsModule.post("/", async (c) => {
       400,
     )
   }
-  const agent = await createAgent(parsed.data, session.user.id)
+  let agent: Awaited<ReturnType<typeof createAgent>>
+  try {
+    agent = await createAgent(parsed.data, session.user.id)
+  } catch (error) {
+    // 409, not 500: the request was well-formed, the name is just taken.
+    if (error instanceof DuplicateAgentNameError) {
+      return c.json({ error: error.message }, 409)
+    }
+    throw error
+  }
   logger.info("Agent created", { agentId: agent.id })
   return c.json({ agent }, 201)
 })
@@ -46,7 +61,15 @@ agentsModule.put("/:id", async (c) => {
       400,
     )
   }
-  const agent = await updateAgent(id, parsed.data, session.user.id)
+  let agent: Awaited<ReturnType<typeof updateAgent>>
+  try {
+    agent = await updateAgent(id, parsed.data, session.user.id)
+  } catch (error) {
+    if (error instanceof DuplicateAgentNameError) {
+      return c.json({ error: error.message }, 409)
+    }
+    throw error
+  }
   if (!agent) return c.json({ error: "Agent not found" }, 404)
   logger.info("Agent updated", { agentId: id })
   return c.json({ agent })

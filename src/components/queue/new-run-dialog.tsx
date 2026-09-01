@@ -78,8 +78,8 @@ export function NewRunDialog({ full = false }: { full?: boolean }) {
           <Button
             className={
               full
-                ? "transition-all duration-200 hover:scale-[1.03]"
-                : "transition-all duration-200 hover:scale-[1.03] hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600"
+                ? "transition-all duration-200 hover:-translate-y-px"
+                : "transition-all duration-200 hover:-translate-y-px hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600"
             }
           />
         }
@@ -122,7 +122,7 @@ export function NewRunDialog({ full = false }: { full?: boolean }) {
             <Button
               type="submit"
               disabled={createRun.isPending}
-              className="transition-all duration-200 hover:scale-[1.03]"
+              className="transition-all duration-200 hover:-translate-y-px"
             >
               {createRun.isPending ? <Spinner /> : null}
               Queue run

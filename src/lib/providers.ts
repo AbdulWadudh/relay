@@ -5,6 +5,7 @@ import GoogleSheets2026 from "@thesvg/react/google-sheets-2026"
 import Groq from "@thesvg/react/groq"
 import Notion from "@thesvg/react/notion"
 import Openai from "@thesvg/react/openai"
+import Openrouter from "@thesvg/react/openrouter"
 import Slack from "@thesvg/react/slack"
 import type { ComponentType, SVGProps } from "react"
 
@@ -53,6 +54,15 @@ export const AI_KEY_PROVIDERS = [
     label: "Gemini",
     icon: Gemini,
     iconVariant: undefined,
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    // Like Notion and OpenAI above, the default mark is a cutout meant for
+    // a filled tile — the currentColor variant stays visible on a plain
+    // surface in both themes.
+    icon: Openrouter,
+    iconVariant: "mono",
   },
 ] as const
 

@@ -38,6 +38,12 @@ interface BinarySpec {
   envVar: string
   /** Per-platform install hints, joined into the error message. */
   install: readonly string[]
+  /**
+   * Sources needing this binary. Absent means every source needs it.
+   * A YouTube-only operator must not be blocked by a missing Instagram
+   * downloader, so preflight checks only what this run will actually run.
+   */
+  sources?: readonly string[]
 }
 
 const BINARIES: readonly BinarySpec[] = [
@@ -50,6 +56,18 @@ const BINARIES: readonly BinarySpec[] = [
       "winget install yt-dlp.yt-dlp",
       "brew install yt-dlp",
       "pipx install yt-dlp",
+    ],
+  },
+  {
+    name: "instaloader",
+    command: config.media.instaloaderPath,
+    versionArg: "--version",
+    envVar: "INSTALOADER_PATH",
+    sources: ["instagram"],
+    install: [
+      "pipx install instaloader",
+      "pip install instaloader",
+      "brew install instaloader",
     ],
   },
   {
@@ -138,9 +156,12 @@ async function detectBinary(spec: BinarySpec): Promise<string> {
  * detected versions, which the run stores in `additional_data` so a failed
  * extraction can be tied to the exact toolchain that produced it.
  */
-export async function ensureMediaBinaries(): Promise<BinaryVersions> {
+export async function ensureMediaBinaries(
+  sourceId?: string,
+): Promise<BinaryVersions> {
   const versions: BinaryVersions = {}
   for (const spec of BINARIES) {
+    if (spec.sources && sourceId && !spec.sources.includes(sourceId)) continue
     versions[spec.name] = await detectBinary(spec)
   }
   return versions

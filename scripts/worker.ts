@@ -7,10 +7,9 @@
  * request handler.
  */
 
-import {
-  installShutdownHandlers,
-  startRunWorker,
-} from "@/lib/queue/worker"
+import { startWorkerHealthServer } from "@/lib/queue/health"
+import { installShutdownHandlers, startRunWorker } from "@/lib/queue/worker"
 
 const worker = startRunWorker()
+startWorkerHealthServer(worker)
 installShutdownHandlers(worker)

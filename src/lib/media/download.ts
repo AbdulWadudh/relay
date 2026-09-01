@@ -2,12 +2,17 @@ import { $ } from "bun"
 
 import config from "@/config"
 import { lastLine, MediaIngestError } from "@/lib/media/errors"
+import { downloadWithInstaloader } from "@/lib/media/instaloader"
 import type { ParsedSource } from "@/lib/media/sources"
 
 /**
- * yt-dlp download step (TRD §3 step 2). Pulls the best audio-only stream
- * into the run's temp directory and returns the file's real path plus the
- * source metadata that ends up in the run's `additional_data`.
+ * The download step (TRD §3 step 2): media into the run's temp directory,
+ * plus the source metadata that lands in `additional_data`.
+ *
+ * Dispatched PER SOURCE. yt-dlp handles everything it can reach, but it
+ * cannot fetch Instagram Reels anonymously, so Instagram goes through
+ * instaloader instead. Both return the same shape, so nothing downstream
+ * knows which tool ran.
  */
 
 /**
@@ -59,6 +64,16 @@ export interface DownloadResult {
 }
 
 export async function download(
+  source: ParsedSource,
+  dir: string,
+): Promise<DownloadResult> {
+  if (source.source === "instagram") {
+    return await downloadWithInstaloader(source, dir)
+  }
+  return await downloadWithYtDlp(source, dir)
+}
+
+async function downloadWithYtDlp(
   source: ParsedSource,
   dir: string,
 ): Promise<DownloadResult> {

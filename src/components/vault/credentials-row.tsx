@@ -86,7 +86,7 @@ export function RowActions({ credential }: { credential: MaskedCredential }) {
                 variant="ghost"
                 size="icon-sm"
                 nativeButton={false}
-                className="transition-all duration-200 hover:scale-110 hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600"
+                className="transition-all duration-200 hover:-translate-y-px hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600"
                 aria-label={`Reconnect ${providerLabel(credential.provider)}`}
                 render={
                   <a href={`/api/v1/rays/oauth/${credential.provider}`} />

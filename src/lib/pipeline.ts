@@ -1,16 +1,20 @@
 import { UnrecoverableError } from "bullmq"
+
 import type { RunStatus } from "@/lib/db/schema"
-import { MediaBinaryError } from "@/lib/media/binaries"
-import { MediaIngestError, withIngestedAudio } from "@/lib/media/ingest"
+import { extract } from "@/lib/extraction"
+import { verifyExtraction } from "@/lib/extraction/verify"
+import { withIngestedAudio } from "@/lib/media/ingest"
 import { logger } from "@/lib/observability/logger"
-import { getRunForWorker, updateRun } from "@/lib/runs"
 import {
-  isPermanentTranscriptionError,
-  NoSpeechError,
-  NoTranscriptionKeyError,
-  TranscriptionError,
-  transcribe,
-} from "@/lib/transcription"
+  codeOf,
+  descriptionOf,
+  isPermanent,
+  messageOf,
+  titleOf,
+} from "@/lib/pipeline-errors"
+import { publishRun } from "@/lib/render/publish"
+import { getRunForWorker, updateRun } from "@/lib/runs"
+import { NoSpeechError, transcribe } from "@/lib/transcription"
 
 /**
  * The processing pipeline (TRD §3 `POST /api/v1/relay/process`), executed
@@ -21,36 +25,6 @@ import {
  * evidence verification (4.5) and publishing (4.6) slot into the marked
  * point inside the ingest scope, where the audio file still exists.
  */
-
-/**
- * Failures that will fail identically on every retry — a bad URL doesn't
- * become valid, and a missing binary won't install itself mid-backoff.
- * Throwing UnrecoverableError tells BullMQ to stop rather than burn the
- * attempt budget re-downloading nothing.
- */
-function isPermanent(error: unknown): boolean {
-  if (error instanceof MediaBinaryError) return true
-  if (error instanceof MediaIngestError) {
-    return (
-      error.code === "SOURCE_UNSUPPORTED" || error.code === "SOURCE_UNAVAILABLE"
-    )
-  }
-  return isPermanentTranscriptionError(error)
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function codeOf(error: unknown): string {
-  if (error instanceof MediaBinaryError) return error.code
-  if (error instanceof MediaIngestError) return error.code
-  if (error instanceof NoTranscriptionKeyError) return error.code
-  if (error instanceof NoSpeechError) return error.code
-  if (error instanceof TranscriptionError)
-    return `TRANSCRIPTION_${error.status}`
-  return "UNKNOWN"
-}
 
 export async function processRun(runId: string): Promise<void> {
   const run = await getRunForWorker(runId)
@@ -78,7 +52,11 @@ export async function processRun(runId: string): Promise<void> {
       await updateRun(runId, {
         timings: {
           download_ms: audio.timings.downloadMs,
-          extract_ms: audio.timings.extractMs,
+          // NOT `extract_ms` — that key belongs to the `extracting` stage
+          // (agent extraction, Task 4.4). Stage completion is derived from
+          // recorded timings, so sharing a key would make ffmpeg's audio
+          // extraction light up the agent stage as complete.
+          audio_extract_ms: audio.timings.extractMs,
         },
         additionalData: {
           // Full pruned yt-dlp metadata — the user's requirement that
@@ -134,8 +112,89 @@ export async function processRun(runId: string): Promise<void> {
         },
       })
 
-      // ── Tasks 4.4–4.6 run here, while audio.audioPath still exists ──
-      // route to agent -> verify evidence -> publish
+      // ── Tasks 4.5–4.6 slot in below, while audio.audioPath exists ──
+      await enter("extracting")
+      const extraction = await extract({
+        userId: run.userId,
+        runId,
+        requestedAgentId: run.agentId,
+        title: titleOf(audio.info),
+        description: descriptionOf(audio.info),
+        segments: transcription.english.segments,
+      })
+
+      // Every claim is checked against the English transcript before it
+      // can reach a destination (PRD §6). Unverifiable claims are FLAGGED
+      // rather than dropped (human decision 2026-09-01) — the value stays
+      // and the reason is recorded, so nothing is silently discarded.
+      const verifyStart = performance.now()
+      const verification = verifyExtraction(
+        extraction.data,
+        transcription.english.segments,
+        descriptionOf(audio.info),
+      )
+      const verifyMs = Math.round(performance.now() - verifyStart)
+
+      logger.info("Evidence verified", {
+        run_id: runId,
+        extracted: verification.extracted,
+        verified: verification.verified,
+        flagged: verification.flagged,
+        verify_ms: verifyMs,
+      })
+
+      await updateRun(runId, {
+        // The agent the router settled on is recorded ON the run, so a run
+        // submitted with no agent still shows which one processed it.
+        agentId: extraction.routing.agentId,
+        result: {
+          extraction: extraction.data,
+          verification: {
+            extracted: verification.extracted,
+            verified: verification.verified,
+            flagged: verification.flagged,
+          },
+        },
+        timings: {
+          route_ms: extraction.timings.routeMs,
+          extract_ms: extraction.timings.extractMs,
+          verify_ms: verifyMs,
+        },
+        additionalData: {
+          routing: {
+            mode: extraction.routing.mode,
+            agent_id: extraction.routing.agentId,
+            agent_name: extraction.routing.agentName,
+            reason: extraction.routing.reason,
+          },
+          extraction: {
+            provider: extraction.provider,
+            model: extraction.model,
+            attempts: extraction.attempts,
+            json_repaired: extraction.repaired,
+            // Retained even when the retry succeeded: a schema that needs
+            // a correction pass every run is a schema worth fixing.
+            first_attempt_errors: extraction.firstAttemptErrors,
+            skipped_models: extraction.skippedModels,
+          },
+          // Every finding, verified and flagged alike. A flagged claim
+          // without its reason recorded would be a silent failure.
+          verification: verification.findings,
+        },
+      })
+
+      await enter("publishing")
+      await publishRun({
+        runId,
+        userId: run.userId,
+        sourceUrl: run.sourceUrl,
+        title: titleOf(audio.info),
+        extraction: extraction.data,
+        agentName: extraction.routing.agentName,
+        category: extraction.routing.category,
+        emoji: extraction.routing.emoji,
+        verification,
+      })
     })
 
     await updateRun(runId, {

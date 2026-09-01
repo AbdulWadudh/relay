@@ -13,7 +13,7 @@ export default function LoginPage() {
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.14),transparent_36%),radial-gradient(circle_at_80%_80%,rgba(124,58,237,0.12),transparent_34%)]"
       />
-      <div className="relative grid w-full max-w-5xl overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-2xl shadow-emerald-950/20 backdrop-blur md:grid-cols-[1.1fr_0.9fr]">
+      <div className="relative grid w-full max-w-5xl overflow-hidden rounded-2xl border border-border/70 bg-card shadow-2xl shadow-emerald-950/20 md:grid-cols-[1.1fr_0.9fr]">
         <section className="hidden flex-col justify-between border-border/70 border-r bg-muted/20 p-10 md:flex">
           <div>
             <Link

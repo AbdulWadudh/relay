@@ -1,12 +1,14 @@
 "use client"
 
-import { Alert02Icon, ArrowLeft02Icon } from "@hugeicons/core-free-icons"
+import { Alert02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import Link from "next/link"
 
 import { QueryErrorState } from "@/components/query-error"
-import { ExternalLink, Linkify } from "@/components/queue/linkify"
+import { Linkify } from "@/components/queue/linkify"
+import { PublishedPanel } from "@/components/queue/published-panel"
+import { RunDetailHeader } from "@/components/queue/run-detail-header"
 import { RunDetailSkeleton } from "@/components/queue/run-detail-skeleton"
+import { RunExtraction } from "@/components/queue/run-extraction"
 import {
   type Fact,
   FactList,
@@ -15,17 +17,14 @@ import {
 } from "@/components/queue/run-facts"
 import { RunRawData } from "@/components/queue/run-raw-data"
 import { RunStageTimeline } from "@/components/queue/run-stage-timeline"
-import { RunStatusBadge } from "@/components/queue/run-status-badge"
 import {
   RunTranscript,
   type TranscriptStream,
 } from "@/components/queue/run-transcript"
-import { Button } from "@/components/ui/button"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+  readVerification,
+  VerificationSummary,
+} from "@/components/queue/verification-summary"
 import { useRun } from "@/lib/query/runs"
 
 const dateFormat = new Intl.DateTimeFormat("en", {
@@ -64,6 +63,15 @@ export function RunDetail({ runId }: { runId: string }) {
   const noSpeech = extra.no_speech as Record<string, unknown> | undefined
   const source = sourceFacts(info)
   const processing = processingFacts(extra)
+  const routing = extra.routing as Record<string, unknown> | undefined
+  const extraction = run.result?.extraction as
+    | Record<string, unknown>
+    | undefined
+  const verification = readVerification(run.result)
+  const published = run.result?.published as
+    | { url?: string; provider?: string }
+    | undefined
+  const findings = (extra.verification ?? []) as Record<string, unknown>[]
 
   const description =
     typeof info.description === "string" && info.description.trim().length > 0
@@ -77,46 +85,11 @@ export function RunDetail({ runId }: { runId: string }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Inline back affordance — the header's button sits far top-right,
-              away from where the eye is reading. */}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Back to queue"
-                  // size-6 matches the badges beside it exactly, and is the
-                  // WCAG 2.2 minimum pointer target (24px) — the default
-                  // icon-sm (32px) towered over a 20px badge.
-                  className="size-6 transition-all duration-200 hover:scale-110 hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600"
-                  render={<Link href="/runs" />}
-                />
-              }
-            >
-              <HugeiconsIcon
-                icon={ArrowLeft02Icon}
-                strokeWidth={2}
-                className="size-3.5"
-              />
-            </TooltipTrigger>
-            <TooltipContent>Back to queue</TooltipContent>
-          </Tooltip>
-          <RunStatusBadge status={run.status} className="h-6" />
-        </div>
-        <h1 className="font-heading font-semibold text-2xl leading-tight [overflow-wrap:anywhere]">
-          {run.title ?? run.sourceLabel}
-        </h1>
-        {/* Full URL as the label here: on the detail page the exact video
-            identity matters more than a tidy hostname. */}
-        <ExternalLink
-          href={run.sourceUrl}
-          label={run.sourceUrl}
-          className="w-fit font-mono text-xs"
-        />
-      </header>
+      <RunDetailHeader
+        status={run.status}
+        title={run.title ?? run.sourceLabel}
+        sourceUrl={run.sourceUrl}
+      />
 
       {run.error ? (
         <div className="flex gap-3 rounded-lg border border-red-600 p-4">
@@ -148,6 +121,35 @@ export function RunDetail({ runId }: { runId: string }) {
           />
         </div>
       </Section>
+
+      {published?.url ? (
+        <Section title="Published">
+          <PublishedPanel url={published.url} provider={published.provider} />
+        </Section>
+      ) : null}
+
+      {verification ? (
+        <Section title="Evidence">
+          <VerificationSummary counts={verification} />
+        </Section>
+      ) : null}
+
+      {extraction ? (
+        <Section title="Extraction">
+          <RunExtraction
+            data={extraction}
+            findings={findings}
+            agentName={
+              typeof routing?.agent_name === "string"
+                ? routing.agent_name
+                : null
+            }
+            routingReason={
+              typeof routing?.reason === "string" ? routing.reason : null
+            }
+          />
+        </Section>
+      ) : null}
 
       {transcript ? (
         <Section title="Transcript">

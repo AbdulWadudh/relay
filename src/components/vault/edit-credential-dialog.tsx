@@ -118,7 +118,7 @@ export function EditCredentialDialog({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={`Edit ${name}`}
-                  className="transition-all duration-200 hover:scale-110 hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600"
+                  className="transition-all duration-200 hover:-translate-y-px hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600"
                 />
               }
             />
@@ -197,7 +197,7 @@ export function EditCredentialDialog({
             <Button
               type="submit"
               disabled={update.isPending}
-              className="transition-all duration-200 hover:scale-[1.03]"
+              className="transition-all duration-200 hover:-translate-y-px"
             >
               {update.isPending ? <Spinner /> : null}
               Save changes

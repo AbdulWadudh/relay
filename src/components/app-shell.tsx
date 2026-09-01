@@ -12,7 +12,7 @@ export function ShellHeader({
 }: React.PropsWithChildren<{ title: string }>) {
   return (
     <header className="z-10 flex h-16 shrink-0 items-center gap-3 border-b px-4 sm:px-6">
-      <SidebarTrigger className="-ms-1 transition-all duration-200 hover:scale-110 hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600" />
+      <SidebarTrigger className="-ms-1 transition-all duration-200 hover:-translate-y-px hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600" />
       <h1 className="ms-1 font-semibold text-lg">{title}</h1>
       {children ? (
         <div className="ms-auto flex items-center gap-3">{children}</div>

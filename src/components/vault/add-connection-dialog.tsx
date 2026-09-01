@@ -104,7 +104,7 @@ export function AddConnectionDialog({
         render={
           <Button
             variant="outline"
-            className="transition-all duration-200 hover:scale-[1.03] hover:border-sky-600 hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600"
+            className="transition-all duration-200 hover:-translate-y-px hover:border-sky-600 hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600"
           />
         }
       >

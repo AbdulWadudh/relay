@@ -105,7 +105,7 @@ export function ProfileCard({
         <Button
           onClick={save}
           disabled={!dirty || pending}
-          className="transition-all duration-200 hover:scale-[1.03]"
+          className="transition-all duration-200 hover:-translate-y-px"
         >
           {pending ? <Spinner data-icon="inline-start" /> : null}
           Save changes

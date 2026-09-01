@@ -35,7 +35,7 @@ export const RUN_STATUS_META: Record<RunStatus, RunStatusMeta> = {
     active: true,
   },
   downloading: {
-    timingKeys: ["download_ms", "extract_ms"],
+    timingKeys: ["download_ms", "audio_extract_ms"],
     label: "Downloading",
     badge: "bg-sky-600 text-white dark:bg-sky-600",
     active: true,
@@ -47,13 +47,17 @@ export const RUN_STATUS_META: Record<RunStatus, RunStatusMeta> = {
     active: true,
   },
   extracting: {
-    timingKeys: [],
+    // `extract_ms` is AGENT extraction (Task 4.4). ffmpeg's audio
+    // extraction records `audio_extract_ms` against `downloading` above —
+    // the two must not share a key, or one stage's work would mark the
+    // other complete.
+    timingKeys: ["route_ms", "extract_ms", "verify_ms"],
     label: "Extracting",
     badge: "bg-violet-600 text-white dark:bg-violet-600",
     active: true,
   },
   publishing: {
-    timingKeys: [],
+    timingKeys: ["publish_ms"],
     label: "Publishing",
     badge: "bg-amber-600 text-white dark:bg-amber-600",
     active: true,

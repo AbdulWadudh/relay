@@ -48,7 +48,7 @@ export function QueryErrorState({
       <EmptyContent>
         <Button
           onClick={onRetry}
-          className="transition-all duration-200 hover:scale-[1.03]"
+          className="transition-all duration-200 hover:-translate-y-px"
         >
           <HugeiconsIcon icon={RefreshIcon} data-icon="inline-start" />
           Try again

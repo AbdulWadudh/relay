@@ -27,6 +27,14 @@ export const runKeys = {
   detail: (id: string) => [...runKeys.details(), id] as const,
 }
 
+export const promptKeys = {
+  all: ["prompts"] as const,
+  lists: () => [...promptKeys.all, "list"] as const,
+  list: () => [...promptKeys.lists()] as const,
+  details: () => [...promptKeys.all, "detail"] as const,
+  detail: (key: string) => [...promptKeys.details(), key] as const,
+}
+
 export const credentialKeys = {
   all: ["credentials"] as const,
   lists: () => [...credentialKeys.all, "list"] as const,

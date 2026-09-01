@@ -49,21 +49,21 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
   const startedAt = performance.now()
 
   event.waitUntil(
-    Promise.resolve(sendTrace({
+    Promise.resolve(
+      sendTrace({
         level: "info",
         message: "HTTP request received",
         service: "relay-api",
         request_id: requestId,
         method: request.method,
         path: request.nextUrl.pathname,
-        query: redact(
-          Object.fromEntries(request.nextUrl.searchParams),
-        ),
+        query: redact(Object.fromEntries(request.nextUrl.searchParams)),
         user_agent: request.headers.get("user-agent") ?? undefined,
         content_type: request.headers.get("content-type") ?? undefined,
         started_at: Date.now(),
         proxy_duration_ms: Math.round(performance.now() - startedAt),
-      })),
+      }),
+    ),
   )
 
   const response = NextResponse.next()

@@ -12,6 +12,7 @@ import {
 import { telemetryEventSchema } from "@/lib/schemas"
 import { agentsModule } from "@/server/agents"
 import { credentialsModule } from "@/server/credentials"
+import { promptsModule } from "@/server/prompts"
 import { raysModule } from "@/server/rays"
 import { relayModule, runsModule } from "@/server/runs"
 
@@ -29,6 +30,7 @@ app.route("/credentials", credentialsModule)
 // Rays are Relay's public integration routes; OAuth is the underlying protocol.
 app.route("/rays/oauth", raysModule)
 app.route("/agents", agentsModule)
+app.route("/prompts", promptsModule)
 app.route("/runs", runsModule)
 app.route("/relay", relayModule)
 

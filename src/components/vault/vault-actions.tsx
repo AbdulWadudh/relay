@@ -84,7 +84,7 @@ function AddCredentialDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button className="transition-all duration-200 hover:scale-[1.03]" />
+          <Button className="transition-all duration-200 hover:-translate-y-px" />
         }
       >
         <HugeiconsIcon

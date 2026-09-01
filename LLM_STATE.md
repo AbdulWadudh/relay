@@ -1,7 +1,95 @@
 # LLM Execution State - Relay
 
-- **Current Phase:** AWAITING HUMAN APPROVAL — Task 4.2 (Run persistence, queue, Queue page) complete; 4.3–4.6 not started.
-- **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**, **Task 4.1: Media Ingest**, **Task 4.2: Run Persistence & Queue**
+- **Current Phase:** Tasks 4.4, 4.5 and 4.6 complete and COMMITTED (human approved the push on 2026-09-01, together with the Docker/Coolify work). The pipeline runs end to end for BOTH sources — verified on a real Instagram Reel after instaloader replaced yt-dlp for that source.
+- **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**, **Task 4.1: Media Ingest**, **Task 4.2: Run Persistence & Queue**, **Task 4.3: Transcription**, **Task 4.4: Agent Routing & Extraction**, **Task 4.5: Evidence Verification**, **Task 4.6: Document Tree & Notion Publish**
+
+## Instagram Unblocked via instaloader (2026-09-01, human decision)
+
+**Instagram works now. The first fully end-to-end run in the project's history — ingest → transcribe → route → extract → verify → publish — was an Instagram Reel.**
+
+- **yt-dlp cannot fetch Reels anonymously; instaloader can.** Reproduced on the exact Reel a run had already failed on (`DauNJ7Hpwaa`): yt-dlp returns "rate-limit reached or login required", instaloader returns a 24.8 MB mp4 plus rich metadata, no login.
+- **A zero-dependency path was tried first and does NOT exist.** Five anonymous routes tested from Bun `fetch`: GraphQL `doc_id` (403), the same with a csrftoken cookie bootstrap (**401 `require_login`**), `?__a=1&__d=dis` (404), `i.instagram.com/api/v1/media` (404), and `/embed/captioned/` (200 but a 620 KB JS shell with no media data). instaloader does more than a couple of requests; reimplementing it was not on the table.
+- **Cost: Python in the image.** `oven/bun:1` was deliberately Python-free (ffmpeg from apt, yt-dlp as a self-contained binary). instaloader is pure Python with no standalone build, so the Dockerfile now installs `python3 python3-pip` and pins `instaloader==4.15.3`.
+- **Preflight is now source-scoped.** `ensureMediaBinaries(sourceId)` skips binaries whose `sources` list excludes this run — a YouTube-only operator without instaloader must not be blocked by it.
+- **Downloader dispatches on `parsed.source`** in `download.ts`; `instaloader.ts` maps Instagram's post JSON onto the same `source_info` shape `pruneInfo` produces for yt-dlp, so routing and the UI need no per-source branches. Instagram has no title field, so the caption's FIRST LINE becomes the title — that is what routing reads.
+- **The cookie-capture work stays deferred as the fallback** (human decision). Anonymous access is rate-limited and will break; the login-shaped instaloader failures map onto the same `SOURCE_UNAVAILABLE` code yt-dlp's do, so it degrades rather than dies.
+- **Photo-only posts** exit 0 and write a .jpg — treated as `SOURCE_UNAVAILABLE` ("no video track"), not a tool failure.
+
+### Two real bugs this exposed
+
+1. **An empty model response killed the run instead of falling through.** `chatCompletion` throws `LlmError(200, "Model returned an empty response")`, and `disposition()` had no case for a 2xx, so it fell to `"fail"` and rethrew — no next model, no next provider. A free OpenRouter model returned an empty 200 on this 90-second transcript and the run died twice (BullMQ retried, same result). Any `LlmError` with `status < 400` is now `"next-model"`: HTTP succeeded, so an unusable completion is a MODEL problem.
+2. **The worker was running stale code**, exactly as RULES.md warns. The first Instagram run after the change failed with yt-dlp's error message because the worker still held the pre-instaloader `download.ts`. RESTART THE WORKER after any pipeline change — the symptom is a correct-looking failure with the *old* wording.
+
+### Measured on the successful run (`4d0435ec`)
+
+```
+download 15.3s · audio_extract 0.18s · transcribe 1.3s · route 3.6s
+extract 303.5s · verify 1ms · publish 2.4s · total 328.7s
+```
+
+- **Extraction took FIVE MINUTES** on `nvidia/nemotron-3-super-120b-a12b:free` via OpenRouter — one attempt, no retries, no skipped models, just slow. PRD §6 targets sub-30s for the whole pipeline. Groq does the same work in ~5s. **OpenRouter is still first in `EXTRACTION_ORDER`; moving Groq first is a one-line change and is now strongly indicated.**
+- **Verification earned its keep on real data: 35 claims extracted, 28 verified, 7 flagged — all `TIMESTAMP_MISMATCH`.** The quotes were verbatim, but on a 20-segment transcript the model reused timestamps across ingredients, so the citations pointed at the wrong moments. Genuine catches, not false positives.
+- Published 42 Notion blocks in 2.4s.
+
+## Tasks 4.5 & 4.6 Completion Notes (2026-09-01)
+
+### 4.5 Evidence verification
+
+- **Two checks per claim**, in `src/lib/extraction/verify.ts`: the quote must appear in the English transcript after normalisation, AND the cited ms range must overlap the segments the quote was actually found in. The second check is only possible because `normalise.ts` keeps an offset table mapping the normalised transcript back to its segments.
+- **The bar for `verified` is an EXACT normalised substring — there is no fuzzy threshold.** A similarity cutoff would let a paraphrase through, which is the one thing this feature exists to prevent. `tokenOverlap` is computed on failures ONLY, to label the reason: `QUOTE_ALTERED` (≥0.6 of the words present, so the model reworded a real quote) vs `QUOTE_NOT_FOUND` (invented).
+- **Normalisation is lossy in FORM only, never in words**: NFKD, strip combining marks, lowercase, unify dash/quote variants, drop punctuation, collapse whitespace. Two different sentences cannot normalise to the same string, so a match is still evidence of a verbatim quote.
+- **Bug found by the negative test:** dashes were normalised to `-` and KEPT, while commas were removed — so an em-dash quote ("water — add ginger") failed against the transcript's comma ("water, add ginger"). A dash is only content INSIDE a word ("2-3", "half-inch"); between spaces it is punctuation. Without the negative test this would have shipped as silent false flagging.
+- **Flagged, not dropped** (human decision): the value stays in `result.extraction`, the finding is recorded in `additional_data.verification`, and both the run detail page and the published page mark it.
+- **Verified against real output AND against deliberately corrupted evidence.** 8 negative cases: verbatim OK, formatting-only OK, paraphrase flagged, fabrication flagged, wrong timestamp flagged, empty flagged, visual tier flagged, nested-in-array reached. Real runs: 15/15 and 11/11 verified.
+
+### 4.6 Document tree & Notion publish
+
+- **`src/lib/render/document.ts` builds a TREE, never a Markdown string.** A string would force every future destination to re-parse structure it already had; the tree is what makes "a second Ray needs no rewrite" true. `notion-blocks.ts` is the only Notion-aware file, and a second Ray adds a sibling to it.
+- **Evidence maps to a Notion `toggle` containing a `quote` block**, with the timestamp in the toggle's own summary so the range is readable while folded. Flagged claims get a `⚠️` prefix plus a yellow callout inside the toggle. NO Markdown is ever emitted, and nothing goes into a code block.
+- **The parent page is DISCOVERED, not configured.** A Notion integration only sees what was shared with it, so `findParentPage` searches for a container page (parent `workspace` or `page_id`) in preference to a database row — writing into a user's database would have to satisfy that database's schema.
+- **Verified end to end against the live Notion API.** Published run `ca63b6fd` → 15 document nodes → 16 top-level blocks (1 callout, 4 heading_2, 2 paragraph, 6 bulleted_list_item, 3 numbered_list_item; evidence toggles are children). Read back from the API to confirm the nesting: `bulleted_list_item > paragraph(quantity) + toggle > quote`. Steps became `numbered_list_item` because the ORDERED_FIELD heuristic matches the field name.
+- `publish_ms` added to the `publishing` stage's timingKeys, so the last stage lights up automatically — the run detail page now shows all five stages complete.
+
+### OpenRouter, now that a key exists
+
+- **Works.** 425 models fetched, 11 eligible free ones (json + structured). Extraction ran on `nvidia/nemotron-3-super-120b-a12b:free` and `dots-studio/dots-3-note-preview:free`.
+- **Ranking bug fixed, same class as the Groq one.** `liquid/lfm-2.5-2.6b:free` ranked 2nd for synthesis because an unparseable size scored 0 and 2.6 > 0 — a model that ADVERTISES being tiny outranked one that simply does not state a size (`z-ai/glm-5.2`). Unknown size is now scored as mid-sized (`ASSUMED_PARAMETERS = 30`), so declared-large > unknown > declared-small. Context is also capped at `SUFFICIENT_CONTEXT` before ranking: past ~64k it buys nothing for a transcript, and ranking on it put a 512k niche model above a frontier one.
+- **`nvidia/nemotron-3-super-120b-a12b:free` intermittently 404s** ("Provider returned error") despite being in the catalog. The model fallthrough handles it — this is exactly what it is for — but it costs a wasted round-trip.
+- **OpenRouter is 6–15x SLOWER than Groq.** Measured extraction wall time: 74s, 35s, 88s on OpenRouter vs ~5s on Groq. PRD §6 targets sub-30s for the WHOLE pipeline. OpenRouter is currently FIRST in `EXTRACTION_ORDER`; moving Groq first is a one-line change in `src/lib/extraction/providers.ts` and is worth considering.
+- **Router quality varies by model:** on one run nemotron declined the Recipe agent for a chai recipe and synthesized a "Tea Recipe" agent instead. gpt-oss-120b routed the same transcript correctly every time.
+
+### UI/UX changes made alongside
+
+- **Explicit clone replaces copy-on-write** (human decision): a System agent is never edited or forked silently. One row button opens the dialog — tooltip "View / Clone" or "Edit / Clone" by type — System opens read-only with Close + Clone, Human opens editable with Close + Clone + Save. Clone switches mode IN PLACE and pre-fills a non-colliding name ("Recipe (copy)").
+- **Row actions are uniform**: every row renders the same slots, with Delete disabled-and-explained on System rows. Hiding it left ragged rows where a gap read as a rendering failure.
+- **New `Modal` shell** (`src/components/modal.tsx`): three-row grid, static header/footer, ScrollArea body. Built over `DialogContent` — an earlier hand-rolled portal + div looked identical but Base UI wires Escape, backdrop dismissal, focus trapping and `DialogClose` to its own Popup, so the close button and auto-close-on-save silently did nothing.
+- **`json-edit-react` for every JSON surface** (`json-view.tsx` / `json-panel.tsx` / `json-theme.ts`). Themed from the app's own CSS variables so it follows `.dark` with no JS. The panel owns a CAPPED ScrollArea: the cap must go on the ScrollArea's VIEWPORT, not the root — Base UI sizes the viewport `h-full` and that percentage does not resolve against a flex-derived height, which left the root correctly capped at 382px while the viewport stayed 11349px and the tree was clipped with no scrollbar at all.
+- **All `hover:scale-*` replaced with `hover:-translate-y-px`** and both `backdrop-blur` usages removed. Scaling promotes an element to a composited layer and re-rasterises its text, which is the "blur on hover" that was reported. Verified 0 blurred elements and 0 `hover:scale` remaining.
+- **Toast viewport moved to `z-100`.** It was `z-50`, identical to the dialog, so the later-mounted modal painted over it.
+- Fixed a real Base UI accessibility error on the run detail page: the back button renders an anchor via `render={<Link>}` and needs `nativeButton={false}`.
+
+## Task 4.4 Completion Notes (2026-09-01)
+
+**Human decisions taken during this task (all reversed/refined mid-build, in this order):**
+1. JSON-Schema validation → add `@cfworker/json-schema` (Zod cannot consume arbitrary JSON Schema, and the Agents UI accepts any pasted schema).
+2. Synthesized schemas → **persist as System agents**, reusable by later runs.
+3. Unverifiable fields → **publish flagged**, not dropped (Task 4.5 implements the flagging).
+4. Model selection → started as a pinned id list, then **superseded**: model ids are NEVER hardcoded. Discovered from each provider's `/models`, ranked by advertised capability, cached in the DB.
+5. **Every prompt lives in the database**, with Redis as the hot cache, invalidated on write.
+6. System agents are **copy-on-write**: editing one forks a personal Human copy; the fork then supersedes the original in routing. **A user's own agents outrank System agents.**
+7. JSON is rendered through `json-edit-react` **everywhere**, not `<pre>` dumps.
+
+- **New tables** (`drizzle/0004_military_eternals.sql`, `0005_lame_sunfire.sql`, both additive `CREATE TABLE` only, applied to remote Turso): `model_catalog` (per-user provider catalog cache) and `prompts` (per-user editable pipeline prompts). Split into `src/lib/db/schema-pipeline.ts` and re-exported from `schema.ts`, which had crossed the 250-line cap; drizzle-kit still reports one 9-table schema. The `schema ⇄ schema-pipeline` cycle is safe because the FK reference is a lazy arrow — verified at runtime, not just by tsc.
+- **`extract_ms` COLLIDED.** Ingest already wrote `extract_ms` (ffmpeg audio extraction) and `run-status.ts` assigned it to `downloading`. Since stage completion is derived from recorded timings, adding it to `extracting` too would have made ffmpeg's work show the agent stage as complete — the same false-green-tick bug fixed once in 4.2. Ingest's key is now `audio_extract_ms`; `extracting` owns `route_ms` + `extract_ms`.
+- **Model ranking is capability-driven, with exactly two documented heuristics.** Groq publishes `supported_features` (`json_mode`, `structured_outputs`), `input/output_modalities`, `context_length`; OpenRouter publishes `supported_parameters` + `pricing`; **OpenAI publishes nothing beyond id/created/owned_by.** The heuristics are (a) an id regex excluding guard/embed/tts/moderation models, because `openai/gpt-oss-safeguard-20b` advertises *identical* capabilities to the general chat model, and (b) a parameter count parsed from the id. (b) exists because a `created`-desc tiebreak picked `gpt-oss-20b` over `gpt-oss-120b` (identical on every published figure, 20b is newer) and **20b failed schema validation twice, 13 then 11 errors, on a recipe that 120b extracts first-try**.
+- **Groq's free tier is 8000 TPM and the transcript goes over the wire twice per run** (routing, then extraction). Back-to-back runs 429 routinely. Two mitigations: routing sees a 4000-char truncation (it only needs the clip's *kind*), and `runChat` waits out the provider's own advised delay once when every candidate is exhausted. NOTE: under sustained pressure the router still degrades to weaker models that fail schema validation — measured, a run fell through to `groq/compound-mini` and produced 3 fields instead of 4. **Worth considering: fall through to the next model when a model fails validation twice**, which the brief's "exactly one retry" wording did not cover.
+- **Redis cache uses its OWN ioredis connection**, not the queue's. BullMQ's is `enableOfflineQueue: false` so a pre-handshake command throws (`Stream isn't writeable...`, measured on the first read in a fresh process). For a cache that trade is backwards; a briefly-buffered cache write is harmless. Namespaced `relay:cache:*`, separate from BullMQ's `{relay}`.
+- **The evidence contract is structural, not requested.** Agent schemas embed a `oneOf` of a `transcript` and a `visual` evidence shape, discriminated by `kind` — so Task 4.3b adds a producer and a verifier branch, not a migration across stored agents. The synthesizer never writes JSON Schema itself: it proposes a field *plan* and `compile()` injects evidence on every field, because a model asked for JSON Schema will eventually emit one where evidence is optional, and that schema would then be persisted and reused.
+- **New `Modal` shell** (`src/components/modal.tsx`): three-row grid (static header / scrolling ScrollArea body / static footer), sizes sm→full. Built because the agent editor's JSON Schema pushed its own Save button off-screen.
+- **Verified in the running app** (agent-browser, dark + light, 1440×900 + 390×844): routing to the seeded Recipe agent (`route 17ms · extract 5.34s`, timeline stage lights up automatically); synthesizer inventing a "Bike Maintenance" agent for a non-recipe transcript and extracting against it first-try; copy-on-write producing `Recipe (my version)` as a Human row with the System original untouched; routing candidates confirming the fork ranks #1 **and removes the System Recipe from the list**; the Prompts dashboard saving, bumping to v2 and invalidating Redis; extraction rendering as content with expandable evidence quotes. Typecheck 0, biome clean on all 66 changed files, build succeeds, every authored file under 250 lines.
+- **NOT verified:** a full end-to-end pipeline run through the worker. YouTube still rate-limits this machine, so extraction was exercised against the transcripts already stored on runs `ca63b6fd` and `f9651c15` (both now carry real `result.extraction`). `bun run lint` still fails repo-wide on pre-existing `useSortedClasses` violations in `landing-page.tsx`/`privacy`/`terms` — untouched by this task.
+- **OpenRouter has NO key configured yet**, so every extraction ran on Groq. The OpenRouter provider entry, catalog normaliser and ranker are written and typecheck, but are **unexercised against a live OpenRouter key** — add one at /vault to activate that path.
+- QA accounts (`qa-relay44@`, `qa-json@`) and the synthetic "Bike Maintenance" agent were removed afterwards.
 
 ## Queue UI + Deploy Notes (2026-09-01)
 
@@ -11,7 +99,7 @@
 - **Links** resolve their icon in three tiers (`src/components/queue/link-icon.tsx`): media-source brand mark → bundled brand mark (12 platforms) → `config.links.faviconUrl` → generic glyph. Only the third tier touches the network, and it is the *browser* calling out, so `FAVICON_SERVICE_URL=""` disables it.
 - **Dragonfly runs with `--cluster_mode=emulated --lock_on_hashtags`** and BullMQ uses the hash-tagged prefix `{relay}`. CORRECTION to an earlier note: this pairing is a **throughput** choice, not correctness — measured locally, an un-tagged prefix still works fine under emulated cluster mode on a single node. The tag pins a queue's keys to one Dragonfly thread.
 - **Coolify (app `djtrhq2qxxyt1doyonjctwcb`, env `relay`)**: added `REDIS_URL=redis://dragonfly:6379`, `QUEUE_CONCURRENCY/ATTEMPTS/BACKOFF_MS`, `FAVICON_SERVICE_URL`. `STUDIO_PASSWORD` was already set, so dropping the `DRIZZLE_MASTERPASS` fallback from compose is safe (that var held the literal error string — a Coolify artifact).
-- **The worker service builds from the Dockerfile rather than reusing a shared image tag.** Coolify rewrites every compose service's image to `<resource-uuid>_<service>:<sha>`, so a hand-pinned `relay-app:latest` shared between `relay` and `worker` would not exist at deploy time. Docker's layer cache makes the second build nearly free.
+- **The worker service builds from the Dockerfile rather than reusing a shared image tag.** Coolify rewrites every compose service's image to `<resource-uuid>_<service>:<sha>`, so a hand-pinned `relay-app:latest` shared between `relay` and `worker` would not exist at deploy time. CORRECTION (2026-09-01): the claim that "Docker's layer cache makes the second build nearly free" was **wrong**. Only `relay` was passing the `NEXT_PUBLIC_*` build args; those are baked into `ENV`, so the worker's build produced a different cache key from the ENV layer down and recompiled the entire Next.js app a second time. The worker service now passes the identical args — see the deployment notes below.
 - **YouTube now rate-limits this dev machine** ("Sign in to confirm you're not a bot") after repeated pulls of the same clips. Not a code fault — it maps correctly to `SOURCE_UNAVAILABLE` — but it means the deferred cookie work applies to YouTube as well as Instagram.
 
 ## Task 4.3 Completion Notes (2026-09-01)
@@ -128,3 +216,61 @@ Instagram refuses anonymous downloads, so Reels need a signed-in session passed 
 - **Migrations no longer run automatically on connection.** libsql's `migrate()` is async but `getDb()` is called synchronously throughout the codebase (e.g. `vault.ts`), and auto-migrating per-connection let concurrent Next.js build workers race to migrate the same database (root cause of the Coolify build failures around commits `eb85f86`..`b7df1bb`: `drizzle-orm`'s sqlite migrator reads the "last applied migration" row before opening its transaction, so parallel workers could both decide a migration was pending and both apply it). Migrations are applied solely via the explicit `bun run db:migrate` step (Dockerfile CMD runs it before `next start`).
 - **`drizzle.config.ts`** switched to `dialect: "turso"` with `dbCredentials: { url, authToken }`.
 - **Better Auth drizzle adapter schema fix:** `src/lib/auth.ts`'s `authSchema` now aliases both the base model name and the configured `modelName` override to the same table (e.g. both `verification` and `auth_verifications` → `schema.authVerifications`) — the adapter's `getSchema(model)` looks up `schema[model]` where `model` is sometimes the base name and sometimes the override depending on the code path; only aliasing the base name caused a 500 on Google sign-in (`BetterAuthError: The model "auth_verifications" was not found in the schema object`).
+
+## Docker / Coolify Deployment Notes (2026-09-01)
+
+Coolify facts that shape the files: build pack is `dockercompose`, the target
+is a **4-CPU arm64** host, `force_docker_cleanup` prunes daily (so the layer
+cache is warm within a deploy, not across weeks), and Coolify rewrites every
+service's image to `<resource-uuid>_<service>:<sha>` — which is why `relay`
+and `worker` each build the Dockerfile instead of sharing a tag.
+
+- **The `worker` service was recompiling the whole Next.js app on every
+  deploy.** Only `relay` passed the `NEXT_PUBLIC_*` build args; those are
+  baked into `ENV`, so from that layer down the worker's cache key differed
+  and Docker rebuilt everything below it. Measured on the new Dockerfile: an
+  arg change re-runs `bun run build` in **16.4s**, identical args make the
+  whole build a **3s** cache hit. The worker service now passes the same
+  args. On the old Dockerfile an arg change also re-ran `bun install`,
+  because the ARG/ENV block sat above it — installation now comes first.
+- **Three stages** (`deps` → `builder` → `runtime`). The builder has no media
+  binaries (it never shells out) and the runtime never sees Bun's global
+  install cache or `.next/cache`. Runtime contents are copied explicitly
+  rather than with `COPY . .`, because one image runs three things needing
+  different slices of the repo: `next start` (.next, next.config.ts, public),
+  `db:migrate` (drizzle.config.ts, drizzle/, src/config) and
+  `bun scripts/worker.ts` (scripts/, src/, tsconfig.json for `@/*`).
+- **Size barely moved: 2003 MB → 1960 MB.** Bun hardlinks its install cache
+  into `node_modules`, so dropping the cache reclaims almost nothing. The
+  image is `node_modules` 1179 MB + `/usr` 721 MB. The remaining win is a
+  `--production` install, worth ~165 MB (`@biomejs` alone is **131 MB**,
+  `typescript` 23 MB) — NOT DONE, because `bun run db:migrate` shells out to
+  `drizzle-kit`, a devDependency. Taking it means either moving drizzle-kit
+  to `dependencies` or migrating through `drizzle-orm/libsql/migrator`
+  instead, which changes the production migration path. A human call.
+- **`oven/bun:1` had floated to 1.4.0** while local development is on 1.3.1 —
+  production was running a different Bun minor than anything was tested on.
+  Pinned to `1.3.1-slim`, and Dragonfly pinned to `v1.40.1` for the same
+  reason (`:latest` is re-pulled on every deploy).
+- **`init: true` on the worker only.** It is the only service that spawns
+  children (yt-dlp, ffmpeg, instaloader); Bun as PID 1 does not reap orphaned
+  grandchildren. Verified: `/proc/1/comm` is `docker-init`.
+- **Worker liveness** `src/lib/queue/health.ts` — a loopback `Bun.serve` on
+  `QUEUE_HEALTH_PORT` (3001) reporting `worker.isRunning()`. Without it Docker
+  and Coolify can only see that the process exists, which stays true after
+  BullMQ stops consuming. Never published; the container's healthcheck is the
+  only caller.
+- **`depends_on: relay` on the worker is a migration ordering constraint**,
+  not a runtime one — `relay`'s CMD runs `db:migrate`, and a worker that
+  picks up a job against an unmigrated schema fails it.
+- **Not done, deliberately:** running as the non-root `bun` user would change
+  the ownership expectations of the already-provisioned `relay_data` volume;
+  and the relay healthcheck queries remote Turso every 30s (~2,880 queries a
+  day) because `/api/v1/health` lists `sqlite_master`.
+- **Verification**: both images built and diffed; new image booted end to end
+  on a local network — `db:migrate` applied all 6 migrations into a fresh
+  database and `/api/v1/health` returned all 9 tables; the worker connected to
+  Dragonfly v1.40.1 and its health endpoint returned
+  `{"status":"ok","queue":"relay-runs","concurrency":2}`; `yt-dlp 2026.03.17`,
+  `instaloader 4.15.3`, `ffmpeg 5.1.9` and `bun 1.3.1` all present in the
+  runtime image.

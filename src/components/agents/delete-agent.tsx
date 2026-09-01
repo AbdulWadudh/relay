@@ -54,7 +54,7 @@ export function DeleteAgent({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="transition-all duration-200 hover:scale-110 hover:bg-red-600 hover:text-white dark:hover:bg-red-600"
+                  className="transition-all duration-200 hover:-translate-y-px hover:bg-red-600 hover:text-white dark:hover:bg-red-600"
                   aria-label={`Remove ${agentName}`}
                 />
               }

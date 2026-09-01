@@ -1,8 +1,8 @@
 "use client"
 
-import { Robot01Icon } from "@hugeicons/core-free-icons"
+import { Delete02Icon, Robot01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-
+import { DisabledActionSlot } from "@/components/agents/action-slot"
 import { AgentFormDialog } from "@/components/agents/agent-form-dialog"
 import { AgentStatusToggle } from "@/components/agents/agent-status-toggle"
 import { AgentsTableSkeleton } from "@/components/agents/agents-table-skeleton"
@@ -46,20 +46,26 @@ function TypeBadge({ type }: { type: AgentSummary["type"] }) {
 }
 
 function RowActions({ agent }: { agent: AgentSummary }) {
+  const editable = agent.type === "human"
   return (
-    <div className="flex items-center justify-end gap-3">
-      {/* Fixed-width wrapper matches the icon buttons' own size-8 footprint
-          so the switch's narrower pill shape doesn't read as a bigger gap
-          than the identical `gap-3` between the two icon buttons. */}
+    // Delete is disabled rather than omitted on System rows, so the
+    // column never has a gap where a button should be.
+    <div className="flex items-center justify-end gap-1">
+      {/* Fixed width so the switch's narrow pill doesn't read as a wider
+          gap than the one between the icons. */}
       <div className="flex size-8 items-center justify-center">
         <AgentStatusToggle agent={agent} />
       </div>
-      {agent.type === "human" ? (
-        <>
-          <AgentFormDialog agent={agent} />
-          <DeleteAgent agentId={agent.id} agentName={agent.name} />
-        </>
-      ) : null}
+      <AgentFormDialog agent={agent} />
+      {editable ? (
+        <DeleteAgent agentId={agent.id} agentName={agent.name} />
+      ) : (
+        <DisabledActionSlot
+          icon={Delete02Icon}
+          label={`Remove ${agent.name}`}
+          reason="System agents can't be removed"
+        />
+      )}
     </div>
   )
 }

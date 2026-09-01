@@ -117,7 +117,7 @@ export function QueryStatusBar({
         onClick={onRefresh}
         disabled={isFetching}
         aria-label={`Refresh ${entity}`}
-        className="transition-all duration-200 hover:scale-110 hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600"
+        className="transition-all duration-200 hover:-translate-y-px hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600"
       >
         <HugeiconsIcon icon={RefreshIcon} strokeWidth={1.5} />
       </Button>

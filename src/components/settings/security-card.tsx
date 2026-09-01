@@ -130,7 +130,7 @@ function ChangePasswordForm() {
         <Button
           onClick={submit}
           disabled={invalid || pending}
-          className="transition-all duration-200 hover:scale-[1.03]"
+          className="transition-all duration-200 hover:-translate-y-px"
         >
           {pending ? <Spinner data-icon="inline-start" /> : null}
           Update password

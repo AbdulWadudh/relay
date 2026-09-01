@@ -33,7 +33,7 @@ export default function NotFound() {
           width={36}
           height={36}
           preload
-          className="size-9 rounded-md transition-transform duration-300 ease-out hover:-rotate-6 hover:scale-110"
+          className="size-9 rounded-md transition-transform duration-300 ease-out hover:-translate-y-px hover:-rotate-6"
         />
       </Link>
 
@@ -76,7 +76,7 @@ export default function NotFound() {
           <Button
             size="lg"
             nativeButton={false}
-            className="transition-all duration-200 hover:scale-[1.03]"
+            className="transition-all duration-200 hover:-translate-y-px"
             render={<Link href={primary.href} />}
           >
             <HugeiconsIcon icon={primary.icon} data-icon="inline-start" />
@@ -86,7 +86,7 @@ export default function NotFound() {
             size="lg"
             variant="outline"
             nativeButton={false}
-            className="transition-all duration-200 hover:scale-[1.03] hover:border-sky-600 hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600"
+            className="transition-all duration-200 hover:-translate-y-px hover:border-sky-600 hover:bg-sky-600 hover:text-white dark:hover:bg-sky-600"
             render={<Link href="/" />}
           >
             <HugeiconsIcon icon={ArrowLeft01Icon} data-icon="inline-start" />

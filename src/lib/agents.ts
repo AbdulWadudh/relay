@@ -1,13 +1,23 @@
 import { and, eq } from "drizzle-orm"
+import { DuplicateAgentNameError, nameTaken } from "@/lib/agent-names"
 import { getDb } from "@/lib/db"
 import { agents } from "@/lib/db/schema"
 import type { AgentInput, AgentUpdateInput } from "@/lib/schemas"
 
+export { DuplicateAgentNameError } from "@/lib/agent-names"
+
 /**
- * Agent service (TRD §3, Task 3). Only Human agents are mutable through
- * this API — System agents are auto-synthesized by the processing pipeline
- * (TRD Task 4) and are read-only here, matched by excluding `type` from the
- * update/delete WHERE clause everywhere except "human".
+ * Agent service (TRD §3, Task 3).
+ *
+ * CLONING IS EXPLICIT (human decision 2026-09-01, replacing the earlier
+ * copy-on-write behaviour). A System agent is never edited and never
+ * silently forked — the UI offers "Clone", which opens the editor
+ * pre-filled and CREATES a new Human agent on save. Editing a Human agent
+ * saves in place, to the same id, and creates nothing.
+ *
+ * Copy-on-write was tried first and was wrong: "Save changes" on a
+ * built-in quietly minted a new row, so a user who pressed it twice ended
+ * up with duplicates and no way to tell which one the pipeline would use.
  */
 
 export interface AgentSummary {
@@ -50,6 +60,9 @@ export async function createAgent(
   input: AgentInput,
   userId: string,
 ): Promise<AgentSummary> {
+  if (await nameTaken(userId, input.name)) {
+    throw new DuplicateAgentNameError(input.name)
+  }
   const [row] = await getDb()
     .insert(agents)
     .values({
@@ -69,11 +82,19 @@ export async function createAgent(
   return toSummary(row)
 }
 
+/**
+ * In-place update of a Human agent. System rows are excluded by the WHERE
+ * clause rather than forked: the caller wanting a variant clones first,
+ * which is a separate, explicit create.
+ */
 export async function updateAgent(
   id: string,
   input: AgentUpdateInput,
   userId: string,
 ): Promise<AgentSummary | null> {
+  if (input.name !== undefined && (await nameTaken(userId, input.name, id))) {
+    throw new DuplicateAgentNameError(input.name)
+  }
   const updates: Partial<typeof agents.$inferInsert> = {}
   if (input.name !== undefined) updates.name = input.name
   if (input.description !== undefined) updates.description = input.description

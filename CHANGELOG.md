@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Task 4.4–4.6: Extraction, Grounding & Notion Publishing
+- Seeded Recipe and Location system agents per user and added agent routing: requested agent → user agent → system agent → a synthesized schema for an unseen category, with the agent-builder writing the new agent's prompt.
+- Added a database-backed, Redis-cached model catalog and prompt store; both revalidate on modification, and no model id or prompt is hardcoded.
+- Validated every model response against the routed agent's JSON Schema with one repair retry that feeds the validation errors back, parsing through `best-effort-json-parser`.
+- Replaced per-property evidence citations with transcript-and-caption grounding: each extracted claim is scored on content-word overlap against the source and flagged, never silently dropped.
+- Rendered extractions to a structured document tree and published it into the Notion `Guides` hierarchy — category row with emoji, inline entries database, and the page itself — using `@notionhq/client`.
+- Added a Prompts dashboard, a reusable Modal, `json-edit-react` JSON panels, explicit Clone semantics for system agents, and instaloader-backed Instagram ingestion.
+- Fixed the extraction prompt dropping the post caption: it was accepted as an input but never sent to the model, despite the agent prompts instructing it to read the caption.
+
+### Deployment
+- Split the Dockerfile into `deps`/`builder`/`runtime` stages so build-only artefacts stay out of the shipped image, and pinned the base to the Bun version this repo is developed against (the floating `oven/bun:1` tag had moved to a different minor than local development).
+- Fixed the `worker` service recompiling the entire Next.js app on every deploy: it omitted the `NEXT_PUBLIC_*` build args that `relay` passes, and those are baked into `ENV`, so its build never matched the cache. Measured 16.4s of duplicated compilation, now a 3s cache hit.
+- Moved dependency installation above the build-arg block so bumping a public version string no longer reinstalls dependencies.
+- Added an `init` process to the worker container so yt-dlp, ffmpeg and instaloader children are reaped, a loopback liveness endpoint so Coolify can report worker health, log rotation on every service, and a pinned Dragonfly image in place of `:latest`.
+
 ### Authentication & Observability
 - Added Better Auth email/password and Google sign-in backed by one `auth_users` table, with session, account, and verification persistence.
 - Scoped credentials and agents to the authenticated user with cascading ownership foreign keys.

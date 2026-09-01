@@ -151,7 +151,7 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
     >
       <nav
         data-nav
-        className="fixed inset-x-0 top-5 z-20 mx-auto flex w-[min(92%,1180px)] items-center justify-between rounded-full border border-white/10 bg-[#101311]/75 px-5 py-3 shadow-2xl shadow-black/20 backdrop-blur-xl"
+        className="fixed inset-x-0 top-5 z-20 mx-auto flex w-[min(92%,1180px)] items-center justify-between rounded-full border border-white/10 bg-[#101311] px-5 py-3 shadow-2xl shadow-black/20"
       >
         <Link
           href="/"
@@ -173,7 +173,7 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
         </div>
         <Link
           href={appHref}
-          className="rounded-full bg-[#d8f27e] px-4 py-2 text-sm font-semibold text-[#101311] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8f27e]"
+          className="rounded-full bg-[#d8f27e] px-4 py-2 text-sm font-semibold text-[#101311] transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8f27e]"
         >
           {isAuthenticated ? "Go to app" : "Sign in"}
         </Link>
@@ -208,13 +208,13 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
           <div data-hero className="mt-10 flex flex-wrap justify-center gap-3">
             <Link
               href={appHref}
-              className="rounded-full bg-[#d8f27e] px-6 py-3 text-sm font-semibold text-[#101311] transition-all hover:scale-105 hover:bg-[#e5fa9d] active:scale-95"
+              className="rounded-full bg-[#d8f27e] px-6 py-3 text-sm font-semibold text-[#101311] transition-all hover:-translate-y-px hover:bg-[#e5fa9d] active:scale-95"
             >
               Process a video
             </Link>
             <a
               href="#system"
-              className="rounded-full border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition-all hover:scale-105 hover:border-white/40 hover:bg-white/10 active:scale-95"
+              className="rounded-full border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-px hover:border-white/40 hover:bg-white/10 active:scale-95"
             >
               See how it works
             </a>
@@ -240,7 +240,7 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
             data-bento
             className="group relative col-span-12 row-span-2 min-h-[420px] overflow-hidden rounded-[2rem] bg-[#c8df7b] p-7 text-[#101311] md:col-span-7 md:p-10"
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,19,17,0.35),transparent_60%)] opacity-60 transition-transform duration-700 ease-out group-hover:scale-105" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,19,17,0.35),transparent_60%)] opacity-60 transition-transform duration-700 ease-out group-hover:-translate-y-px" />
             <div className="relative flex h-full max-w-md flex-col justify-between">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[0.2em] opacity-60">
@@ -269,7 +269,7 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
                 Let the category choose the agent.
               </h3>
             </div>
-            <div className="absolute -bottom-20 -right-10 size-64 rounded-full border border-[#d8f27e]/30 transition-transform duration-700 group-hover:scale-110" />
+            <div className="absolute -bottom-20 -right-10 size-64 rounded-full border border-[#d8f27e]/30 transition-transform duration-700 group-hover:-translate-y-px" />
             <div className="absolute -bottom-12 -right-2 size-40 rounded-full border border-[#d8f27e]/20" />
           </article>
           <article
@@ -391,7 +391,7 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
             </p>
             <Link
               href={appHref}
-              className="mt-7 inline-flex rounded-full bg-[#101311] px-6 py-3 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
+              className="mt-7 inline-flex rounded-full bg-[#101311] px-6 py-3 text-sm font-semibold text-white transition-transform hover:-translate-y-px active:scale-95"
             >
               Process your first video ↗
             </Link>

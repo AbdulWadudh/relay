@@ -1,3 +1,5 @@
+import config from "@/config"
+
 /**
  * Minimal OpenAI-compatible chat client (Task 4.3, reused by 4.4).
  *
@@ -6,6 +8,16 @@
  * logged, never stored on the module, and never included in a thrown
  * error's message (RULES.md / PRD §6: zero plaintext token exposure).
  */
+
+/**
+ * A request that never answers is worse than one that fails: the run
+ * cannot fall through to the next model while it waits. The caller's own
+ * signal still wins when it fires first.
+ */
+function withTimeout(signal: AbortSignal | undefined): AbortSignal {
+  const timeout = AbortSignal.timeout(config.llm.timeoutMs)
+  return signal ? AbortSignal.any([signal, timeout]) : timeout
+}
 
 export class LlmError extends Error {
   readonly status: number
@@ -25,6 +37,14 @@ export interface ChatRequest {
   user: string
   /** Ask the provider for a JSON object back (extraction in Task 4.4). */
   json?: boolean
+  /**
+   * Schema-constrained decoding, for models that advertise it. Stronger
+   * than `json`, which only guarantees syntactic JSON and not conformance.
+   * `strict` is deliberately off: strict mode requires every property to
+   * be listed in `required`, and Relay's schemas omit a field the video
+   * never supported rather than emitting a null.
+   */
+  jsonSchema?: { name: string; schema: Record<string, unknown> }
   temperature?: number
   signal?: AbortSignal
 }
@@ -53,13 +73,26 @@ export async function chatCompletion(request: ChatRequest): Promise<string> {
     body: JSON.stringify({
       model: request.model,
       temperature: request.temperature ?? 0,
-      ...(request.json ? { response_format: { type: "json_object" } } : {}),
+      ...(request.jsonSchema
+        ? {
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: request.jsonSchema.name,
+                schema: request.jsonSchema.schema,
+                strict: false,
+              },
+            },
+          }
+        : request.json
+          ? { response_format: { type: "json_object" } }
+          : {}),
       messages: [
         { role: "system", content: request.system },
         { role: "user", content: request.user },
       ],
     }),
-    signal: request.signal,
+    signal: withTimeout(request.signal),
   })
 
   const payload = (await response

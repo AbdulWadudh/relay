@@ -85,11 +85,48 @@ export const config = {
     concurrency: Number(process.env.QUEUE_CONCURRENCY ?? 2),
     attempts: Number(process.env.QUEUE_ATTEMPTS ?? 2),
     backoffMs: Number(process.env.QUEUE_BACKOFF_MS ?? 5000),
+    /**
+     * Loopback port for the worker's liveness endpoint
+     * (src/lib/queue/health.ts). Never published — the container's own
+     * healthcheck is its only caller, so it must match the port the
+     * healthcheck probes in docker-compose.yml.
+     */
+    healthPort: Number(process.env.QUEUE_HEALTH_PORT ?? 3001),
+  },
+  llm: {
+    /**
+     * Hard ceiling on one chat completion. Free models occasionally accept
+     * a request and never answer; without this the worker sits on that
+     * socket forever and the run never fails over to the next candidate.
+     */
+    timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 120000),
+  },
+  cache: {
+    /**
+     * Redis/Dragonfly is the hot cache in front of the database for
+     * pipeline prompts and provider model catalogs (human decision
+     * 2026-09-01). The database stays the source of truth — a cold or
+     * unreachable cache costs a query, never correctness — and every write
+     * invalidates its key rather than waiting for the TTL.
+     *
+     * Namespaced separately from the BullMQ prefix so flushing one never
+     * takes the other with it.
+     */
+    prefix: "relay:cache",
+    promptTtlSeconds: Number(process.env.CACHE_PROMPT_TTL ?? 3600),
+    // Provider catalogs turn over daily, so this is the ceiling on how
+    // long a newly published model stays invisible to the router.
+    catalogTtlSeconds: Number(process.env.CACHE_CATALOG_TTL ?? 86400),
   },
   media: {
     // Host binaries (TRD §1). Overridable so operators can point at an
     // absolute path when the binaries aren't on the service account's PATH.
     ytDlpPath: process.env.YT_DLP_PATH ?? "yt-dlp",
+    // Instagram refuses yt-dlp anonymously ("rate-limit reached or login
+    // required") but serves instaloader, which is why the two sources use
+    // different downloaders. Verified 2026-09-01 on the exact Reel a run
+    // had already failed on.
+    instaloaderPath: process.env.INSTALOADER_PATH ?? "instaloader",
     ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
     // Per-run scratch space, inside the mounted data volume so a container
     // restart can't strand artifacts somewhere unmanaged.
@@ -107,6 +144,11 @@ export const config = {
   notion: {
     clientId: process.env.NOTION_CLIENT_ID ?? "",
     clientSecret: process.env.NOTION_CLIENT_SECRET ?? "",
+    apiBaseUrl: "https://api.notion.com/v1",
+    // Notion pins behaviour to a dated API version; omitting it makes the
+    // block payloads this app sends subject to silent format changes.
+    apiVersion: "2022-06-28",
+    timeoutMs: Number(process.env.NOTION_TIMEOUT_MS ?? 20000),
     authorizeUrl: "https://api.notion.com/v1/oauth/authorize",
     tokenUrl: "https://api.notion.com/v1/oauth/token",
     redirectPath: "/api/v1/rays/oauth/notion/callback",

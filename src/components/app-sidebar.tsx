@@ -4,6 +4,7 @@ import {
   Queue01Icon,
   Robot01Icon,
   Settings01Icon,
+  SparklesIcon,
   VaultIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -64,6 +65,15 @@ const NAV = [
     idle: "hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600",
     active:
       "data-active:bg-violet-600 data-active:text-white dark:data-active:bg-violet-600",
+    soon: false,
+  },
+  {
+    href: "/prompts",
+    label: "Prompts",
+    icon: SparklesIcon,
+    idle: "hover:bg-fuchsia-600 hover:text-white dark:hover:bg-fuchsia-600",
+    active:
+      "data-active:bg-fuchsia-600 data-active:text-white dark:data-active:bg-fuchsia-600",
     soon: false,
   },
   {

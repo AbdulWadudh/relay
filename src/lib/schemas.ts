@@ -87,6 +87,17 @@ export const relayProcessSchema = z.object({
 
 export type RelayProcessInput = z.infer<typeof relayProcessSchema>
 
+/**
+ * Pipeline prompt edit. `content` is the whole prompt — these are short
+ * enough that a full replace beats a patch format, and a truncated prompt
+ * would silently change how every run behaves.
+ */
+export const promptUpdateSchema = z.object({
+  content: z.string().trim().min(1).max(20_000),
+})
+
+export type PromptUpdateInput = z.infer<typeof promptUpdateSchema>
+
 export const rayCallbackSchema = z.object({
   code: z.string().min(1),
   state: z.string().min(1),

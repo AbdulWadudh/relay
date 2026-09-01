@@ -1,5 +1,10 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 
+// Task 4.4's own tables live in their own module to keep this file under
+// the 250-line cap; re-exported here so `schema` stays the single import
+// point for Drizzle and for drizzle-kit's `schema` entry.
+export * from "@/lib/db/schema-pipeline"
+
 /**
  * Drizzle schema (TRD §2).
  *

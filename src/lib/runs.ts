@@ -131,6 +131,11 @@ export async function createRun(
 export interface RunPatch {
   status?: RunStatus
   error?: string | null
+  /**
+   * Set by the router (Task 4.4) once an agent is chosen, so a run
+   * submitted without one still records which agent processed it.
+   */
+  agentId?: string | null
   result?: Record<string, unknown> | null
   /** Merged into the existing timings, not replacing them. */
   timings?: Record<string, number>
@@ -160,6 +165,7 @@ export async function updateRun(
     .set({
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.error !== undefined ? { error: patch.error } : {}),
+      ...(patch.agentId !== undefined ? { agentId: patch.agentId } : {}),
       ...(patch.result !== undefined ? { result: patch.result } : {}),
       ...(patch.timings
         ? { timings: { ...current.timings, ...patch.timings } }

@@ -29,6 +29,20 @@
       "when": 1788197908990,
       "tag": "0003_perfect_redwing",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788211362409,
+      "tag": "0004_military_eternals",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788211693618,
+      "tag": "0005_lame_sunfire",
+      "breakpoints": true
     }
   ]
 }

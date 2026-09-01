@@ -101,7 +101,7 @@ async function ingest(url: string, dir: string): Promise<IngestedAudio> {
     )
   }
 
-  const binaries = await ensureMediaBinaries()
+  const binaries = await ensureMediaBinaries(source.source)
   await $`mkdir -p ${dir}`.quiet()
 
   const downloadStart = performance.now()

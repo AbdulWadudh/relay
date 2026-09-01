@@ -60,7 +60,7 @@ export function DashboardNotFoundPanel({ title }: { title: string }) {
             <Button
               size="lg"
               nativeButton={false}
-              className="transition-all duration-200 hover:scale-[1.03]"
+              className="transition-all duration-200 hover:-translate-y-px"
               render={<Link href="/runs" />}
             >
               Back to your vault
