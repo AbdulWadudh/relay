@@ -75,7 +75,20 @@ export function RunsPagination({
   const last = Math.min(page * perPage, total)
 
   return (
-    <div className="flex flex-col items-center gap-2 pt-2 sm:flex-row sm:justify-between">
+    /*
+      Sticky to the bottom of the shell's scroll area, so paging away from
+      row 20 does not mean scrolling back down to find the control that got
+      you there.
+
+      `bg-background` and a top border are load-bearing, not decoration: the
+      rows scroll UNDER this, and without an opaque fill they read straight
+      through it. Solid, not a translucent tint (RULES.md bans glass), which
+      is also the only thing that actually hides the text passing beneath.
+
+      It releases naturally at the end of the scroll and settles above the
+      container's own bottom padding — no offset needed.
+    */
+    <div className="sticky bottom-0 z-10 flex flex-col items-center gap-2 border-t bg-background py-3 sm:flex-row sm:justify-between">
       <p className="text-muted-foreground text-xs">
         {/* Counts, not just page numbers: "41-60 of 137" answers "how much
             is there" in a way "page 3 of 7" does not. */}
