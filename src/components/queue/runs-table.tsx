@@ -9,6 +9,7 @@ import { QueryStatusBar } from "@/components/query-status"
 import { DeleteRun } from "@/components/queue/delete-run"
 import { ExternalLink } from "@/components/queue/linkify"
 import { NewRunDialog } from "@/components/queue/new-run-dialog"
+import { canRetry, RetryRun } from "@/components/queue/retry-run"
 import { RunStatusBadge } from "@/components/queue/run-status-badge"
 import { RunsTableSkeleton } from "@/components/queue/runs-table-skeleton"
 import { SourceIcon } from "@/components/queue/source-icon"
@@ -153,7 +154,10 @@ export function RunsTable() {
                   <span className="font-mono text-muted-foreground text-xs">
                     {dateFormat.format(run.createdAt)}
                   </span>
-                  <DeleteRun runId={run.id} label={run.sourceLabel} />
+                  <div className="flex items-center gap-1">
+                    {canRetry(run.status) ? <RetryRun run={run} /> : null}
+                    <DeleteRun runId={run.id} label={run.sourceLabel} />
+                  </div>
                 </div>
               </div>
             ))}
@@ -178,7 +182,7 @@ export function RunsTable() {
                   <TableHead className="hidden w-44 lg:table-cell">
                     Submitted
                   </TableHead>
-                  <TableHead className="w-24 text-end">Actions</TableHead>
+                  <TableHead className="w-32 text-end">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -208,7 +212,8 @@ export function RunsTable() {
                       {dateFormat.format(run.createdAt)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-end gap-3">
+                      <div className="flex items-center justify-end gap-1">
+                        {canRetry(run.status) ? <RetryRun run={run} /> : null}
                         <DeleteRun runId={run.id} label={run.sourceLabel} />
                       </div>
                     </TableCell>

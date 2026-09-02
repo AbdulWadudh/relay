@@ -90,6 +90,7 @@ export function RunDetail({ runId }: { runId: string }) {
         status={run.status}
         title={run.title ?? run.sourceLabel}
         sourceUrl={run.sourceUrl}
+        run={run}
       />
 
       {run.error ? (
