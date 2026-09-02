@@ -39,6 +39,18 @@ local.db*
 # QA screenshots
 /.qa/
 
+# graphify knowledge graph — the graph itself IS committed (graph.json,
+# GRAPH_REPORT.md, manifest.json, .graphify_labels.json and cache/ are all
+# path-relative and portable), so a fresh clone can query it without paying
+# for a rebuild. Only the machine-local and regenerable bits are ignored:
+/graphify-out/.graphify_python
+/graphify-out/.graphify_root
+/graphify-out/cost.json
+/graphify-out/cache/last_query_stamp
+# 1.5MB, churns wholesale on every rebuild; regenerate in ~1s with
+# `graphify export html` (needs only graph.json — no LLM, no API key)
+/graphify-out/graph.html
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

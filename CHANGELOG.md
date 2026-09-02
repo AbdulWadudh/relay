@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Tooling
+- Mapped the repo into a graphify knowledge graph so structural questions are answered by traversal instead of reading source into context — measured ~12x fewer tokens per question. Installed with the `[sql]` extra after the first pass warned that all 7 `drizzle/*.sql` migrations had contributed nothing to the graph; the extra recovered the schema. Usage documented in AGENTS.md, README and RULES.
+- Committed the graph itself (`graphify-out/`, ~2.3MB: graph, semantic cache, manifest, community labels, audit report) rather than gitignoring it, so a fresh clone queries it with no rebuild and no clone re-spends the ~316k-token doc extraction. Every committed artefact is path-relative; only the machine-local sidecars, the per-machine cost ledger, and the regenerable 1.5MB `graph.html` are ignored.
+
 ### Task 4.4–4.6: Extraction, Grounding & Notion Publishing
 - Seeded Recipe and Location system agents per user and added agent routing: requested agent → user agent → system agent → a synthesized schema for an unseen category, with the agent-builder writing the new agent's prompt.
 - Added a database-backed, Redis-cached model catalog and prompt store; both revalidate on modification, and no model id or prompt is hardcoded.

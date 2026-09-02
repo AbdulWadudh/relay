@@ -71,6 +71,53 @@ drizzle/          Generated SQL migrations
 public/           Static assets (served from the site root)
 ```
 
+## Codebase knowledge graph
+
+The repo is mapped into a queryable knowledge graph (code via tree-sitter AST, docs and brand assets via an LLM pass) using [graphify](https://github.com/Graphify-Labs/graphify). Answering a structural question from the graph instead of reading source files measured **~12x fewer tokens per question** on this repo.
+
+**The graph is committed** — `graphify-out/graph.json` is in the repo, so a fresh clone can query it immediately without rebuilding. You only need the CLI:
+
+```bash
+# The [sql] extra is required, or drizzle/*.sql migrations are silently
+# skipped and the schema goes missing from the graph.
+uv tool install "graphifyy[sql]"
+graphify install          # adds the /graphify skill to your coding agent
+```
+
+Rebuilding from scratch (`/graphify .`) is rarely needed — the committed cache means even a full re-extract replays the doc pass for free rather than re-spending it.
+
+Daily use:
+
+| Command | Purpose |
+| --- | --- |
+| `graphify explain "admitRun"` | A symbol's location, community, and every in/out edge — the blast radius of a change |
+| `graphify path "VaultPage" "withSourceCookies"` | Shortest path between two concepts |
+| `graphify query "how does session auth work" --budget 6000` | Broad traversal; the default ~2000-token budget truncates on this corpus |
+| `graphify update .` | Refresh after landing code — AST only, no LLM or API key, and a no-op when nothing structural changed |
+| `/graphify . --update` | Refresh after editing a `.md` doc (semantic pass; the CLI `update` above covers code only) |
+| `start graphify-out\graph.html` | Interactive graph, standalone file, no server |
+
+### What's committed, and what isn't
+
+`graphify-out/` is tracked (~2.3MB) so the graph is a shared asset rather than something each person rebuilds:
+
+| Committed | Why |
+| --- | --- |
+| `graph.json` | The graph everyone queries |
+| `cache/` | The semantic doc pass, ~250KB — without it each clone re-spends ~316k tokens |
+| `manifest.json` | Path-relative by design, so a teammate's `update` is incremental instead of a full re-extract |
+| `.graphify_labels.json` | The 110 hand-written community names |
+| `GRAPH_REPORT.md` | Audit trail: god nodes, community cohesion, and every edge labelled `EXTRACTED` / `INFERRED` / `AMBIGUOUS` |
+
+Ignored: `.graphify_python` and `.graphify_root` (absolute paths to *your* machine), `cost.json` (per-machine run ledger — appends every run, so it would conflict constantly), and `graph.html` (1.5MB that churns wholesale each rebuild — regenerate it in ~1s with `graphify export html`).
+
+Two things to know:
+
+- **A refresh is now a tracked diff.** Commit it alongside the change that caused it. graphify ships a git merge driver for `graph.json` (`graphify hook install`) for when two branches both refresh it.
+- **Don't pair the post-commit hook with the committed graph.** `graphify hook install` rebuilds *after* the commit lands, which leaves `graph.json` dirty in the tree every time. Refresh explicitly with `graphify update .` and include it in the same commit instead.
+
+Treat the graph as a snapshot: on any disagreement with the source, the source wins.
+
 ## Documents
 
 - `PRD.md` — product requirements · `TRD.md` — technical requirements

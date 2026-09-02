@@ -3,6 +3,67 @@
 - **Current Phase:** **Production outage FIXED and deployed (commit `580f0e1`).** Session Auth Phases 4 and 5 plus Gemini extraction are complete but UNCOMMITTED and awaiting approval. Phases 0-3 are committed; `1104047` (Phase 3) reached production for the first time with this deploy. Next: the real human sign-in — now actually possible, because the capture service had never run in production at all. Then the Phase 6 instaloader decision, which is gated on it.
 - **Completed Phases:** PRD, TRD, Agent Rules, Design Guidelines, Branding, **Task 1: Foundation & Database**, **Task 2: Credentials Dashboard & Notion Ray**, **Task 3: Agent Management System**, **Task 4.1: Media Ingest**, **Task 4.2: Run Persistence & Queue**, **Task 4.3: Transcription**, **Task 4.4: Agent Routing & Extraction**, **Task 4.5: Evidence Verification**, **Task 4.6: Document Tree & Notion Publish**
 
+## Tooling — graphify knowledge graph (2026-09-02) — DONE, docs only, AWAITING APPROVAL
+
+Mapped the repo into a queryable knowledge graph so structural questions
+(what calls X, what a change touches) are answered by traversal instead of
+reading source into context. Measured 12.0x fewer tokens per query
+(~106,866 naive → ~8,916 per query).
+
+Built: 1,603 nodes, 3,787 edges, 110 communities from 243 files — code via
+tree-sitter AST (no API key, no LLM), the 11 `.md` docs and 2 logo assets via
+a semantic pass. Community labels were written by hand and survive
+`graphify update`.
+
+### One real gap the tool caught
+
+The first AST pass warned that all 7 `drizzle/*.sql` migrations contributed
+nothing — `tree_sitter_sql` is not in the base install. Re-ran with
+`uv tool install "graphifyy[sql]"`, which recovered 17 migration nodes. Worth
+knowing on any reinstall: the base package drops the schema with a warning,
+not an error.
+
+### Known limitations, recorded rather than smoothed over
+
+- `graphify update .` refreshes **code only**. A `.md` edit needs
+  `/graphify . --update` (semantic pass), or the doc half goes stale silently.
+- The health check reports 321 dangling-endpoint edges (edges pointing at
+  endpoints no node defines) — real coverage loss. The 55/59 "collapsed"
+  edges are benign: barrel files emit both `imports_from` and `re_exports`
+  between the same pair and merge into one undirected edge.
+- `cost.json` records 316,525 tokens as input with 0 output. The Agent tool
+  reports one combined figure per subagent, not a split — the total is right,
+  the output column is not.
+
+### Not code
+
+No `src/` file changed; `bun run typecheck` passes with 0 errors. Changes are
+`AGENTS.md`, `README.md`, `RULES.md`, `CHANGELOG.md`, `.gitignore` and this
+file, plus the ~2.3MB of `graphify-out/` artefacts now tracked. That is over
+the 3-file circuit breaker; flagged rather than hidden.
+
+### The graph is committed — reversal of a first call
+
+Initially gitignored the whole of `graphify-out/`. That was wrong, and the
+human pushed back: the point is that everyone can use it. Checked instead of
+arguing — `graph.json`, `manifest.json`, `GRAPH_REPORT.md`,
+`.graphify_labels.json` and `cache/` contain **zero** absolute paths
+(`source_file` is relative, e.g. `SESSION_AUTH.md`), and graphify ships a
+`merge-driver` for union-merging two `graph.json` files, which only exists if
+the file is meant to be committed. Only `.graphify_python` (72B) and
+`.graphify_root` (17B) are machine-specific.
+
+So: commit the graph, the 250KB semantic cache (or every clone re-spends
+~316k tokens), the manifest (relative by design, keeps a teammate's `update`
+incremental), the labels and the report. Ignore the two absolute-path
+sidecars, `cost.json` (appends per run — would conflict constantly), and
+`graph.html` (1.5MB, churns wholesale, regenerates in ~1s from graph.json).
+
+Consequence to watch: a graph refresh is now a tracked diff, so it belongs in
+the same commit as the change that caused it. Do **not** install
+`graphify hook install` — it rebuilds *after* the commit lands and would leave
+`graph.json` permanently dirty.
+
 ## Task 6 — deploy readiness (2026-09-02) — PARTLY DONE, one item needs a decision
 
 ### DONE: the capture service can now actually run in a container

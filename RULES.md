@@ -29,6 +29,7 @@
 ## Toolchain
 - **Biome** for lint + format (`bun run lint`, `bun run format`). ESLint and Prettier are banned.
 - `tsc --noEmit` is retained **only** for the typecheck gate (Biome does not type-check; Bun has no typechecker).
+- **graphify knowledge graph (human decision 2026-09-02):** structural questions about this codebase — what calls X, what a change touches, how two modules connect — are answered from `graphify-out/graph.json` via `graphify explain` / `path` / `query` before grepping or reading files. The graph is a snapshot: the source always wins on disagreement, and `graphify update .` runs after landing code (AST only, no API key; a `.md` edit needs `/graphify . --update` instead, since the CLI refreshes code only). Installed with the `[sql]` extra (`uv tool install "graphifyy[sql]"`) — without it the `drizzle/*.sql` migrations are dropped from the graph with only a warning. **`graphify-out/` is committed** (graph, cache, manifest, labels, report — all path-relative and portable) so the graph is a shared asset and no clone re-spends the doc extraction; only machine-local sidecars, `cost.json` and the regenerable `graph.html` are ignored. A refresh is therefore a tracked diff — commit it with the change that caused it, and do not install the post-commit rebuild hook, which fires after the commit and leaves the graph permanently dirty. See AGENTS.md and README.
 
 ## UI
 - Only dedicated ShadCN components. Native `<input>`, `<select>`, `<textarea>`, `<button>` are forbidden.
