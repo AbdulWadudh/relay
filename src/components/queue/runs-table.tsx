@@ -3,6 +3,7 @@
 import { Queue01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import Link from "next/link"
+import type * as React from "react"
 
 import { QueryErrorState } from "@/components/query-error"
 import { QueryStatusBar } from "@/components/query-status"
@@ -22,6 +23,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Table,
   TableBody,
@@ -165,63 +167,97 @@ export function RunsTable({ page = 1 }: { page?: number }) {
           </div>
 
           <div className="hidden rounded-lg border lg:block">
-            {/* Fixed layout: every column except Source is sized to its own
-                content, so Source absorbs all remaining width. Auto layout
-                shared the space evenly and left the titles truncated to a
-                few characters while Submitted sat half empty. Fixed layout
-                is also what makes `truncate` inside the cells behave — under
-                auto layout a truncating cell just grows the table instead. */}
-            <Table className="min-w-[44rem] table-fixed">
-              <TableHeader>
-                <TableRow>
-                  {/* No width: takes whatever the sized columns leave. */}
-                  <TableHead>Source</TableHead>
-                  {/* Sized to their widest real content, which also keeps a
+            {/*
+              The rows scroll INSIDE the table, not with the page, so the
+              header stays put and the pager below never leaves the screen.
+
+              `max-h`, not a fixed height: a short page still shrinks to its
+              rows rather than leaving a well of empty space under them, and
+              only a full page scrolls.
+
+              The arbitrary variant is doing real work. The `Table` primitive
+              wraps itself in a container with `overflow-y-hidden`, which
+              makes that div a scrollport for the Y axis — a sticky `th`
+              would then stick to IT rather than to this ScrollArea, and sit
+              there motionless while the rows moved behind it. Neutralising
+              that container's overflow puts the ScrollArea's viewport back
+              in charge, which is what the header sticks to.
+            */}
+            <ScrollArea
+              // One value, two places, so they cannot drift.
+              style={
+                {
+                  "--runs-h": "calc(100svh - 14.875rem)",
+                } as React.CSSProperties
+              }
+              // The cap has to reach the VIEWPORT, not just the root. The
+              // viewport is `size-full`, and `height: 100%` against an
+              // auto-height parent resolves to auto — so a `max-h` on the
+              // root alone left the viewport growing to its full 1550px
+              // inside a 1072px box and nothing scrolled at all. Measured.
+              className="max-h-[var(--runs-h)] [&_[data-slot=scroll-area-viewport]]:max-h-[var(--runs-h)] [&_[data-slot=table-container]]:overflow-visible"
+            >
+              <Table className="min-w-[44rem] table-fixed">
+                {/*
+                Sticky on the `th`, not on the `thead`. Tailwind's preflight
+                sets `border-collapse: collapse`, and a collapsed table's
+                row borders belong to the table rather than the cell — a
+                sticky `thead` drops its bottom border the moment it detaches
+                and the header bleeds into the first row. The cells carry
+                their own opaque fill and an inset shadow standing in for
+                that border, so the divider survives being stuck.
+              */}
+                <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:bg-background [&_th]:shadow-[inset_0_-1px_0_var(--border)]">
+                  <TableRow>
+                    {/* No width: takes whatever the sized columns leave. */}
+                    <TableHead>Source</TableHead>
+                    {/* Sized to their widest real content, which also keeps a
                       status change (Queued -> Done) from reflowing anything. */}
-                  <TableHead className="w-[8.5rem]">Status</TableHead>
-                  <TableHead className="w-20">Duration</TableHead>
-                  <TableHead className="hidden w-44 lg:table-cell">
-                    Submitted
-                  </TableHead>
-                  <TableHead className="w-32 text-end">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((run) => (
-                  <TableRow
-                    key={run.id}
-                    className="transition-colors duration-200 hover:bg-muted"
-                  >
-                    <TableCell>
-                      <RunTitle run={run} />
-                      {run.error ? (
-                        // TableCell bakes in `whitespace-nowrap`, which stops
-                        // line-clamp from ever wrapping — the message would
-                        // clip mid-word instead of filling two lines.
-                        <p className="mt-1 line-clamp-2 whitespace-normal text-red-700 text-xs dark:text-red-400">
-                          {run.error}
-                        </p>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <RunStatusBadge status={run.status} />
-                    </TableCell>
-                    <TableCell className="font-mono text-muted-foreground text-xs">
-                      {duration(run)}
-                    </TableCell>
-                    <TableCell className="hidden font-mono text-muted-foreground text-xs lg:table-cell">
-                      {dateFormat.format(run.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        {canRetry(run.status) ? <RetryRun run={run} /> : null}
-                        <DeleteRun runId={run.id} label={run.sourceLabel} />
-                      </div>
-                    </TableCell>
+                    <TableHead className="w-[8.5rem]">Status</TableHead>
+                    <TableHead className="w-20">Duration</TableHead>
+                    <TableHead className="hidden w-44 lg:table-cell">
+                      Submitted
+                    </TableHead>
+                    <TableHead className="w-32 text-end">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((run) => (
+                    <TableRow
+                      key={run.id}
+                      className="transition-colors duration-200 hover:bg-muted"
+                    >
+                      <TableCell>
+                        <RunTitle run={run} />
+                        {run.error ? (
+                          // TableCell bakes in `whitespace-nowrap`, which stops
+                          // line-clamp from ever wrapping — the message would
+                          // clip mid-word instead of filling two lines.
+                          <p className="mt-1 line-clamp-2 whitespace-normal text-red-700 text-xs dark:text-red-400">
+                            {run.error}
+                          </p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <RunStatusBadge status={run.status} />
+                      </TableCell>
+                      <TableCell className="font-mono text-muted-foreground text-xs">
+                        {duration(run)}
+                      </TableCell>
+                      <TableCell className="hidden font-mono text-muted-foreground text-xs lg:table-cell">
+                        {dateFormat.format(run.createdAt)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          {canRetry(run.status) ? <RetryRun run={run} /> : null}
+                          <DeleteRun runId={run.id} label={run.sourceLabel} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
           </div>
 
           {/* Outside both layouts: the cards and the table are two renderings

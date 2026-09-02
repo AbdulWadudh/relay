@@ -80,15 +80,17 @@ export function RunsPagination({
       row 20 does not mean scrolling back down to find the control that got
       you there.
 
-      `bg-background` and a top border are load-bearing, not decoration: the
-      rows scroll UNDER this, and without an opaque fill they read straight
-      through it. Solid, not a translucent tint (RULES.md bans glass), which
-      is also the only thing that actually hides the text passing beneath.
+      `bg-background` is load-bearing, not decoration: in the card layout
+      the rows scroll UNDER this, and without an opaque fill they read
+      straight through it. Solid, not a translucent tint (RULES.md bans
+      glass), which is also the only thing that actually hides the text
+      passing beneath.
 
-      It releases naturally at the end of the scroll and settles above the
-      container's own bottom padding — no offset needed.
+      No top border. The table above is a bordered container and its bottom
+      edge already separates the two — adding one here stacked a second
+      line directly under the first.
     */
-    <div className="sticky bottom-0 z-10 flex flex-col items-center gap-2 border-t bg-background py-3 sm:flex-row sm:justify-between">
+    <div className="sticky bottom-0 z-10 flex flex-col items-center gap-2 bg-background py-3 sm:flex-row sm:justify-between">
       <p className="text-muted-foreground text-xs">
         {/* Counts, not just page numbers: "41-60 of 137" answers "how much
             is there" in a way "page 3 of 7" does not. */}
