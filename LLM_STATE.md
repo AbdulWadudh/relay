@@ -1231,3 +1231,56 @@ and says the server is being challenged. It is tested BEFORE `UNAVAILABLE`
 because "Sign in to confirm you're not a bot" contains "sign in" — without
 that ordering it reads as `SESSION_EXPIRED`, tells the user to reconnect a
 working session, and burns a reject against the credential.
+
+## List-page structure unified (2026-09-02)
+
+Runs, agents and credentials were three hand-written variants of the same
+page. Only one had a sticky header, none capped their height, and the whole
+page scrolled — so column headings left the screen after six rows and the
+pager went with them.
+
+### The structure
+
+`ShellContent fill` → fixed-height flex column, no ScrollArea, page cannot
+scroll. `ScrollPanel` → claims the leftover height and scrolls its content.
+`DataTable` → the table, its sticky header and its column widths.
+
+Codified in RULES.md under "List pages". The short version: only one thing
+on the page scrolls, and it is never the page.
+
+### Two dead ends worth not repeating
+
+**A height calculation.** The first version capped the table with
+`calc(100svh - 14.875rem)` — a number obtained by measuring the chrome above
+and below it on one viewport. It produced the two-scrollbar bug the moment
+anything else changed height, because the number described a layout instead
+of following it. `SidebarInset` is already `h-svh` with a `shrink-0` header,
+so `flex-1` gives the exact remainder for free.
+
+**One box for the panel.** `flex-1` alone always fills, which left 755px of
+empty bordered space under the Vault's six credentials. `max-h-full` alone
+caps against the whole column, siblings included, so a full page overflows
+by the height of the status bar and pager. Claiming the space and consuming
+it have to be separate elements — hence the outer/inner pair in
+`ScrollPanel`.
+
+### Measured after the change
+
+| | box | table | scrolls | page scrolls |
+| --- | --- | --- | --- | --- |
+| runs, 20 rows | 1076 | capped | yes, 1586 > 1074 | no |
+| agents, 4 rows | 278 | 276 | no | no |
+| vault, 6 rows | 392 | 390 | no | no |
+
+Header held at a constant offset while the first row travelled to -327, and
+exactly one scrollbar exists on the page — the table's.
+
+### A note on verifying this in dev
+
+Two false conclusions were reached and corrected while checking it. The
+preview tab drifted to a different route between probes, and a hard load of
+a freshly edited route needs ~12s for Turbopack to compile it — a 4s probe
+sees the Suspense fallback and looks like a hang. An A/B against `HEAD` was
+briefly read as "this change broke agents"; it had not. Assert
+`location.pathname` inside the same probe that measures, and give a hard
+load after an edit at least 12 seconds.

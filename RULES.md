@@ -50,6 +50,26 @@
 - **Layout must not dance while loading (MANDATORY, human decision 2026-08-31):** nothing may change position between the loading state and the fully loaded state — only the content itself updates. A skeleton mirrors the real component's structure and reserves every element's height (status bars, headers, chrome), rather than being a generic block. Anything that appears only after mount (relative timestamps, client-only values) renders a same-sized placeholder in the meantime.
 - **Row-scoped actions:** operations on an existing record (reconnect, delete) live in that record's table row, not in the page header; the header holds only creation/first-time actions.
 - **Fixed-viewport shell (dashboard workbench only):** inside the `(dashboard)` route group, the shell never scrolls — `h-svh overflow-hidden` on `SidebarInset` (`src/app/(dashboard)/layout.tsx`). Only the designated inner panel (`ShellContent`'s `ScrollArea`, `src/components/app-shell.tsx`) scrolls. Public pages (landing, login, privacy, terms) are NOT part of this shell and scroll normally via the browser's native document scroll — don't apply `overflow-y-auto`/`overflow-hidden` to `html`/`body` globally, or public pages get a nested double-scrollbar (setting overflow-y on both html and body disables the browser's html→body scroll propagation).
+- **List pages: one structure, and only ONE thing scrolls (MANDATORY, human decision 2026-09-02).** Every page whose body is a list — runs, agents, credentials — is built the same way, from `src/components/app-shell.tsx`, `src/components/scroll-panel.tsx` and `src/components/data-table.tsx`:
+
+  ```tsx
+  <ShellContent fill>                                  {/* page does NOT scroll */}
+    <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-6">
+      <ThingTable />                                   {/* flex min-h-0 flex-1 flex-col gap-2 */}
+    </div>
+  </ShellContent>
+  ```
+
+  - **`<ShellContent fill>` for a list; plain `<ShellContent>` for a document.** `fill` renders a fixed-height flex column and no ScrollArea, so the page cannot scroll; the default keeps the scrolling body a run detail or a settings form needs. A list page with the scrolling variant produces **two scrollbars side by side**, which is the bug this rule exists to prevent.
+  - **Never size the panel with a height calculation.** The first attempt used `calc(100svh - 14.875rem)`, reverse-engineered by measuring the chrome above and below it on one viewport. It broke the moment anything else changed height. `SidebarInset` is already `h-svh` with a `shrink-0` header, so `flex-1` yields the exact remaining height at every viewport with nothing to keep in sync.
+  - **`min-h-0` on every flex ancestor of the scroller.** A flex item defaults to `min-height:auto` and refuses to shrink below its content, so one missing `min-h-0` pushes the list past the screen and the overflow reappears on the page.
+  - **A short list must not stretch its border.** `ScrollPanel` is deliberately two boxes: an outer one that *claims* the leftover height and draws nothing, and an inner one sized by its content and merely *capped* at that leftover. One box cannot do both — `flex-1` alone left 755px of empty bordered space under the Vault's six credentials, and `max-h-full` alone caps against the whole column (siblings included) so a long list pushes the pager off-screen.
+  - **Tables go through `DataTable`.** A column declares its width once; `className` lands on the `th` and the `td` together, so a `w-20` or a `hidden lg:table-cell` cannot drift between them. Per-cell presentation goes in `cellClassName`.
+  - **The sticky header goes on the `th`, never the `thead`** (`STICKY_TABLE_HEADER`). Preflight sets `border-collapse: collapse`, so a collapsed table's row borders belong to the table — a sticky `thead` drops its bottom border the moment it detaches and bleeds into the first row. The cells carry an opaque fill and an inset shadow instead.
+  - **The `Table` primitive's container must be neutralised** (`[&_[data-slot=table-container]]:overflow-visible`, already inside `ScrollPanel`). It ships `overflow-y-hidden`, which makes that div the Y-axis scrollport, and a sticky `th` would stick to *it* and sit motionless while the rows moved behind it.
+  - **No separator between the panel and the pager.** The panel is a bordered box; its bottom edge already divides them, and adding `border-t` to the pager stacks a second line under the first.
+  - Mobile card lists use the same `ScrollPanel` with `bordered={false}`, so the "only one thing scrolls" contract holds below `lg` too.
+
 - **Browser work:** always use `agent-browser` for any browser automation, QA, or screenshotting — never other browser tools.
 
 ## Code Hygiene

@@ -55,8 +55,8 @@ export default async function QueuePage({
       <ShellHeader title="Runs">
         <NewRunDialog />
       </ShellHeader>
-      <ShellContent>
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <ShellContent fill>
+        <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-6">
           <Suspense key={page} fallback={<RunsTableSkeleton />}>
             <RunsData userId={session.user.id} page={page} />
           </Suspense>

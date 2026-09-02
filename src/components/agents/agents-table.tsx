@@ -7,8 +7,10 @@ import { AgentFormDialog } from "@/components/agents/agent-form-dialog"
 import { AgentStatusToggle } from "@/components/agents/agent-status-toggle"
 import { AgentsTableSkeleton } from "@/components/agents/agents-table-skeleton"
 import { DeleteAgent } from "@/components/agents/delete-agent"
+import { type DataColumn, DataTable } from "@/components/data-table"
 import { QueryErrorState } from "@/components/query-error"
 import { QueryStatusBar } from "@/components/query-status"
+import { ScrollPanel } from "@/components/scroll-panel"
 import { Badge } from "@/components/ui/badge"
 import {
   Empty,
@@ -18,14 +20,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import type { AgentSummary } from "@/lib/agents"
 import { useAgents } from "@/lib/query/agents"
 import { cn } from "@/lib/utils"
@@ -103,6 +97,37 @@ function AgentsEmpty() {
   )
 }
 
+const AGENT_COLUMNS: ReadonlyArray<DataColumn<AgentSummary>> = [
+  {
+    id: "name",
+    header: "Name",
+    cell: (agent) => (
+      <div className="flex items-center gap-2">
+        <span className="font-medium">{agent.name}</span>
+        <TypeBadge type={agent.type} />
+      </div>
+    ),
+  },
+  {
+    id: "description",
+    header: "Description",
+    cellClassName: "max-w-xs truncate text-muted-foreground",
+    cell: (agent) => agent.description,
+  },
+  {
+    id: "added",
+    header: "Added",
+    cellClassName: "font-mono text-muted-foreground text-xs",
+    cell: (agent) => dateFormat.format(agent.createdAt),
+  },
+  {
+    id: "actions",
+    header: "Actions",
+    className: "text-end",
+    cell: (agent) => <RowActions agent={agent} />,
+  },
+]
+
 export function AgentsTable() {
   const {
     data: agents,
@@ -133,7 +158,7 @@ export function AgentsTable() {
   const rows = agents ?? []
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       <QueryStatusBar
         entity="agents"
         isFetching={isFetching}
@@ -151,69 +176,43 @@ export function AgentsTable() {
               table but not wide enough to fit it, so it used to overflow
               into a horizontal scrollbar. The skeleton switches at the
               same breakpoint or the layout jumps on load. */}
-          <div className="flex flex-col gap-3 lg:hidden">
-            {rows.map((agent) => (
-              <div
-                key={agent.id}
-                className="rounded-lg border p-4 transition-colors duration-200"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="grid min-w-0 flex-1 gap-1 leading-tight">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate font-medium">{agent.name}</span>
-                      <TypeBadge type={agent.type} />
-                    </div>
-                    <span className="line-clamp-2 text-muted-foreground text-xs">
-                      {agent.description}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
-                  <span className="font-mono text-muted-foreground text-xs">
-                    Added {dateFormat.format(agent.createdAt)}
-                  </span>
-                  <RowActions agent={agent} />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="hidden rounded-lg border lg:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Added</TableHead>
-                  <TableHead className="text-end">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((agent) => (
-                  <TableRow
-                    key={agent.id}
-                    className="transition-colors duration-200 hover:bg-muted"
-                  >
-                    <TableCell>
+          <ScrollPanel bordered={false} className="lg:hidden">
+            <div className="flex flex-col gap-3">
+              {rows.map((agent) => (
+                <div
+                  key={agent.id}
+                  className="rounded-lg border p-4 transition-colors duration-200"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="grid min-w-0 flex-1 gap-1 leading-tight">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{agent.name}</span>
+                        <span className="truncate font-medium">
+                          {agent.name}
+                        </span>
                         <TypeBadge type={agent.type} />
                       </div>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate text-muted-foreground">
-                      {agent.description}
-                    </TableCell>
-                    <TableCell className="font-mono text-muted-foreground text-xs">
-                      {dateFormat.format(agent.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <RowActions agent={agent} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                      <span className="line-clamp-2 text-muted-foreground text-xs">
+                        {agent.description}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
+                    <span className="font-mono text-muted-foreground text-xs">
+                      Added {dateFormat.format(agent.createdAt)}
+                    </span>
+                    <RowActions agent={agent} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollPanel>
+
+          <DataTable
+            className="hidden lg:flex"
+            rows={rows}
+            rowKey={(agent) => agent.id}
+            columns={AGENT_COLUMNS}
+          />
         </>
       )}
     </div>

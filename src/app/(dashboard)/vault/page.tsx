@@ -50,11 +50,11 @@ export default async function VaultPage() {
       <ShellHeader title="Vault">
         <VaultActions configuredIds={configuredIds} />
       </ShellHeader>
-      <ShellContent>
+      <ShellContent fill>
         <Suspense>
           <VaultNotices />
         </Suspense>
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-6">
           <Suspense fallback={<CredentialsTableSkeleton />}>
             <VaultData userId={session.user.id} configuredIds={configuredIds} />
           </Suspense>

@@ -20,8 +20,18 @@ export function ShellHeader({
     </header>
   )
 }
+export function ShellContent({
+  children,
+  fill = false,
+}: React.PropsWithChildren<{ fill?: boolean }>) {
+  if (fill) {
+    return (
+      <div className="z-10 flex min-h-0 flex-1 flex-col p-4 sm:p-8">
+        {children}
+      </div>
+    )
+  }
 
-export function ShellContent({ children }: React.PropsWithChildren) {
   return (
     <ScrollArea className="z-10 min-h-0 flex-1">
       <div className="p-4 sm:p-8">{children}</div>
