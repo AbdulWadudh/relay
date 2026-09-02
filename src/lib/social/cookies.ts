@@ -1,7 +1,7 @@
-import type { CapturedCookie, CaptureProvider } from "@/lib/capture/providers"
+import type { CapturedCookie, SocialProvider } from "@/lib/social/providers"
 
 /**
- * Turns the browser's own cookie jar into the Netscape file `yt-dlp
+ * Normalizes parsed cookies into the Netscape file `yt-dlp
  * --cookies` reads (SESSION_AUTH.md §3).
  *
  * NOTHING HERE MAY BE LOGGED. A serialized jar is the whole credential —
@@ -10,7 +10,7 @@ import type { CapturedCookie, CaptureProvider } from "@/lib/capture/providers"
  */
 
 /** Cookies whose domain is outside the provider's list are discarded. */
-function inScope(cookie: CapturedCookie, provider: CaptureProvider): boolean {
+function inScope(cookie: CapturedCookie, provider: SocialProvider): boolean {
   const domain = cookie.domain.toLowerCase()
   return provider.cookieDomains.some((allowed) => {
     const target = allowed.toLowerCase()
@@ -51,7 +51,7 @@ export interface SerializedJar {
 
 export function toNetscapeJar(
   cookies: readonly CapturedCookie[],
-  provider: CaptureProvider,
+  provider: SocialProvider,
 ): SerializedJar {
   const scoped = cookies.filter((cookie) => inScope(cookie, provider))
   for (const cookie of scoped) assertSerializable(cookie)
@@ -103,7 +103,7 @@ export function toNetscapeJar(
 /** Every cookie the provider needs is present — i.e. the login finished. */
 export function isComplete(
   cookies: readonly CapturedCookie[],
-  provider: CaptureProvider,
+  provider: SocialProvider,
 ): boolean {
   const names = new Set(
     cookies.filter((c) => inScope(c, provider)).map((c) => c.name),

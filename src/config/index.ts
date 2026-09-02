@@ -102,100 +102,8 @@ export const config = {
   llm: {
     timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 120000),
   },
-  capture: {
-    /**
-     * Server-side browser the user drives to sign in to a social source
-     * (SESSION_AUTH.md §2). Runs HEADFUL under Xvfb on Linux — Instagram
-     * fingerprints `--headless=new` aggressively — and directly on a dev
-     * machine that already has a display.
-     */
-    chromiumPath: process.env.CHROMIUM_PATH ?? "chromium",
-    xvfbRunPath: process.env.XVFB_RUN_PATH ?? "xvfb-run",
-    /**
-     * Xvfb is a Linux thing. On Windows/macOS the launcher skips it and
-     * uses the real display, so a developer can exercise capture without
-     * a container. Auto-detected, overridable for the odd Linux box that
-     * already has a display.
-     */
-    useXvfb: process.env.CAPTURE_USE_XVFB
-      ? process.env.CAPTURE_USE_XVFB === "true"
-      : process.platform === "linux",
-    /** Own process, like the worker: Next.js route handlers cannot upgrade
-     * a request to a WebSocket, and a live browser is long-lived state a
-     * request handler cannot own (SESSION_AUTH.md §2.1). */
-    port: Number(process.env.CAPTURE_PORT ?? 3002),
-    /**
-     * Where the BROWSER connects — an ORIGIN with no path, because
-     * `src/server/capture.ts` appends `/stream` and the client then appends
-     * `?ticket=`. In a deploy this is a public `wss://` host.
-     *
-     * `||`, NOT `??`. docker-compose passes `CAPTURE_PUBLIC_URL:
-     * '${CAPTURE_PUBLIC_URL}'`, which expands to an EMPTY STRING when the
-     * variable is unset in Coolify rather than being absent — and `??`
-     * only catches null/undefined. The empty string would sail through and
-     * hand the browser a relative `/stream?ticket=...`, which resolves
-     * against the APP's own origin: the socket would open against Next.js,
-     * which cannot upgrade it, and the sign-in would fail with nothing in
-     * any log pointing at a missing env var.
-     */
-    publicUrl: process.env.CAPTURE_PUBLIC_URL || "ws://127.0.0.1:3002",
-    /**
-     * Where the NEXT.JS APP reaches the capture service's control plane.
-     * Server-to-server, so in compose this is the service name — distinct
-     * from `publicUrl`, which the end user's browser has to resolve.
-     */
-    internalUrl: process.env.CAPTURE_INTERNAL_URL ?? "http://127.0.0.1:3002",
-    /**
-     * Headful Chromium is ~300-500MB each and the deploy target is one
-     * VPS. Two fits with headroom for a concurrent download + ffmpeg
-     * spike; drop to 1 on a 2GB box.
-     */
-    maxConcurrent: Number(process.env.CAPTURE_MAX_CONCURRENT ?? 2),
-    /** Hard ceiling. 2FA means fetching a code from a phone. */
-    sessionTtlMs: Number(process.env.CAPTURE_SESSION_TTL_MS ?? 600_000),
-    /** The real reclaimer — an abandoned tab must not hold 500MB. */
-    idleTimeoutMs: Number(process.env.CAPTURE_IDLE_TIMEOUT_MS ?? 90_000),
-    /** Ticket → WebSocket handshake is machine-speed. */
-    ticketTtlMs: Number(process.env.CAPTURE_TICKET_TTL_MS ?? 60_000),
-    viewport: { width: 1280, height: 800 },
-    /**
-     * No frame rate is configured on purpose: CDP's `screencastFrameAck`
-     * IS the backpressure — the next frame is requested only once the
-     * client acknowledges the last, so the stream self-throttles.
-     */
-    frame: { format: "jpeg", quality: 60 },
-    /**
-     * SECURITY DOWNGRADE, off by default. This browser renders third-party
-     * pages, so disabling Chromium's sandbox puts a renderer exploit on the
-     * host. Only turn it on where the container genuinely cannot run the
-     * sandbox, and prefer fixing the container instead (run as non-root, or
-     * give it the Chromium seccomp profile).
-     */
-    noSandbox: process.env.CAPTURE_NO_SANDBOX === "true",
-    /**
-     * Shared secret for the control endpoints the Next.js app calls on the
-     * capture service (create / harvest / cancel).
-     *
-     * Loopback is not available here: app and capture are separate
-     * containers, so those calls cross the compose network. Only `/stream`
-     * is meant to be publicly reachable — the reverse proxy must not expose
-     * the control paths, and this token is the second lock behind that.
-     *
-     * Defaults to the vault key so a single-host dev setup works with no
-     * extra configuration, while still never being empty.
-     */
-    internalToken:
-      process.env.CAPTURE_INTERNAL_TOKEN ?? process.env.VAULT_KEY ?? "",
-    /**
-     * Fallback for hosts where `shm_size` cannot be raised. Docker's default
-     * 64MB /dev/shm makes Chromium tabs crash; `--disable-dev-shm-usage`
-     * trades that for disk I/O. Prefer shm_size on the service.
-     */
-    smallShm: process.env.CAPTURE_SMALL_SHM === "true",
-  },
   /**
-   * Lifecycle of a CAPTURED session once it is in use, as opposed to
-   * `capture` above, which governs the browser that produces one
+   * Lifecycle of an imported social session once it is in use
    * (SESSION_AUTH.md §5.3, §5.5).
    */
   social: {
@@ -268,11 +176,6 @@ export const config = {
     // Host binaries (TRD §1). Overridable so operators can point at an
     // absolute path when the binaries aren't on the service account's PATH.
     ytDlpPath: process.env.YT_DLP_PATH ?? "yt-dlp",
-    // Instagram refuses yt-dlp anonymously ("rate-limit reached or login
-    // required") but serves instaloader, which is why the two sources use
-    // different downloaders. Verified 2026-09-01 on the exact Reel a run
-    // had already failed on.
-    instaloaderPath: process.env.INSTALOADER_PATH ?? "instaloader",
     ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
     /**
      * Ordered `--extractor-args` fallbacks, keyed by media source id
@@ -316,7 +219,7 @@ export const config = {
   },
   observability: {
     /**
-     * Local log file, so all three processes (web, worker, capture) can be
+     * Local log file, so both processes (web, worker) can be
      * read in one place without tailing three terminals.
      *
      * Inside `data/`, which is gitignored — logs are operational data, and

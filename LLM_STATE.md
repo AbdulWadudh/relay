@@ -1039,3 +1039,91 @@ and `worker` each build the Dockerfile instead of sharing a tag.
   `{"status":"ok","queue":"relay-runs","concurrency":2}`; `yt-dlp 2026.03.17`,
   `instaloader 4.15.3`, `ffmpeg 5.1.9` and `bun 1.3.1` all present in the
   runtime image.
+
+---
+
+## Session capture removed; cookie import in its place (2026-09-02)
+
+**Human decision.** The capture service is deleted, not deprecated. Two
+reasons, both measured:
+
+1. **Google will not authenticate a CDP-attached browser.** A real sign-in
+   returned *"This browser or app may not be secure."* That is policy. No
+   flag, user-agent or profile change gets past it, so server-driven YouTube
+   auth was never achievable — the feature could only ever have served one of
+   its two providers.
+2. **Build time.** The `capture` stage installed chromium, chromium-sandbox,
+   xvfb, xauth and fonts (~400MB). The operator's words: *"it make my app
+   deployment very slow."*
+
+Instagram capture *did* work end to end (real account, real Reel, no
+checkpoint) — this was not a technical failure on that side. It was one
+provider's worth of value for a whole browser in the image.
+
+**What the user does now:** installs "Get cookies.txt LOCALLY", signs in
+normally in their own browser, exports from the provider's export page, and
+uploads the file. `src/components/vault/cookie-import-steps.tsx` renders the
+instructions from the registry, so they are per-provider without the
+component naming a provider.
+
+**Deleted** (~1,400 lines): `src/lib/capture/{cdp,chromium,screencast,server,
+session,tickets}.ts`, `scripts/capture.ts`, `connect-session-dialog.tsx`,
+`session-canvas.tsx`, `src/server/capture.ts`, `src/lib/query/capture.ts`, the
+`capture` Docker stage, the `capture` compose service, and the whole
+`config.capture` block with its 12 env vars.
+
+**Kept and moved** to `src/lib/social/`: `providers.ts` (the registry) and
+`cookies.ts` (`toNetscapeJar` + `isComplete`). Neither ever knew where its
+cookies came from, so the pivot did not touch their logic — the registry only
+gained `exportUrl` and `caution`, which the instructions need.
+
+**Cleaning is the security boundary.** The instructions say exporting
+*everything* is fine, which is only honest because the domain allowlist runs
+before storage. Verified: a jar carrying a bank and a webmail cookie next to a
+real Instagram session stored 8, discarded 2, and neither foreign value
+reached the stored jar. Eight parser cases pass, including a JSON export
+(named as such, so the user knows what to change), a signed-out export, an
+expired `sessionid`, and CRLF.
+
+**Found and fixed en route — a redaction bypass in the logger.**
+`traceBody` (`src/lib/observability/logger.ts`) sliced the RAW request body
+whenever it exceeded `MAX_TRACE_BODY_LENGTH` and returned it *unredacted*, so
+the size guard doubled as a way around redaction: any request big enough to
+trip it was logged verbatim. A cookie import is tens of KB and would have
+written the user's whole social session to OpenObserve. Now redacts first and
+truncates the redacted output. Pre-existing, and it applied to every oversized
+body, not just this route.
+
+The import field is named `cookieJar` deliberately: `isSensitiveKey` splits
+camelCase and matches the word "cookie". Naming it `jar` would have logged it.
+
+**Risk #3 is retired, not mitigated.** The user's password no longer reaches
+this server at all.
+
+## instaloader removed — §1.2 Branch A (2026-09-02)
+
+Landed in the same change, because the phase it was sequenced behind (§1.2
+"Non-negotiable sequencing") was the capture work, which was itself deleted.
+Authenticated downloads were proven against a real jar *first*. Recorded as a
+deviation in SESSION_AUTH.md §1.2 rather than glossed.
+
+The §1.2 experiment ran in full: (a) and (b) passed, (c) passed on everything
+but `title`, which yt-dlp reports as `"Video by <username>"`. instaloader
+never had a title either — `mapInfo` synthesized one from the caption's first
+line, and yt-dlp puts that same caption in `description`. So the synthesis was
+ported (`withSyntheticTitle`), not the downloader kept. It now yields
+`"29g protein & 405 calories per serving 🍛"` on the test Reel, matching
+instaloader. The rule matches on data, not a source id, and leaves real titles
+containing "by" alone.
+
+**Also measured:** yt-dlp's read-write jar rewrite leaves a real Instagram
+`sessionid` byte-identical and rotates only `rur`. An earlier note that the
+SID vanished after a failed fetch was an artefact of a bogus test SID. The
+`succeeded` gate in `src/lib/media/cookies.ts` stays as a safety net but is
+not load-bearing for Instagram.
+
+Python, pip and instaloader are gone from the runtime image — a build-time win
+that hits `relay` and `worker`, independent of the Chromium one.
+
+**Not yet done:** no deploy has been run against this. Image size and build
+time are claimed from what was removed, not from a measured build.

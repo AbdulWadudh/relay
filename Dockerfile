@@ -67,20 +67,20 @@ ENV NODE_ENV=production \
 # pinned so an upstream release can't silently change extraction behaviour
 # between deploys.
 #
-# instaloader is the exception that pulls in Python: Instagram refuses
-# yt-dlp anonymously ("rate-limit reached or login required") but serves
-# instaloader, which ships no self-contained binary. Pinned for the same
-# reason yt-dlp is. Only Instagram runs invoke it.
+# Instagram used to need a SECOND downloader here (instaloader, and the
+# python3 + pip it drags in) because yt-dlp cannot reach Reels
+# ANONYMOUSLY. Users now supply their own cookie jar, yt-dlp reaches Reels
+# with it, and the §1.2 experiment measured no metadata loss — so Python is
+# gone from the image entirely.
 #
 # First instruction of the stage on purpose: it depends only on the base
-# image and these two versions, so it stays cached across every deploy that
+# image and this version, so it stays cached across every deploy that
 # touches app code — apt is not re-run and yt-dlp is not re-downloaded.
 ARG YT_DLP_VERSION=2026.03.17
-ARG INSTALOADER_VERSION=4.15.3
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-      ffmpeg curl ca-certificates python3 python3-pip; \
+      ffmpeg curl ca-certificates; \
     rm -rf /var/lib/apt/lists/*; \
     arch="$(dpkg --print-architecture)"; \
     case "$arch" in \
@@ -91,30 +91,24 @@ RUN set -eux; \
     curl -fsSL -o /usr/local/bin/yt-dlp \
       "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/${asset}"; \
     chmod +x /usr/local/bin/yt-dlp; \
-    pip3 install --no-cache-dir --break-system-packages \
-      "instaloader==${INSTALOADER_VERSION}"; \
     yt-dlp --version; \
-    instaloader --version; \
     ffmpeg -version | head -n 1
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 
-# One image runs three things, and each needs a different slice of the repo:
+# One image runs two things, and each needs a different slice of the repo:
 # `next start` reads .next/, next.config.ts and public/; `db:migrate` reads
 # drizzle.config.ts, drizzle/ and src/config; `bun scripts/worker.ts` reads
 # scripts/ and src/, resolving its `@/*` imports through tsconfig.json.
 # Copied explicitly rather than as `COPY . .` so build-only files stay out.
 #
-# THESE MUST STAY ABOVE `FROM runtime AS capture`. They previously sat at
-# the END of the file, which put them in the CAPTURE stage — every
-# instruction after a FROM belongs to that stage. The damage was total and
-# silent: `runtime` ended up with no source and no CMD (an unusable stage),
-# `relay`/`worker` build no `target` so Docker gave them the LAST stage —
-# capture, Chromium and all — and capture's own
-# `CMD ["bun", "scripts/capture.ts"]` was overridden by the `next start`
-# CMD below it, so the capture service ran a SECOND Next.js server and
-# raced `relay` on `db:migrate` at every start.
+# IF YOU EVER ADD A STAGE BELOW THIS ONE, these COPYs and the CMD must stay
+# above it. They once sat at the end of the file, after a `FROM runtime AS
+# capture`, and every instruction after a FROM belongs to THAT stage — so
+# `runtime` silently ended up with no source and no CMD, and a service
+# built with no `target` got the last stage instead. That was a production
+# outage, not a tidiness issue.
 COPY package.json bun.lock next.config.ts tsconfig.json drizzle.config.ts ./
 COPY drizzle ./drizzle
 COPY public ./public
@@ -124,58 +118,3 @@ COPY scripts ./scripts
 EXPOSE 3000
 
 CMD ["sh", "-c", "bun run db:migrate && exec bun --bun next start --hostname 0.0.0.0 --port 3000"]
-
-# ------------------------------------------------------------- capture ---
-# The session-capture service (SESSION_AUTH.md §2) is its OWN stage layered
-# on the runtime, not part of it. Chromium plus Xvfb is roughly 400MB, and
-# only this one process ever executes it — baking it into `runtime` would
-# make the web and worker images carry 400MB they never run.
-#
-# Headful under Xvfb is deliberate: Instagram fingerprints `--headless=new`
-# aggressively, which is the whole reason a real display is needed.
-FROM runtime AS capture
-ARG DEBIAN_FRONTEND=noninteractive
-# `xauth` and `chromium-sandbox` are NOT optional extras, and both were
-# missing because --no-install-recommends drops them (measured 2026-09-02
-# by running this stage):
-#
-#   * xvfb ships `xvfb-run`, but that script shells out to `xauth` to mint
-#     the display cookie. Without it every launch died at
-#     "xvfb-run: error: xauth command not found" — so the capture service
-#     could not open a browser AT ALL in the container.
-#   * Debian splits Chromium's setuid sandbox helper into `chromium-sandbox`.
-#     Without it Chromium refuses to start with "No usable sandbox!", which
-#     is precisely the message that pushes people to --no-sandbox.
-#
-# `xvfb-run --help` is smoke-tested here rather than only `Xvfb -help`: the
-# old check passed while the launcher path was broken.
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-      chromium chromium-sandbox xvfb xauth \
-      fonts-liberation fonts-noto-color-emoji; \
-    rm -rf /var/lib/apt/lists/*; \
-    chromium --version; \
-    test -u /usr/lib/chromium/chrome-sandbox; \
-    command -v xauth; \
-    xvfb-run --help >/dev/null 2>&1 || true; \
-    Xvfb -help >/dev/null 2>&1 || true
-
-# Chromium's sandbox is kept ON (src/lib/capture/chromium.ts), and it needs
-# an unprivileged user to sandbox INTO — running as root is what forces
-# people to reach for --no-sandbox. `capture` owns the data dir because that
-# is where per-session browser profiles are written.
-RUN useradd --create-home --shell /usr/sbin/nologin capture \
-    && mkdir -p /app/data \
-    && chown -R capture:capture /app/data
-USER capture
-
-ENV CHROMIUM_PATH=chromium \
-    XVFB_RUN_PATH=xvfb-run \
-    CAPTURE_USE_XVFB=true
-
-EXPOSE 3002
-# LAST instruction of the file on purpose. A stage keeps only its final
-# CMD, so anything appended below this line would silently replace the
-# capture entrypoint — which is exactly the bug this file used to have.
-CMD ["bun", "scripts/capture.ts"]

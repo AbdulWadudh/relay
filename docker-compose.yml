@@ -4,8 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile
       # EXPLICIT, and load-bearing. With no `target`, Docker builds the LAST
-      # stage in the Dockerfile — which is `capture`, so the web app silently
-      # shipped Chromium and ran as the capture user.
+      # stage in the Dockerfile. `runtime` is the last stage today, but a
+      # stage appended below it would silently become what ships here — that
+      # exact mistake once put Chromium in the web image and took prod down.
       target: runtime
       args:
         NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
@@ -51,12 +52,6 @@ services:
       OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
       OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
       REDIS_URL: redis://dragonfly:6379
-      # Server-to-server, over the compose network.
-      CAPTURE_INTERNAL_URL: http://capture:3002
-      CAPTURE_INTERNAL_TOKEN: ${CAPTURE_INTERNAL_TOKEN:?generate one with openssl rand -hex 32}
-      # What the END USER'S BROWSER connects to, so it must be a public wss://
-      # host behind the proxy — not the compose service name.
-      CAPTURE_PUBLIC_URL: ${CAPTURE_PUBLIC_URL}
     depends_on:
       dragonfly:
         condition: service_healthy
@@ -78,8 +73,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # Same reason as `relay` above: without this it builds the capture
-      # stage and carries ~400MB of Chromium it never executes.
+      # Same reason as `relay` above.
       target: runtime
       args:
         NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
@@ -90,7 +84,7 @@ services:
         NEXT_PUBLIC_OPENOBSERVE_VERSION: ${NEXT_PUBLIC_OPENOBSERVE_VERSION:-0.1.0}
     restart: unless-stopped
     command: ["bun", "scripts/worker.ts"]
-    # yt-dlp, ffmpeg and instaloader are spawned as children of this
+    # yt-dlp and ffmpeg are spawned as children of this
     # process. Bun as PID 1 does not reap orphaned grandchildren, so without
     # an init the container accumulates zombies one run at a time.
     init: true
@@ -132,98 +126,6 @@ services:
         condition: service_healthy
     volumes:
       - relay_data:/app/data
-
-  # Server-side browser a user drives to sign in to a media source, so Relay
-  # stores a session cookie and never a social password (SESSION_AUTH.md).
-  #
-  # Its own service because Next.js route handlers cannot upgrade a request
-  # to a WebSocket, and because the concurrency cap is only enforceable if
-  # ONE process owns the map of live browsers. It builds the `capture` stage,
-  # which layers Chromium and Xvfb on the shared runtime — `relay` and
-  # `worker` stay slim and never carry that ~400MB.
-  capture:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: capture
-      args:
-        NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
-        NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID: ${NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID:-relay-app}
-        NEXT_PUBLIC_OPENOBSERVE_SITE: ${NEXT_PUBLIC_OPENOBSERVE_SITE}
-        NEXT_PUBLIC_OPENOBSERVE_ORG: ${NEXT_PUBLIC_OPENOBSERVE_ORG}
-        NEXT_PUBLIC_OPENOBSERVE_SERVICE: ${NEXT_PUBLIC_OPENOBSERVE_SERVICE:-relay-app}
-        NEXT_PUBLIC_OPENOBSERVE_VERSION: ${NEXT_PUBLIC_OPENOBSERVE_VERSION:-0.1.0}
-    restart: unless-stopped
-    # Chromium spawns a process TREE per session. Bun as PID 1 does not reap
-    # orphaned grandchildren, so without an init a cancelled sign-in leaves
-    # zombies behind — the same lesson the worker service learned.
-    init: true
-    # Docker's default /dev/shm is 64MB and Chromium tabs crash on it. This
-    # is the correct fix; CAPTURE_SMALL_SHM is only for hosts that cannot
-    # set it, and trades the crash for disk I/O.
-    shm_size: 1gb
-    # WHAT THIS BUYS, because it looks alarming out of context.
-    #
-    # Chromium's sandbox needs `clone(CLONE_NEWUSER)`, which Docker's default
-    # seccomp profile denies to any process without CAP_SYS_ADMIN. Measured
-    # 2026-09-02: with the default profile Chromium dies at "Failed to move
-    # to new namespace ... Operation not permitted", and the usual reaction
-    # is to pass --no-sandbox, which is far worse — renderers would then run
-    # with the container's full privileges.
-    #
-    # This is the better half of the trade. Chromium installs its OWN
-    # seccomp-bpf filter on every renderer, and that policy is tighter for
-    # this workload than Docker's generic default. So the untrusted code —
-    # third-party page content — stays confined either way; relaxing the
-    # container-level filter is what lets Chromium apply its own.
-    #
-    # Paired with cap_drop below, which was verified sufficient: the sandbox
-    # starts with ZERO capabilities, so nothing here grants privilege.
-    security_opt:
-      - seccomp:unconfined
-    cap_drop:
-      - ALL
-    # Only /stream should ever be routed publicly. The control endpoints are
-    # additionally gated by CAPTURE_INTERNAL_TOKEN, but the proxy should not
-    # expose them in the first place.
-    expose:
-      - "3002"
-    healthcheck:
-      test:
-        - CMD
-        - bun
-        - -e
-        - "fetch('http://127.0.0.1:3002/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    environment:
-      NODE_ENV: production
-      SERVICE_NAME: relay-capture
-      APP_BASE_URL: ${APP_BASE_URL}
-      REDIS_URL: redis://dragonfly:6379
-      # A DEDICATED secret, not VAULT_KEY. The config falls back to the vault
-      # key for a zero-config dev box, but shipping that means the master
-      # encryption key travels as an HTTP header between containers.
-      CAPTURE_INTERNAL_TOKEN: ${CAPTURE_INTERNAL_TOKEN:?generate one with openssl rand -hex 32}
-      CAPTURE_MAX_CONCURRENT: ${CAPTURE_MAX_CONCURRENT:-2}
-      CAPTURE_SESSION_TTL_MS: ${CAPTURE_SESSION_TTL_MS:-600000}
-      CAPTURE_IDLE_TIMEOUT_MS: ${CAPTURE_IDLE_TIMEOUT_MS:-90000}
-      OPENOBSERVE_URL: ${OPENOBSERVE_URL}
-      OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
-      OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
-    depends_on:
-      dragonfly:
-        condition: service_healthy
-    # Deliberately NOT mounting relay_data: browser profiles are per-session
-    # scratch that must not outlive the container, and this service has no
-    # business reading the database file the other two share.
 
   # Redis-compatible queue backend for BullMQ.
   # `--default_lua_flags=allow-undeclared-keys` is REQUIRED: BullMQ's Lua

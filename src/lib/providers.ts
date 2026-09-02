@@ -296,7 +296,7 @@ const SOCIAL_DETAIL: Record<
  * lookup needs no mapping table (SESSION_AUTH.md §2.4).
  *
  * `available` gates the card: a source with no entry in
- * src/lib/capture/providers.ts cannot be signed into and renders "Soon".
+ * src/lib/social/providers.ts cannot be signed into and renders "Soon".
  */
 export const SOCIAL_PROVIDERS: readonly SocialProviderInfo[] =
   MEDIA_SOURCES.map((source) => ({

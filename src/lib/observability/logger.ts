@@ -206,13 +206,23 @@ async function traceBody(
     return undefined
   try {
     const text = await new Response(body).text()
-    if (text.length > MAX_TRACE_BODY_LENGTH) {
-      return `${text.slice(0, MAX_TRACE_BODY_LENGTH)}…[truncated]`
+    // REDACT FIRST, TRUNCATE SECOND — never the other way round.
+    //
+    // This used to slice the RAW text whenever it exceeded the cap and
+    // return it unredacted, so the size guard doubled as a redaction
+    // bypass: any request big enough to trip it was logged verbatim. That
+    // is precisely the shape of a cookie-jar import (POST /social/:p/import
+    // is tens of KB), which would have written the user's whole social
+    // session to OpenObserve. Truncation is a log-volume control and must
+    // never be able to widen what is exposed.
+    const redacted = contentType.includes("json")
+      ? redactLogValue(JSON.parse(text))
+      : redactLogValue(Object.fromEntries(new URLSearchParams(text)))
+    const rendered = JSON.stringify(redacted) ?? ""
+    if (rendered.length > MAX_TRACE_BODY_LENGTH) {
+      return `${rendered.slice(0, MAX_TRACE_BODY_LENGTH)}…[truncated]`
     }
-    if (contentType.includes("json")) {
-      return redactLogValue(JSON.parse(text))
-    }
-    return redactLogValue(Object.fromEntries(new URLSearchParams(text)))
+    return redacted
   } catch {
     return "[unavailable]"
   }

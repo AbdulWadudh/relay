@@ -15,7 +15,6 @@
     "db:generate": "bunx --bun drizzle-kit generate",
     "db:migrate": "bunx --bun drizzle-kit migrate",
     "db:studio": "bunx --bun drizzle-kit studio",
-    "capture": "SERVICE_NAME=relay-capture bun scripts/capture.ts",
     "verify:ytdlp": "bun scripts/verify-ytdlp.ts"
   },
   "dependencies": {

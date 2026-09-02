@@ -127,9 +127,58 @@ than 90 days"* — it is ~5.5 months stale against `Dockerfile:78`. For YouTube
 specifically, whose extractors break and get fixed continuously, a hard pin with
 no bump cadence is a slow-motion outage. See risk #8.
 
-### 1.2 Instagram consolidation — VERDICT: **BLOCKED ON PROOF**
+### 1.2 Instagram consolidation — VERDICT: **SETTLED — Branch A, landed 2026-09-02**
+
+The experiment below was run in full against a real signed-in Instagram jar.
+Result: **(a) and (b) passed outright, (c) passed on everything except
+`title`** — and the `title` gap turned out to be repairable rather than
+disqualifying, so Branch A landed with one addition.
+
+```
+(a) metadata      DauNJ7Hpwaa | "Video by aathirasethumadhavan" | 89.77s
+    control       no cookies → "rate-limit reached or login required" (as documented)
+(b) media         source.m4a  660,982 bytes   source.info.json  38,072 bytes
+(c) info JSON     description ✓ (2,180 chars, the full caption)
+                  channel ✓  uploader ✓  duration ✓  timestamp ✓  like/comment ✓
+                  title   ✗ "Video by <username>" — a placeholder, no topic
+```
+
+`title` is what agent routing reads, so shipping the placeholder would have
+degraded routing on every Reel — the exact failure this section warned about.
+But instaloader never had a title either: `mapInfo` **synthesized** one from
+the caption's first line. yt-dlp puts that same caption in `description`, so
+the synthesis was ported rather than the downloader kept —
+`withSyntheticTitle` in `src/lib/media/download.ts`. Verified against the real
+info JSON: it now produces `"29g protein & 405 calories per serving 🍛"`,
+which is what instaloader produced.
+
+The rule is matched on the DATA (title empty, or exactly `Video|Post|Reel by
+<channel/uploader>`), not on a source id, so `download.ts` stays
+provider-generic. Checked against real titles that contain the word "by" —
+`"Cooking by Candlelight"` is left alone.
+
+**A second measurement settled the write-back question** the §4.2 rotation
+gate was built around. yt-dlp's read-write jar rewrite, run against a real
+session:
+
+| cookie | before | after |
+| --- | --- | --- |
+| `sessionid` | 2027-09-01, 78B | 2027-09-01, 78B — **byte-identical** |
+| `csrftoken` `datr` `ds_user_id` `ig_did` `mid` `wd` | | unchanged |
+| `rur` | session, 111B | session, 107B — rotated |
+
+An Instagram session **survives** the rewrite; only the datacenter routing
+hint churns. An earlier observation that the SID vanished after a failed
+fetch was an artefact of a bogus test SID, not real behaviour — the
+`succeeded` gate in `src/lib/media/cookies.ts` is a correct safety net, but
+it is not load-bearing for Instagram.
+
+> **Labelling correction.** During implementation this was referred to as
+> "Branch B". It is **Branch A** — yt-dlp only, instaloader deleted. Branch B
+> below is the road not taken.
 
 ### The hypothesis
+
 
 `src/lib/media/instaloader.ts` exists only because yt-dlp cannot fetch Reels
 *anonymously*. If `yt-dlp --cookies` works with a real signed-in jar, both sources
@@ -216,9 +265,10 @@ routing silently degrades on every Reel** — a regression that produces plausib
 wrong output rather than an error, which is the worst failure mode this codebase
 has. `mapInfo` would have to be ported onto yt-dlp's shape, not deleted.
 
-### Branch A — yt-dlp-only works
+### Branch A — yt-dlp-only works — **THIS IS WHAT LANDED**
 
-Requires (a), (b) **and** (c) to pass.
+Requires (a), (b) **and** (c) to pass. Every bullet below was carried out
+on 2026-09-02, plus `withSyntheticTitle` to cover the `title` gap.
 
 - `src/lib/media/download.ts:66-74` loses the `if (source.source === "instagram")`
   dispatch; `download()` becomes a single call to `downloadWithYtDlp`.
@@ -236,9 +286,10 @@ Requires (a), (b) **and** (c) to pass.
   `INSTALOADER_PATH` (`.env.example:56`) are removed.
 - **Storage is unaffected** — one jar format (Netscape), one consumer.
 
-### Branch B — Instagram still needs instaloader
+### Branch B — Instagram still needs instaloader — **NOT TAKEN**
 
-Any of (a)/(b)/(c) fails.
+Any of (a)/(b)/(c) fails. Kept for the record, and for the day yt-dlp's
+Instagram extractor breaks.
 
 - Both downloaders stay. `download.ts` keeps its dispatch.
 - **Two cookie formats, and they are not interchangeable.** yt-dlp consumes a
@@ -257,6 +308,15 @@ Any of (a)/(b)/(c) fails.
 
 ### Non-negotiable sequencing
 
+**Followed, with one deviation, recorded here rather than quietly.** The
+removal landed in the same change as the import flow, because the capture
+service it would otherwise have sequenced behind was itself being deleted —
+there was no "authenticated downloads work" milestone left to land after.
+Authenticated downloads WERE proven first, against a real jar, before
+instaloader was deleted (§1.2). The risk the original rule guards against
+— a cookie bug and a consolidation bug being indistinguishable — is
+therefore still bounded, but it is a deviation and not a technicality.
+
 **Removing instaloader is its own phase and lands after authenticated downloads
 work (§7, Phase 6).** Never in the same change. The reason is concrete and
 recorded: `LLM_STATE.md:21` — a stale worker produced "a correct-looking failure
@@ -266,152 +326,123 @@ consolidation bug are indistinguishable.
 
 ---
 
-## 2. Session capture flow
+## 2. Session import flow
 
-### 2.1 The one structural constraint that shapes everything
+> **SUPERSEDED 2026-09-02.** §2 previously specified a server-side capture
+> service: a headful Chromium the user drove through a screencast to sign in.
+> It was built, shipped, and then removed. Two measurements killed it, in
+> this order.
+>
+> 1. **Google refuses to authenticate a CDP-attached browser.** A real
+>    sign-in attempt returned *"This browser or app may not be secure."*
+>    That is policy, not fingerprinting — no flag, user-agent or profile
+>    tweak reaches past it. Server-driven YouTube auth was never possible.
+> 2. **Chromium cost ~400MB on every deploy.** The `capture` stage installed
+>    chromium, chromium-sandbox, xvfb, xauth and fonts. Build time was the
+>    operator's dominant complaint.
+>
+> Instagram capture *did* work end to end (verified 2026-09-02 against a real
+> account, no checkpoint triggered), so this was not a technical failure on
+> that side — it was one provider's worth of value for an entire browser in
+> the image, and a flow the other provider could never use.
+>
+> What replaced it is smaller in every dimension: **the user exports a
+> cookies.txt from their own browser and uploads it.** The removed files are
+> in git history at `9719104`.
 
-**Next.js App Router route handlers cannot upgrade to WebSocket.** The Hono app is
-mounted through `hono/vercel`'s `handle()` (`src/app/api/v1/[[...route]]/route.ts:79-83`),
-which returns a `Response` — there is no upgrade path. A screencast is a
-long-lived bidirectional channel, and a live Chromium handle is long-lived
-in-process state that a request-scoped handler cannot own.
+### 2.1 What the user does
 
-Therefore **capture runs in its own Bun process**, exactly as the worker does
-(`scripts/worker.ts`, the `worker` service at `docker-compose.yml:67`). The
-precedent already exists in-repo: `src/lib/queue/health.ts:19` runs a `Bun.serve`
-inside the worker process. Capture uses the same pattern with
-`server.upgrade()` added.
+The whole flow is client-side until the upload:
 
-This also makes the concurrency cap (§5) *enforceable*: an in-memory session `Map`
-is only authoritative if exactly one process owns it.
+1. Install **Get cookies.txt LOCALLY** — the open-source extension that
+   writes the file on the user's machine and uploads nothing. The word
+   `LOCALLY` distinguishes it from similarly named extensions that POST the
+   jar to a third-party server.
+2. Sign in to the provider normally, in their own browser, as themselves.
+3. Navigate to the registry's `exportUrl` and export.
+4. Upload or paste the file into the Vault dialog.
+
+Step 3 is not decoration. For YouTube the export page is
+`youtube.com/robots.txt`, because a normal YouTube page rotates the refresh
+token as it loads and invalidates a jar exported moments earlier (§4.2b).
+The same section is why the YouTube registry entry carries a `caution`
+telling the user to export from a private window and close it immediately.
 
 ### 2.2 End-to-end
 
 ```
 /vault ── "Connect" on a social provider card
    │
-   ▼
-POST /api/v1/capture/:provider          (Next.js / Hono, authenticated)
-   │  · resolves :provider through the capture registry
-   │  · asks the capture service for a slot over loopback
-   │  · mints a single-use ticket into Dragonfly (60s TTL)
-   ▼  → 201 { sessionId, ticket, wsUrl, expiresAt }   |   503 if cap hit
+   ▼  ImportSessionDialog renders CookieImportSteps, driven by the registry
+   │  (loginUrl, exportUrl, sessionCookies, cookieDomains, caution)
+   │
+   ▼  user picks a file, or pastes it
    │
    ▼
-Browser opens  wss://<capture host>/stream?ticket=…    (capture service)
-   │  · ticket redeemed + DELETEd atomically; bound to (userId, sessionId)
-   │  · capture service launches Chromium headful under Xvfb
-   │  · CDP Page.startScreencast → JPEG frames → WS → <canvas>
-   │  ← pointer/key events → CDP Input.dispatchMouseEvent / dispatchKeyEvent
-   │
-   ▼  user completes login on the provider's own page (2FA, CAPTCHA all work)
-   │
-   ▼
-Capture service polls CDP Storage.getCookies for the registry's `sessionCookies`
-   │  · when all present → emits { type: "ready", account: {…} } on the WS
-   ▼
-POST /api/v1/capture/:sessionId/finish   (Next.js / Hono, authenticated)
-   │  · fetches the harvested jar from the capture service over loopback
+POST /api/v1/social/:provider/import     (Next.js / Hono, authenticated)
+   │  · cookieImportSchema — field is named `cookieJar` SO THE LOGGER
+   │    REDACTS IT (isSensitiveKey matches the word "cookie")
+   │  · importJar():
+   │      – rejects a JSON export by name, so the user knows what to change
+   │      – drops every cookie outside provider.cookieDomains
+   │      – drops every cookie already past its own expiry
+   │      – requires provider.sessionCookies to survive both, or refuses
+   │      – re-serializes what is left into a canonical Netscape jar
    │  · createCredential({ type: "cookie", provider, accessToken: <jar> })
-   │  · disposes the session
-   ▼  → 201 { credential }   → UI invalidates credentialKeys.list()
+   ▼  → 201 { credential, kept, discarded }  |  422 with an actionable message
+   │
+   ▼  UI invalidates credentialKeys.list() and reports what was discarded
 ```
+
+**Cleaning is the security boundary, not a convenience.** The instructions
+tell the user that exporting *everything* is fine, which is only an honest
+thing to say because `toNetscapeJar`'s domain allowlist runs before anything
+is stored. Verified 2026-09-02: a jar containing a bank and a webmail cookie
+alongside a real Instagram session stored 8 cookies, discarded 2, and neither
+foreign value appeared in the stored jar.
 
 ### 2.3 Files
 
-**New — capture service (own process):**
-
 | File | Responsibility |
 | --- | --- |
-| `scripts/capture.ts` | Entrypoint, mirrors `scripts/worker.ts`. `bun run capture`. |
-| `src/lib/capture/server.ts` | `Bun.serve` + `server.upgrade()`; ticket redemption; loopback control endpoints. |
-| `src/lib/capture/cdp.ts` | Minimal CDP client over Bun's native `WebSocket` — id correlation, event subscription. **No npm dependency.** |
-| `src/lib/capture/chromium.ts` | Launch/kill headful Chromium under Xvfb via `Bun.$`; per-session throwaway profile dir. |
-| `src/lib/capture/session.ts` | Session registry: create/get/dispose, concurrency cap, hard TTL, idle timer, guaranteed teardown. |
-| `src/lib/capture/screencast.ts` | `Page.startScreencast` → WS frames; `screencastFrameAck` backpressure; input relay. |
-| `src/lib/capture/cookies.ts` | `Storage.getCookies` → Netscape serialization. |
-| `src/lib/capture/providers.ts` | **The registry.** Per source: login URL, `sessionCookies`, `mapAccount`. |
-
-**New — app side:**
-
-| File | Responsibility |
-| --- | --- |
-| `src/server/capture.ts` | `captureModule` (Hono). Routes below. |
-| `src/components/vault/connect-session-dialog.tsx` | Modal over `src/components/modal.tsx`. |
-| `src/components/vault/session-canvas.tsx` | `<canvas>`, WS lifecycle, pointer/key handlers, TTL countdown. |
-| `src/lib/query/capture.ts` | TanStack mutation hooks, matching `src/lib/query/credentials.ts`. |
-
-**Touched:**
-
-| File | Change |
-| --- | --- |
-| `src/app/api/v1/[[...route]]/route.ts` | `app.route("/capture", captureModule)` beside line 29-35. |
-| `src/lib/providers.ts` | New `SOCIAL_PROVIDERS` list (§2.4); folded into `ALL_PROVIDERS` (line 132). |
-| `src/lib/schemas.ts` | `captureStartSchema`, `captureInputSchema`; `type` enum at line 20 gains `"cookie"`. |
-| `src/lib/db/schema.ts` | `type` enum at line 36 gains `"cookie"`. No migration (§3). |
-| `src/config/index.ts` | New `capture` + `social` sections (§5.5). |
-| `src/components/vault/add-connection-dialog.tsx` | Social provider cards alongside Ray cards. |
-| `src/components/vault/credentials-row.tsx` | "Reconnect" row action for a stale social credential. |
-| `package.json` | `"capture": "bun scripts/capture.ts"`. |
-| `.env.example` | Matching entries (§5.5). |
-| `Dockerfile`, `docker-compose.yml` | Chromium + Xvfb; `capture` service. **⚠ Stop-and-ask before touching.** |
+| `src/lib/social/providers.ts` | The registry. Per-provider `loginUrl`, `exportUrl`, `sessionCookies`, `cookieDomains`, `caution`, `mapAccount`. Was `src/lib/capture/providers.ts`. |
+| `src/lib/social/cookies.ts` | `toNetscapeJar` (domain allowlist + serialization) and `isComplete`. Unchanged by the pivot — it never knew where its cookies came from. |
+| `src/lib/social/import.ts` | Netscape parsing, expiry filtering, and the typed `CookieImportError` messages the user actually reads. |
+| `src/server/social.ts` | `POST /social/:provider/import`. The jar's only pass through the server, straight into the encrypted vault. |
+| `src/components/vault/cookie-import-steps.tsx` | The instructions. Every provider-specific string comes from the registry. |
+| `src/components/vault/import-session-dialog.tsx` | File picker, paste box, optional account label. |
+| `src/lib/query/social.ts` | `useImportCookies`. No cache key — the jar is never cached. |
 
 ### 2.4 Staying provider-generic
 
-`RULES.md:57` requires flows to go through a registry with "no provider-specific
-routes, cookies, or hardcoded provider strings in flow logic".
-`src/lib/capture/providers.ts` is the exact analogue of
-`src/server/ray-providers.ts:53`, including the `Partial<Record<…>>` shape so an
-unimplemented source has no entry:
-
-```ts
-export interface CaptureProvider {
-  name: SocialProviderId
-  /** Where the capture browser lands. */
-  loginUrl: string
-  /** Session is complete once ALL of these are present in the jar. */
-  sessionCookies: readonly string[]
-  /** Cookie domains written into the jar. Everything else is discarded. */
-  cookieDomains: readonly string[]
-  /**
-   * CONTRACT (RULES.md:58) — identical to RayProvider.mapMetaData: MUST return
-   * the generic `account_*` keys. Provider vocabulary is mapped here and
-   * nowhere else.
-   */
-  mapAccount: (cookies: CdpCookie[], probe: unknown) =>
-    Record<string, unknown> & { account_id?: string; account_name?: string }
-}
-```
-
-**The social provider vocabulary derives from `MEDIA_SOURCES`**
-(`src/lib/media/sources.ts:30-50`), not a hand-written second list. A social
-credential's `provider` **is** the media source id, so the download-time lookup
-in §4 is `provider === parsed.source` with no mapping table. One source of truth;
-adding a source stays a one-entry change (`src/lib/media/sources.ts:6-9`).
-
-This closes a real gap in the deferred note. `LLM_STATE.md:138` says adding
-`"cookie"` needs "only the Drizzle enum and Zod schema". **That is incomplete.**
-`credentialInputSchema.provider` is `z.enum(PROVIDER_IDS)`
-(`src/lib/schemas.ts:21`), and `PROVIDER_IDS` derives from
-`ALL_PROVIDERS = [...AI_KEY_PROVIDERS, ...RAY_PROVIDERS]`
-(`src/lib/providers.ts:132-141`). Neither list contains `instagram` or `youtube`,
-so **a cookie credential cannot be stored today — `createCredential` would reject
-it at the schema boundary.** A third provider list is required.
+Unchanged in intent from the capture design: `:provider` resolves through
+the registry, `mapAccount` maps provider vocabulary onto the generic
+`account_*` keys, and no source string appears in the route, the parser or
+the UI (RULES.md:57-58). The registry gained the fields the *instructions*
+need (`exportUrl`, `caution`) because those are provider-specific concepts
+and this is the only file allowed to hold them.
 
 ### 2.5 Routes
 
-All under the existing `/api/v1` basePath (`src/app/api/v1/[[...route]]/route.ts:25`).
-`:provider` is generic, resolved through the registry — mirroring
-`raysModule.get("/:provider")` (`src/server/rays.ts:28`).
-
 | Method | Path | Behaviour |
 | --- | --- | --- |
-| `POST` | `/capture/:provider` | 401 no session · 404 unknown provider · 409 credential already exists (use Reconnect) · 503 + `Retry-After` cap hit · 201 `{ sessionId, ticket, wsUrl, expiresAt }` |
-| `GET` | `/capture/:sessionId` | Poll status: `pending` / `ready` / `expired`. Lets the UI recover if the WS drops. |
-| `POST` | `/capture/:sessionId/finish` | Harvest → `createCredential` → dispose. 409 if not `ready`. |
-| `DELETE` | `/capture/:sessionId` | User cancelled. Disposes immediately. |
+| `POST` | `/social/:provider/import` | 401 no session · 404 unknown provider · 400 malformed body · 422 + an actionable message when the export is unusable · 201 `{ credential, kept, discarded }` |
 
-WebSocket lives on the capture service, not here: `GET <captureUrl>/stream?ticket=…`.
+Reconnecting is the same route: `createCredential` replaces on
+(user, provider, `account_id`), so a re-import updates in place (§3.4).
+
+### 2.6 What the pivot retired
+
+- **Risk #3 (password transit) is gone, not mitigated.** The user's password
+  never reaches this server, because the sign-in happens in their browser.
+  The Connect dialog no longer needs the disclosure it used to carry.
+- **The screencast WebSocket (§5.2) no longer exists**, and with it the
+  remote-control channel, the single-use ticket, and the concurrency cap on
+  live browsers (§5.1). §5.3 and §5.4 — the per-credential rate budget and
+  per-user serialization — are about *using* a session and still apply.
+- **One downloader instead of two** (§1.2, Branch B). Instagram needed
+  instaloader only because yt-dlp cannot reach Reels *anonymously*; with the
+  user's own jar it reaches them, so Python left the image too.
 
 ---
 

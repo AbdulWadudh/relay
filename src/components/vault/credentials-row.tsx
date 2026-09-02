@@ -20,9 +20,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { AddCredentialDialog } from "@/components/vault/add-credential-dialog"
-import { ConnectSessionDialog } from "@/components/vault/connect-session-dialog"
 import { DeleteCredential } from "@/components/vault/delete-credential"
 import { EditCredentialDialog } from "@/components/vault/edit-credential-dialog"
+import { ImportSessionDialog } from "@/components/vault/import-session-dialog"
 import { providerLabel } from "@/lib/providers"
 import { cn } from "@/lib/utils"
 import type { MaskedCredential } from "@/lib/vault"
@@ -115,7 +115,7 @@ function ReconnectSession({ credential }: { credential: MaskedCredential }) {
           Session expired — sign in to {label} again
         </TooltipContent>
       </Tooltip>
-      <ConnectSessionDialog
+      <ImportSessionDialog
         provider={credential.provider}
         open={open}
         onOpenChange={setOpen}

@@ -59,18 +59,6 @@ const BINARIES: readonly BinarySpec[] = [
     ],
   },
   {
-    name: "instaloader",
-    command: config.media.instaloaderPath,
-    versionArg: "--version",
-    envVar: "INSTALOADER_PATH",
-    sources: ["instagram"],
-    install: [
-      "pipx install instaloader",
-      "pip install instaloader",
-      "brew install instaloader",
-    ],
-  },
-  {
     name: "ffmpeg",
     command: config.media.ffmpegPath,
     versionArg: "-version",

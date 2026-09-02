@@ -6,8 +6,8 @@ import { SOCIAL_PROVIDERS } from "@/lib/providers"
 /**
  * Media SOURCES to sign in to, for the "Account" tab.
  *
- * A source with no entry in src/lib/capture/providers.ts cannot be signed
- * into and renders "Soon" — availability is the capture registry, not a
+ * A source with no entry in src/lib/social/providers.ts cannot be
+ * connected and renders "Soon" — availability is the registry, not a
  * flag someone remembered to flip.
  */
 export function SocialProviderGrid({

@@ -17,7 +17,7 @@ import {
   ApiKeyForm,
   type ApiKeyFormState,
 } from "@/components/vault/api-key-form"
-import { ConnectSessionDialog } from "@/components/vault/connect-session-dialog"
+import { ImportSessionDialog } from "@/components/vault/import-session-dialog"
 import { RayProviderGrid } from "@/components/vault/ray-provider-grid"
 import { SocialProviderGrid } from "@/components/vault/social-provider-grid"
 import { cn } from "@/lib/utils"
@@ -194,7 +194,7 @@ export function AddCredentialDialog({
       </Modal>
 
       {connecting ? (
-        <ConnectSessionDialog
+        <ImportSessionDialog
           provider={connecting}
           open={true}
           onOpenChange={(next) => {

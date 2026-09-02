@@ -19,11 +19,12 @@ export function createRedis(
     // The API process should surface a dead queue as a failed enqueue
     // rather than buffering writes that silently never land.
     //
-    // Capture tickets opt OUT of that (see src/lib/capture/tickets.ts): the
-    // client connects lazily, so the FIRST command after a process start
-    // would otherwise throw "Stream isn't writeable" before the socket is
-    // ready — which made the first sign-in after every deploy fail. A
-    // ticket read is not a job enqueue; waiting a few ms beats failing.
+    // Short-lived reads may opt OUT of that: the client connects lazily, so
+    // the FIRST command after a process start would otherwise throw
+    // "Stream isn't writeable" before the socket is ready. The capture
+    // service's ticket reads needed this and hit it after every deploy;
+    // that service is gone, but the option and the reason are kept for the
+    // next caller that is a read rather than a job enqueue.
     enableOfflineQueue: options.enableOfflineQueue ?? false,
   })
 

@@ -2,7 +2,6 @@ import { $ } from "bun"
 
 import config from "@/config"
 import { lastLine, MediaIngestError } from "@/lib/media/errors"
-import { downloadWithInstaloader } from "@/lib/media/instaloader"
 import type { ParsedSource } from "@/lib/media/sources"
 import { logger } from "@/lib/observability/logger"
 import { providerLabel } from "@/lib/providers"
@@ -11,10 +10,10 @@ import { providerLabel } from "@/lib/providers"
  * The download step (TRD §3 step 2): media into the run's temp directory,
  * plus the source metadata that lands in `additional_data`.
  *
- * Dispatched PER SOURCE. yt-dlp handles everything it can reach, but it
- * cannot fetch Instagram Reels anonymously, so Instagram goes through
- * instaloader instead. Both return the same shape, so nothing downstream
- * knows which tool ran.
+ * ONE downloader for every source. Instagram briefly needed a second
+ * (instaloader) because yt-dlp cannot reach Reels ANONYMOUSLY; with the
+ * user's own jar it reaches them fine, so that toolchain is gone
+ * (SESSION_AUTH.md §1.2, Branch B).
  */
 
 /**
@@ -48,6 +47,56 @@ function pruneInfo(raw: unknown): Record<string, unknown> {
       ([key]) => !DROPPED_INFO_KEYS.has(key) && !key.startsWith("_"),
     ),
   )
+}
+
+/**
+ * A title that says nothing but who posted it — measured 2026-09-02, a
+ * Reel yt-dlp titles `"Video by aathirasethumadhavan"` whose caption
+ * begins "29g protein & 405 calories per serving".
+ *
+ * Extractors for caption-first platforms have no title field to report, so
+ * they synthesize one from the uploader. Agent routing reads `title`, so
+ * left alone it would degrade on every such item.
+ *
+ * Matched on the DATA, not on a source id: any extractor whose title is
+ * empty or is exactly the uploader's name restated gets the same
+ * treatment, and `src/lib/media/download.ts` stays provider-generic
+ * (RULES.md:57-58).
+ */
+function isPlaceholderTitle(
+  title: string,
+  info: Record<string, unknown>,
+): boolean {
+  if (title.trim().length === 0) return true
+  const names = [info.channel, info.uploader, info.uploader_id]
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.toLowerCase())
+  const stripped = title.toLowerCase().replace(/^(video|post|reel)\s+by\s+/, "")
+  return stripped !== title.toLowerCase() && names.includes(stripped.trim())
+}
+
+/**
+ * Gives caption-first sources a title a person would recognise, taken from
+ * the caption's first line. This is `mapInfo`'s old behaviour from the
+ * deleted instaloader path, carried over onto yt-dlp's info shape — the
+ * §1.2 experiment found the caption intact in `description`, so nothing is
+ * lost by dropping the second downloader.
+ *
+ * Exported for the acceptance check in scripts/verify-ytdlp.ts, which
+ * runs it against a real Reel's info JSON — the placeholder rule is
+ * matched on data, so a yt-dlp release that changes the shape of a
+ * synthesized title has to be caught by running it, not by reading it.
+ */
+export function withSyntheticTitle(
+  info: Record<string, unknown>,
+): Record<string, unknown> {
+  const title = typeof info.title === "string" ? info.title : ""
+  if (!isPlaceholderTitle(title, info)) return info
+
+  const description =
+    typeof info.description === "string" ? info.description : ""
+  const firstLine = description.split("\n")[0]?.trim().slice(0, 200)
+  return firstLine ? { ...info, title: firstLine } : info
 }
 
 /**
@@ -93,9 +142,13 @@ export async function download(
    */
   cookiesPath?: string | null,
 ): Promise<DownloadResult> {
-  if (source.source === "instagram") {
-    return await downloadWithInstaloader(source, dir)
-  }
+  // ONE downloader, for every source. Instagram used to route to
+  // instaloader because yt-dlp could not reach Reels anonymously; now that
+  // the user supplies their own jar, yt-dlp reaches them with it and
+  // instaloader's second toolchain (Python + pip, ~120MB in the image)
+  // bought nothing but a title. §1.2 measured both: same media, same
+  // metadata, and the caption yt-dlp puts in `description` is exactly what
+  // instaloader's `mapInfo` built its title from — see `withSyntheticTitle`.
   return await downloadWithYtDlp(source, dir, cookiesPath ?? null)
 }
 
@@ -226,10 +279,12 @@ async function downloadWithYtDlp(
     )
   }
 
-  const info = pruneInfo(
-    await Bun.file(`${dir}/source.info.json`)
-      .json()
-      .catch(() => null),
+  const info = withSyntheticTitle(
+    pruneInfo(
+      await Bun.file(`${dir}/source.info.json`)
+        .json()
+        .catch(() => null),
+    ),
   )
   return { mediaPath, info }
 }
