@@ -4,6 +4,29 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# RULES.md is binding — read it before writing code
+
+`RULES.md` holds every standing decision a human has made about this repo: the
+stack, the UI mandates, the scroll model, naming, and the circuit breakers that
+say when to stop and ask. It wins over anything inferred from the surrounding
+code, and over habit.
+
+The ones most often broken by not knowing they exist:
+
+- **List pages have ONE structure** (`RULES.md` § "List pages"). Runs, agents and
+  credentials all compose `<ShellContent fill>` + `ScrollPanel` + `DataTable`.
+  Only one element on the page scrolls, and it is never the page. Never size a
+  list with a `calc(100svh - …)` height — that produced a two-scrollbar bug.
+- **Max 250 lines per file**, and `src/components/ui/**` is vendored — compose
+  over it, do not edit it.
+- **Never commit without explicit approval**, and no `Co-Authored-By` trailer.
+- **No hardcoding**: provider ids/labels come from `src/lib/providers.ts`, env
+  from `src/config/index.ts`.
+
+`LLM_STATE.md` is the companion log — what was tried, what was measured, and the
+dead ends worth not repeating. Check it before re-litigating a decision.
+
+
 # Codebase knowledge graph (graphify)
 
 This repo is mapped into a knowledge graph at `graphify-out/graph.json`, which is **committed** — it is there on a fresh clone, no build needed. See README "Codebase knowledge graph".
