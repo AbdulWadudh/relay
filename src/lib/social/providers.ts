@@ -46,7 +46,17 @@ export interface SocialProvider {
    */
   notes: {
     signIn: string | null
+    /** Read BEFORE exporting. Rendered above the ordered steps. */
     export: string | null
+    /**
+     * The last action, rendered as the final numbered step AFTER the export
+     * itself.
+     *
+     * Split out from `export` because putting "then close the window" in a
+     * warning ABOVE the instruction to navigate inverted the sequence and
+     * read as though the export came first.
+     */
+    afterExport: string | null
   }
   /**
    * The sign-in must happen in a private/incognito window.
@@ -103,7 +113,7 @@ const providers: Partial<Record<MediaSourceId, SocialProvider>> = {
     // rewrite left `sessionid` byte-identical and rotated only `rur`, so
     // ordinary use does not churn an Instagram session the way it does a
     // Google one. Nothing extra for the user to be careful about.
-    notes: { signIn: null, export: null },
+    notes: { signIn: null, export: null, afterExport: null },
     requiresPrivateWindow: false,
     mapAccount: (cookies) => ({
       // A numeric account id, not a secret — safe in plaintext meta_data,
@@ -126,8 +136,14 @@ const providers: Partial<Record<MediaSourceId, SocialProvider>> = {
     notes: {
       signIn:
         "Do this in a NEW private or incognito window. Google rotates your session every time a YouTube page loads, so an export taken in a normal window can stop working within minutes.",
+      // Stated as "same tab", not "same browser": yt-dlp's procedure needs
+      // the signed-in tab NAVIGATED to robots.txt, and opening a second
+      // tab leaves a live YouTube page that rotates the session as it sits
+      // there.
       export:
-        "This should be the only private tab open. Export, then close the whole window and do not reopen YouTube in it.",
+        "Stay in the same tab you just signed in with. Navigate it, do not open a new tab. It should be the only private tab open.",
+      afterExport:
+        "Close the whole private window. Do not reopen YouTube in it, or the file you just saved stops working.",
     },
     requiresPrivateWindow: true,
     mapAccount: () => ({

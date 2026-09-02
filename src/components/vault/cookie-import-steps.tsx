@@ -95,6 +95,36 @@ function Note({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * One action inside a step that is itself a short ordered sequence.
+ *
+ * The number is the point: these have to happen in order, and the export
+ * step in particular breaks if the user does them in any other one.
+ */
+function SubStep({
+  index,
+  title,
+  children,
+}: {
+  index: number
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <li className="flex gap-3">
+      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border font-mono text-muted-foreground text-xs">
+        {index}
+      </span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="font-medium text-sm">{title}</p>
+        <div className="text-muted-foreground text-sm leading-relaxed">
+          {children}
+        </div>
+      </div>
+    </li>
+  )
+}
+
 /** A URL the user must open in ANOTHER browser, so it is copyable. */
 function CopyableUrl({ url }: { url: string }) {
   const [copied, setCopied] = React.useState(false)
@@ -226,6 +256,18 @@ export function ConnectStepBody({
               to open a {browser.privateName} window, then paste this into it.
             </p>
             <CopyableUrl url={provider.loginUrl} />
+            {/*
+              The handoff to the next step. Without it people sign in, close
+              the tab because they are "done", and then cannot follow step 3
+              — which is exactly the confusion this line exists to prevent.
+            */}
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Once you are signed in,{" "}
+              <span className="font-medium text-foreground">
+                leave that tab open
+              </span>{" "}
+              and come back here. The next step reuses it.
+            </p>
           </div>
         ) : null}
         <Button
@@ -254,17 +296,32 @@ export function ConnectStepBody({
     return (
       <div className="space-y-4">
         {provider.notes.export ? <Note>{provider.notes.export}</Note> : null}
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          In that same browser, open this page, then click the extension and
-          choose <span className="font-medium text-foreground">Export</span>.
-        </p>
-        <CopyableUrl url={provider.exportUrl} />
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Keep the default <span className="font-medium">Netscape</span> format.
-          If you are offered JSON, do not pick it. You will get a{" "}
-          <code className="font-mono text-foreground text-xs">cookies.txt</code>{" "}
-          file.
-        </p>
+        {/*
+          Numbered, because three things have to happen in ORDER and the
+          previous prose version got that wrong twice: it said "same
+          browser" where the procedure needs the same TAB, and it put
+          "then close the window" in a warning ABOVE the instruction to
+          navigate, so the cleanup read as though it came first.
+        */}
+        <ol className="space-y-4">
+          <SubStep index={1} title="Navigate that tab to this address">
+            <CopyableUrl url={provider.exportUrl} />
+          </SubStep>
+          <SubStep index={2} title="Click the extension, then Export">
+            Keep the default{" "}
+            <span className="font-medium text-foreground">Netscape</span>{" "}
+            format. If you are offered JSON, do not pick it. You will get a{" "}
+            <code className="font-mono text-foreground text-xs">
+              cookies.txt
+            </code>{" "}
+            file.
+          </SubStep>
+          {provider.notes.afterExport ? (
+            <SubStep index={3} title="Close the window">
+              {provider.notes.afterExport}
+            </SubStep>
+          ) : null}
+        </ol>
       </div>
     )
   }

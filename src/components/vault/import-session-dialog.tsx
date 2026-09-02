@@ -183,7 +183,10 @@ export function ImportSessionDialog({
             */}
             <div
               key={active.id}
-              className={`motion-safe:fade-in motion-safe:animate-in motion-safe:duration-300 motion-safe:ease-out ${
+              // `pe-3` keeps body text clear of the ScrollArea scrollbar,
+              // which otherwise overlays the last word of a wrapped line
+              // once the step is tall enough to scroll.
+              className={`pe-3 motion-safe:fade-in motion-safe:animate-in motion-safe:duration-300 motion-safe:ease-out ${
                 back
                   ? "motion-safe:slide-in-from-left-4"
                   : "motion-safe:slide-in-from-right-4"
