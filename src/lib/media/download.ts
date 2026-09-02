@@ -161,6 +161,25 @@ const CLIENT_RETRYABLE =
  */
 const FORMAT_MISSING = /requested format is not available|no video formats/i
 
+/**
+ * The source is challenging THIS SERVER as automated traffic.
+ *
+ * Also tested before `UNAVAILABLE`, and for the same reason FORMAT_MISSING
+ * is: yt-dlp relays it as "Sign in to confirm you're not a bot", which
+ * contains "sign in" and so matches the unavailable family. Left alone it
+ * produces two lies — signed out, that a public video is private or
+ * removed; signed IN, that the session expired, which also burns a reject
+ * against a credential that is working perfectly.
+ *
+ * MEASURED 2026-09-02 from the production host, every configured client,
+ * with and without a jar: signed out each one returned this message, and
+ * signed in each returned "no formats" instead (the documented PO-token
+ * symptom). The same video, binary and jar succeed from a residential
+ * connection. So it is the server's address being refused, not the item,
+ * and not the credential — which is what the message now says.
+ */
+const BOT_CHECK = /not a bot|confirm you.{0,4}re not a bot|too many requests/i
+
 interface YtDlpAttempt {
   ok: boolean
   /** Last stderr line — the line carrying the actual reason. */
@@ -288,6 +307,15 @@ async function downloadWithYtDlp(
       throw new MediaIngestError(
         "SOURCE_UNAVAILABLE",
         `Could not fetch the media for this ${source.label} — the source refused every available client (HTTP 403). This often clears on its own; if it persists, the yt-dlp version may need updating.`,
+      )
+    }
+    // Also before the login-shaped branch. Never SESSION_EXPIRED: a jar
+    // cannot answer a challenge aimed at the server's address, so counting
+    // this against the credential would retire a working session.
+    if (BOT_CHECK.test(stderr)) {
+      throw new MediaIngestError(
+        "SOURCE_UNAVAILABLE",
+        `Could not fetch this ${source.label}: the source is challenging this server as automated traffic, not refusing the item itself. Your connected account is fine. This usually clears on its own; if it does not, the server's network is the thing to change.`,
       )
     }
     // BEFORE the login-shaped branch, and that order is the whole point:

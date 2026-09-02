@@ -1163,3 +1163,71 @@ outside the panel. Re-measured: dialog 600px in a 667 viewport, Next at
 Verified with agent-browser: both providers, dark and light, 1280x950, 390x844
 and 375x667, reduced motion forced. Zero console errors after a clean dev
 restart.
+
+## Deferred: YouTube is IP-blocked on the production host (2026-09-02)
+
+**Status: open. Deferred by the user on 2026-09-02 — "will work on this later".**
+Instagram is unaffected and working. Only YouTube fails, and only from prod.
+
+### What was measured, not guessed
+
+Same pinned yt-dlp (`2026.03.17`), same video (`K6Oy8QRgTdU`), same vault:
+
+| | production (Oracle VPS, 144.24.126.27) | a residential connection |
+| --- | --- | --- |
+| with a cookie jar | every client: "Requested format is not available" | works (`251`/`96`) |
+| signed out | every client: "Sign in to confirm you're not a bot" | works (`251`) |
+
+Four clients were tried in production each time (`default`, `web_safari`,
+`web_embedded`, `mweb`). The signed-out message is YouTube's bot check
+verbatim; the signed-in one is the documented PO-token symptom — the wiki
+says a missing token yields "HTTP 403 errors **or** report formats as
+unavailable". Two different refusals of the same request, both keyed to the
+server's address. The item is public and the credential is healthy.
+
+### This supersedes §1.1b of SESSION_AUTH.md
+
+That entry rejected PO tokens on two grounds, and the ground has moved under
+the first one:
+
+- *"the bot check has decayed"* — it is back, measured above. The same entry
+  anticipated this: "Cookies remain the answer if the bot check returns."
+  They are not: cookies were measured against it today and the signed-in
+  request is refused too, just differently.
+- *"PO tokens do not guarantee bypassing 403 errors or bot checks"* — still
+  true, and still the reason this is a gamble rather than a fix.
+
+### The chosen direction, and its cost
+
+The user picked the PO token provider (`bgutil-ytdlp-pot-provider`) to try
+first, because it is free. Before starting, weigh what it actually costs:
+
+- A **fourth compose service** (`brainicism/bgutil-ytdlp-pot-provider`, port
+  4416). The capture service was deleted a day earlier *specifically* to stop
+  deploys being slow — this walks part of that back.
+- It is **Node.js ≥20 or Deno**, which is why `SESSION_AUTH.md` §1.1b called
+  it a collision with the Bun-only rule. As a separate container it does not
+  put Node in Relay's image, so the collision is weaker than it was — but it
+  is still a second runtime in the stack.
+- The plugin must reach the **standalone yt-dlp binary**, which has no pip.
+  Install path: drop `bgutil-ytdlp-pot-provider.zip` from the release into a
+  yt-dlp plugin directory in the runtime stage. Requires yt-dlp ≥ 2025.05.22
+  (we pin 2026.03.17, so this is satisfied).
+- Point the plugin at the sidecar with
+  `--extractor-args "youtubepot-bgutilhttp:base_url=http://<service>:4416"`.
+  It defaults to `127.0.0.1:4416`, which is wrong across compose services.
+- yt-dlp confirms none is installed today: `PO Token Providers: none`.
+
+**If it does not work**, the remaining lever is the one the evidence points
+at directly: route yt-dlp through a residential proxy (`--proxy`, one env
+var). It costs money, but only `bestaudio` is ever fetched — a Short is
+1-2 MB — so even a per-GB plan lasts a very long time.
+
+### Already shipped, so this is a degraded feature and not a broken one
+
+The failure is now reported honestly rather than blamed on the user:
+`BOT_CHECK` in `src/lib/media/download.ts` classifies it `SOURCE_UNAVAILABLE`
+and says the server is being challenged. It is tested BEFORE `UNAVAILABLE`
+because "Sign in to confirm you're not a bot" contains "sign in" — without
+that ordering it reads as `SESSION_EXPIRED`, tells the user to reconnect a
+working session, and burns a reject against the credential.
