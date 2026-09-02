@@ -1,55 +1,55 @@
 # Graph Report - relay  (2026-09-02)
 
 ## Corpus Check
-- 233 files · ~136,115 words
+- 241 files · ~144,019 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1579 nodes · 3693 edges · 118 communities (77 shown, 39 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 80 edges (avg confidence: 0.83)
+- 1618 nodes · 3797 edges · 111 communities (71 shown, 38 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 79 edges (avg confidence: 0.83)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4aa6c0c0`
+- Built from commit: `536428bb`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- credentials-row.tsx
+- runs-table.tsx
 - sidebar.tsx
 - Troubleshooting
-- utils.ts
+- link-icon.tsx
 - profile-card.tsx
-- import.ts
+- cookie-import-steps.tsx
 - scripts
 - schemas.ts
 - transcription/index.ts
 - biome.json
-- button.tsx
+- delete-agent.tsx
 - query/agents.ts
 - nav-user.tsx
 - compilerOptions
 - vault.ts
-- import-session-dialog.tsx
+- button.tsx
 - chat.ts
 - evidence.ts
 - ingest.ts
 - observability/client.ts
-- lib/providers.ts
+- utils.ts
 - config/index.ts
 - pipeline.ts
 - add-credential-dialog.tsx
 - Relay (PRD): short-form video to evidence-grounded Markdown
 - components.json
-- notion.ts
+- shape.ts
 - schema.ts
 - logger.ts
-- json-panel.tsx
-- extraction/route.ts
+- lib/runs.ts
+- extraction/index.ts
 - verify.ts
 - SESSION_AUTH: server-side cookie capture for social sources
-- runs/page.tsx
-- prompts/page.tsx
+- settings/page.tsx
+- extraction/prompts.ts
 - Relay UI/UX philosophy (data-dense command center)
 - catalog.ts
 - compose: capture service (Chromium, shm, seccomp)
@@ -57,33 +57,32 @@
 - §2.1 Capture runs in its own Bun process
 - `auth_users`
 - §3 Storage model (column mapping for a cookie credential)
-- field.tsx
+- edit-credential-dialog.tsx
 - cn
-- extraction/index.ts
-- lib/settings.ts
-- [[...route]]/route.ts
-- auth-session.ts
-- logger
+- pagination.tsx
+- whisper.ts
+- run-stage-timeline.tsx
+- auth-request.ts
+- document.ts
 - Relay README (stack, setup, layout)
 - Relay Brand Mark (logo.png)
-- apiFetch
-- binaries.ts
+- notion-guides.ts
+- run-facts.tsx
 - run-detail.tsx
 - rays.ts
 - Gemini wired for extraction
 - json-view.tsx
-- settings/page.tsx
-- admission.ts
+- linkify.tsx
+- logger
 - dependencies
-- lib/runs.ts
+- notion.ts
 - run-models.tsx
 - getDb
 - §4.2 withSourceCookies (materialize and destroy)
-- agents/page.tsx
-- verify-ytdlp.ts
+- import-session-dialog.tsx
+- run-raw-data.tsx
 - §1.1 YouTube GVS 403 (settled by measurement)
-- vault/page.tsx
-- media/cookies.ts
+- run-status-badge.tsx
 - proxy.ts
 - free-port.ts
 - privacy/page.tsx
@@ -123,26 +122,20 @@
 - postcss.config.mjs
 - Biome for lint+format, tsc only for typecheck
 - Generous scale (desktop command center sizing)
-- EditCredentialDialog
-- db/index.ts
-- sheet.tsx
-- schema-pipeline.ts
-- models.ts
-- download.ts
-- requireSession
+- smoke-test.ts
 - OpenObserveStream
 
 ## God Nodes (most connected - your core abstractions)
-1. `cn()` - 206 edges
+1. `cn()` - 218 edges
 2. `getDb()` - 54 edges
-3. `config` - 33 edges
-4. `Button()` - 31 edges
+3. `Button()` - 35 edges
+4. `config` - 33 edges
 5. `logger` - 25 edges
 6. `providerLabel()` - 24 edges
-7. `requireSession()` - 18 edges
-8. `toast` - 17 edges
-9. `compilerOptions` - 17 edges
-10. `Spinner()` - 16 edges
+7. `toast` - 18 edges
+8. `requireSession()` - 18 edges
+9. `Spinner()` - 17 edges
+10. `compilerOptions` - 17 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Component strictness: zero native form elements` --semantically_similar_to--> `UI rule: ShadCN components and HugeIcons only`  [INFERRED] [semantically similar]
@@ -166,99 +159,99 @@
 - **Evidence grounding chain (transcript to published citation)** — prd_evidence_grounding, llm_state_transcription_gotchas, llm_state_evidence_contract_structural, llm_state_evidence_verification_4_5, llm_state_document_tree_notion_publish [INFERRED 0.85]
 - **Relay Visual Identity System** — public_logo_relay_mark, public_logo_brand_palette, public_logo_relay_route_motif, public_logo_stacked_bars_motif, public_logo_app_icon_canvas [INFERRED 0.85]
 
-## Communities (118 total, 39 thin omitted)
+## Communities (111 total, 38 thin omitted)
 
-### Community 0 - "credentials-row.tsx"
-Cohesion: 0.07
-Nodes (51): dateFormat, AgentsTableSkeleton(), ROWS, TypeBadge(), QueryErrorState(), QueryStatusBar(), QueryStatusBarProps, QueryStatusBarSkeleton() (+43 more)
+### Community 0 - "runs-table.tsx"
+Cohesion: 0.05
+Nodes (64): AGENT_COLUMNS, dateFormat, AgentsTableSkeleton(), ROWS, TypeBadge(), DataColumn, DataTable(), PromptCard() (+56 more)
 
 ### Community 1 - "sidebar.tsx"
 Cohesion: 0.08
-Nodes (34): AppSidebar(), NAV, ProfileUser, ThemeToggle(), Sidebar(), SidebarContent(), SidebarContext, SidebarContextProps (+26 more)
+Nodes (35): AppSidebar(), NAV, ProfileUser, ThemeToggle(), Separator(), Sidebar(), SidebarContent(), SidebarContext (+27 more)
 
 ### Community 2 - "Troubleshooting"
 Cohesion: 0.07
 Nodes (27): 1. Open a private window, 1. Sign in, 2. Go to the export page, 2. Sign in to YouTube, 3. Export, 3. Navigate to robots.txt — in the same tab, 4. Export, then close the window immediately, 4. Upload (+19 more)
 
-### Community 3 - "utils.ts"
-Cohesion: 0.22
-Nodes (9): Brand, BRANDS, faviconFor(), LinkIcon(), secondLevel(), SOURCE_ICON, SourceIcon(), Separator() (+1 more)
+### Community 3 - "link-icon.tsx"
+Cohesion: 0.29
+Nodes (8): Brand, BRANDS, faviconFor(), LinkIcon(), secondLevel(), SOURCE_ICON, SourceIcon(), sourceIdForHost()
 
 ### Community 4 - "profile-card.tsx"
-Cohesion: 0.18
-Nodes (13): RunStatusBadge(), ChangePasswordForm(), Card(), CardAction(), CardContent(), CardDescription(), CardFooter(), CardHeader() (+5 more)
+Cohesion: 0.19
+Nodes (11): ChangePasswordForm(), Card(), CardAction(), CardContent(), CardDescription(), CardFooter(), CardHeader(), CardTitle() (+3 more)
 
-### Community 5 - "import.ts"
-Cohesion: 0.12
-Nodes (21): BROWSERS, CONNECT_STEPS, ConnectStepBody(), useBrowser(), MediaSourceId, SocialProviderInfo, cookieImportSchema, assertSerializable() (+13 more)
+### Community 5 - "cookie-import-steps.tsx"
+Cohesion: 0.10
+Nodes (27): BrowserGuide, BROWSERS, ConnectPlatform, DEFAULT_GUIDE, FIREFOX_ANDROID_STORE, useBrowserGuide(), CopyableUrl(), Note() (+19 more)
 
 ### Community 6 - "scripts"
 Cohesion: 0.05
 Nodes (36): @biomejs/biome, drizzle-kit, devDependencies, @biomejs/biome, drizzle-kit, tailwindcss, @tailwindcss/postcss, @types/bun (+28 more)
 
 ### Community 7 - "schemas.ts"
-Cohesion: 0.14
-Nodes (16): SUPPORTED_SOURCE_LABELS, credentialsQueryOptions(), fetchCredentials(), UpdateCredentialVariables, useCredentials(), agentInputSchema, agentUpdateSchema, AI_PROVIDER_IDS (+8 more)
+Cohesion: 0.09
+Nodes (26): MediaSource, parseSourceUrl(), sourceLabel(), SUPPORTED_SOURCE_LABELS, AI_KEY_PROVIDERS, PROVIDER_IDS, credentialsQueryOptions(), fetchCredentials() (+18 more)
 
 ### Community 8 - "transcription/index.ts"
-Cohesion: 0.13
-Nodes (25): NoTranscriptionKeyError, ResolvedProvider, resolveProvider(), transcribe(), Transcription, providers, TRANSCRIPTION_ORDER, transcriptionProvider (+17 more)
+Cohesion: 0.18
+Nodes (17): NoTranscriptionKeyError, ResolvedProvider, resolveProvider(), transcribe(), Transcription, providers, TRANSCRIPTION_ORDER, transcriptionProvider (+9 more)
 
 ### Community 9 - "biome.json"
 Cohesion: 0.06
 Nodes (32): css, parser, next, react, files, includes, formatter, enabled (+24 more)
 
-### Community 10 - "button.tsx"
-Cohesion: 0.25
-Nodes (17): DisabledActionSlot(), AlertDialog(), AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader() (+9 more)
+### Community 10 - "delete-agent.tsx"
+Cohesion: 0.17
+Nodes (19): ACCENT, FALLBACK, DeleteRun(), AlertDialog(), AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription() (+11 more)
 
 ### Community 11 - "query/agents.ts"
-Cohesion: 0.11
-Nodes (24): AgentFormDialog(), onOpenChange(), initialModeFor(), AgentFormFields(), AgentStatusToggle(), AgentFormMode, DEFAULT_CONFIG, DEFAULT_SCHEMA (+16 more)
+Cohesion: 0.10
+Nodes (27): AgentFormDialog(), onOpenChange(), initialModeFor(), AgentFormFields(), AgentStatusToggle(), DeleteAgent(), AgentFormMode, DEFAULT_CONFIG (+19 more)
 
 ### Community 12 - "nav-user.tsx"
-Cohesion: 0.12
-Nodes (17): NavUser(), ProfileCard(), DropdownMenu(), DropdownMenuCheckboxItem(), DropdownMenuContent(), DropdownMenuGroup(), DropdownMenuItem(), DropdownMenuLabel() (+9 more)
+Cohesion: 0.09
+Nodes (23): NavUser(), ProfileCard(), Avatar(), AvatarBadge(), AvatarFallback(), AvatarGroup(), AvatarGroupCount(), AvatarImage() (+15 more)
 
 ### Community 13 - "compilerOptions"
 Cohesion: 0.06
 Nodes (30): dom, dom.iterable, esnext, **/*.mts, next.config.ts, .next/dev/types/**/*.ts, next-env.d.ts, .next/types/**/*.ts (+22 more)
 
 ### Community 14 - "vault.ts"
-Cohesion: 0.25
-Nodes (12): encrypt(), CredentialType, ImportResult, createCredential(), CredentialMetaPatch, deleteCredential(), MASKED_COLUMNS, MaskedCredential (+4 more)
+Cohesion: 0.12
+Nodes (25): decrypt(), encrypt(), EncryptedPayload, getMasterKey(), credentials, CredentialType, persistRotation(), SourceCookies (+17 more)
 
-### Community 15 - "import-session-dialog.tsx"
-Cohesion: 0.16
-Nodes (20): ACCENT, ModalAccent, ModalProps, ModalSize, SIZE, NewRunDialog(), Dialog(), DialogClose() (+12 more)
+### Community 15 - "button.tsx"
+Cohesion: 0.17
+Nodes (17): DisabledActionSlot(), ACCENT, ModalAccent, ModalProps, ModalSize, SIZE, canRetry(), RetryRun() (+9 more)
 
 ### Community 16 - "chat.ts"
-Cohesion: 0.18
-Nodes (14): attemptPass(), ChatRun, disposition(), NoExtractionKeyError, PassResult, retryAfterMs(), runChat(), chatCompletion() (+6 more)
+Cohesion: 0.10
+Nodes (31): attemptPass(), ChatRun, disposition(), PassResult, retryAfterMs(), asArray(), asNumber(), isFree() (+23 more)
 
 ### Community 17 - "evidence.ts"
 Cohesion: 0.10
 Nodes (19): COMPACT_EVIDENCE, Evidence, EVIDENCE_SCHEMA, EvidenceKind, isEvidence(), isTranscriptEvidence(), isVisualEvidence(), SchemaFragment (+11 more)
 
 ### Community 18 - "ingest.ts"
-Cohesion: 0.23
-Nodes (14): BinaryVersions, ensureMediaBinaries(), IngestErrorCode, lastLine(), MediaIngestError, exists(), extractAudio(), ingest() (+6 more)
+Cohesion: 0.11
+Nodes (30): BINARIES, BinarySpec, BinaryVersions, detectBinary(), detected, ensureMediaBinaries(), firstLine(), MediaBinaryError (+22 more)
 
 ### Community 19 - "observability/client.ts"
 Cohesion: 0.21
 Nodes (11): ErrorBoundaryState, TelemetryErrorBoundary, TelemetryProvider(), alreadyInitialized(), browserOptions, ClientEvent, initTelemetry(), send() (+3 more)
 
-### Community 20 - "lib/providers.ts"
+### Community 20 - "utils.ts"
 Cohesion: 0.13
-Nodes (23): ProviderMark(), ProviderOrderRow, ProviderOrderRowProps, ProviderCard(), ProviderCardProps, ProviderPicker(), RayProviderGrid(), SocialProviderGrid() (+15 more)
+Nodes (22): ProviderMark(), ProviderOrderRow, ProviderOrderRowProps, ProviderCard(), ProviderCardProps, ProviderPicker(), RayProviderGrid(), SocialProviderGrid() (+14 more)
 
 ### Community 21 - "config/index.ts"
-Cohesion: 0.15
-Nodes (8): LoginForm(), metadata, metadata, AppConfig, config, PORT, YOUTUBE_CLIENTS, API_BASE
+Cohesion: 0.09
+Nodes (18): attempt(), CHAIN, FIXTURES, label(), main(), worker, LoginForm(), metadata (+10 more)
 
 ### Community 22 - "pipeline.ts"
-Cohesion: 0.47
-Nodes (8): codeOf(), descriptionOf(), isPermanent(), messageOf(), titleOf(), processRun(), isPermanentPublishError(), isPermanentTranscriptionError()
+Cohesion: 0.37
+Nodes (10): codeOf(), descriptionOf(), isPermanent(), messageOf(), titleOf(), processRun(), startRunWorker(), isPermanentPublishError() (+2 more)
 
 ### Community 23 - "add-credential-dialog.tsx"
 Cohesion: 0.26
@@ -272,45 +265,49 @@ Nodes (23): 0.2.0 - Credentials Dashboard & Notion Ray, Task 4.4-4.6: Extraction
 Cohesion: 0.09
 Nodes (21): aliases, components, hooks, lib, ui, utils, iconLibrary, menuAccent (+13 more)
 
-### Community 26 - "notion.ts"
-Cohesion: 0.06
-Nodes (49): ClaimFinding, REASON_TEXT, Item(), RunExtraction(), countEvidence(), Evidence, evidenceRange(), ExtractedField (+41 more)
+### Community 26 - "shape.ts"
+Cohesion: 0.17
+Nodes (17): ClaimFinding, REASON_TEXT, Item(), RunExtraction(), countEvidence(), Evidence, evidenceRange(), ExtractedItem (+9 more)
 
 ### Community 27 - "schema.ts"
-Cohesion: 0.15
-Nodes (12): Agent, authSessions, authVerifications, Credential, credentials, NewAgent, NewCredential, NewRelayRun (+4 more)
+Cohesion: 0.10
+Nodes (20): Agent, authSessions, authUsers, authVerifications, Credential, NewAgent, NewCredential, NewRelayRun (+12 more)
 
 ### Community 28 - "logger.ts"
-Cohesion: 0.16
-Nodes (12): isSensitiveKey(), LogEventInput, logFileStream, LogLevel, OpenObserveConfig, openObserveMiddleware(), pino, pinoLogger (+4 more)
+Cohesion: 0.07
+Nodes (31): app, DELETE, GET, PATCH, POST, PUT, ingest(), isSensitiveKey() (+23 more)
 
-### Community 30 - "extraction/route.ts"
-Cohesion: 0.14
-Nodes (24): cacheKeys, loadPrompt(), PROMPT_SEEDS, promptFor(), PromptSeed, resetPrompt(), seedPrompts(), classify() (+16 more)
+### Community 29 - "lib/runs.ts"
+Cohesion: 0.25
+Nodes (13): RunStatus, fetchRun(), fetchRuns(), hasActiveRuns(), runDetailQueryOptions(), runsQueryOptions(), useRuns(), isTerminal() (+5 more)
+
+### Community 30 - "extraction/index.ts"
+Cohesion: 0.10
+Nodes (38): NoExtractionKeyError, runChat(), SkippedModel, compactSchemaForPrompt(), asObject(), buildSystem(), extract(), Extraction (+30 more)
 
 ### Community 31 - "verify.ts"
-Cohesion: 0.15
-Nodes (18): normalise(), NormalisedTranscript, normaliseTranscript(), check(), contentWords(), Finding, isRecord(), pointerSegment() (+10 more)
+Cohesion: 0.16
+Nodes (17): normalise(), NormalisedTranscript, normaliseTranscript(), check(), contentWords(), Finding, isRecord(), pointerSegment() (+9 more)
 
 ### Community 32 - "SESSION_AUTH: server-side cookie capture for social sources"
 Cohesion: 0.14
 Nodes (19): Queue admission control (src/lib/queue/admission.ts), Capture security model (loopback CDP, ticket, fenced navigation), Deferral via moveToDelayed + DelayedError, Deferred: social cookie credentials (2026-08-31 decision), Per-user slot semaphore (fairness), Per-credential rate budget as a rolling window, Zod validates all external input at the API boundary, Branch A: yt-dlp-only consolidation (+11 more)
 
-### Community 33 - "runs/page.tsx"
-Cohesion: 0.16
-Nodes (14): AgentsData(), dynamic, metadata, Params, RunData(), RunPage(), dynamic, metadata (+6 more)
+### Community 33 - "settings/page.tsx"
+Cohesion: 0.05
+Nodes (57): AgentsData(), AgentsPage(), dynamic, metadata, DashboardCatchAll(), generateMetadata(), Params, sectionTitle() (+49 more)
 
-### Community 34 - "prompts/page.tsx"
-Cohesion: 0.15
-Nodes (17): dynamic, metadata, PromptsData(), PromptsPage(), ACCENT, FALLBACK, PromptCard(), PromptsList() (+9 more)
+### Community 34 - "extraction/prompts.ts"
+Cohesion: 0.29
+Nodes (9): dynamic, metadata, PromptsData(), listPrompts(), PROMPT_SEEDS, PromptKey, PromptSeed, seedPrompts() (+1 more)
 
 ### Community 35 - "Relay UI/UX philosophy (data-dense command center)"
 Cohesion: 0.13
 Nodes (18): 0.1.0 - Foundation & Database, Component strictness: zero native form elements, GSAP animation standards (useGSAP, guarded refs), ShadCN preset b5pFrsf5Vq (mira/zinc/emerald), Typography & iconography (Oxanium, Space Grotesk, JetBrains Mono, HugeIcons), Relay UI/UX philosophy (data-dense command center), Authenticated browser verification via signed auth_sessions cookie, Explicit Clone replaces copy-on-write for System agents (+10 more)
 
 ### Community 36 - "catalog.ts"
-Cohesion: 0.21
-Nodes (18): cached(), client(), get(), globalForCache, invalidate(), keyFor(), put(), readThrough() (+10 more)
+Cohesion: 0.19
+Nodes (20): cached(), cacheKeys, client(), get(), globalForCache, invalidate(), keyFor(), put() (+12 more)
 
 ### Community 37 - "compose: capture service (Chromium, shm, seccomp)"
 Cohesion: 0.16
@@ -332,33 +329,33 @@ Nodes (10): `agents`, `auth_accounts`, `auth_sessions`, `auth_users`, `auth_veri
 Cohesion: 0.17
 Nodes (15): additional_data reduced to a derived `stale` boolean, BYOK encrypted credential vault, Security rule: encrypted tokens, plaintext meta_data, never logged, §3.2 expires_at is a floor on uselessness, §4.4 Capture logging allowlist, §3.3 What must never enter meta_data, §3.5 Migration: NONE (Drizzle enum is TypeScript-level), §3.4 Reconnect works with no new code (+7 more)
 
-### Community 42 - "field.tsx"
-Cohesion: 0.15
-Nodes (14): Field(), FieldContent(), FieldDescription(), FieldError(), FieldGroup(), FieldLegend(), FieldSeparator(), FieldSet() (+6 more)
+### Community 42 - "edit-credential-dialog.tsx"
+Cohesion: 0.12
+Nodes (27): Dialog(), DialogContent(), DialogDescription(), DialogFooter(), DialogHeader(), DialogOverlay(), DialogTitle(), DialogTrigger() (+19 more)
 
 ### Community 43 - "cn"
-Cohesion: 0.12
-Nodes (25): Avatar(), AvatarBadge(), AvatarFallback(), AvatarGroup(), AvatarGroupCount(), AvatarImage(), Breadcrumb(), BreadcrumbEllipsis() (+17 more)
+Cohesion: 0.09
+Nodes (28): Breadcrumb(), BreadcrumbEllipsis(), BreadcrumbItem(), BreadcrumbLink(), BreadcrumbList(), BreadcrumbPage(), BreadcrumbSeparator(), ResizableHandle() (+20 more)
 
-### Community 44 - "extraction/index.ts"
-Cohesion: 0.20
-Nodes (17): SkippedModel, compactSchemaForPrompt(), asObject(), buildSystem(), extract(), Extraction, ExtractionError, formatTranscript() (+9 more)
+### Community 44 - "pagination.tsx"
+Cohesion: 0.24
+Nodes (12): PageSlot, pageWindow(), RunsPagination(), buttonVariants, Pagination(), PaginationContent(), PaginationEllipsis(), PaginationItem() (+4 more)
 
-### Community 45 - "lib/settings.ts"
-Cohesion: 0.17
-Nodes (15): chatProvider, ChatTask, EXTRACTION_ORDER, OLLAMA_CAPABILITIES, providers, AiKeyProviderId, isKeylessProvider(), extractionOrderSchema (+7 more)
+### Community 45 - "whisper.ts"
+Cohesion: 0.25
+Nodes (9): NOTE: deliberately no `prompt`. A decoding prompt does not make Whisper, runWhisper(), scrub(), toSegments(), toSpeechConfidence(), TranscriptionError, VerboseJson, WhisperResult (+1 more)
 
-### Community 46 - "[[...route]]/route.ts"
-Cohesion: 0.11
-Nodes (17): app, DELETE, GET, PATCH, POST, PUT, PromptKey, updatePrompt() (+9 more)
+### Community 46 - "run-stage-timeline.tsx"
+Cohesion: 0.27
+Nodes (8): DOT, formatMs(), RunStageTimeline(), STAGE_ICON, StageState, PIPELINE_STAGES, RUN_STATUS_META, RUN_STATUSES
 
-### Community 47 - "auth-session.ts"
-Cohesion: 0.21
-Nodes (10): { GET, POST }, Home(), LandingPage(), marquee, stories, auth, authSchema, AuthSession (+2 more)
+### Community 47 - "auth-request.ts"
+Cohesion: 0.43
+Nodes (4): { GET, POST }, auth, authSchema, AuthSession
 
-### Community 48 - "logger"
-Cohesion: 0.21
-Nodes (12): worker, logger, createRedis(), getRedis(), globalForRedis, startWorkerHealthServer(), enqueueRun(), getRunsQueue() (+4 more)
+### Community 48 - "document.ts"
+Cohesion: 0.40
+Nodes (9): ExtractedField, buildDocument(), FACT_FIELDS, itemLine(), LEAD_FIELDS, sectionFor(), sentence(), stepNote() (+1 more)
 
 ### Community 49 - "Relay README (stack, setup, layout)"
 Cohesion: 0.20
@@ -368,109 +365,81 @@ Nodes (12): Next.js Agent Rules (read node_modules docs first), LLM Execution St
 Cohesion: 0.33
 Nodes (11): Public Static App Icon Asset, Square 1024x1024 App-Icon Canvas, Brand Palette: Emerald Green + Navy Accent on White, Arrow-Into-Stack Interlock Composition, Media Relay / Extraction Product Identity, Play / Forward-Arrow Triangle Motif, Relay Brand Mark (logo.png), Relay (Brand Name) (+3 more)
 
-### Community 51 - "apiFetch"
-Cohesion: 0.20
-Nodes (7): DeleteAgent(), DeleteRun(), DeleteCredential(), useDeleteAgent(), useDeleteCredential(), apiFetch(), useDeleteRun()
+### Community 51 - "notion-guides.ts"
+Cohesion: 0.36
+Nodes (8): ensureCategoryPage(), ensureEntriesDataSource(), ensureGuidesTarget(), findGuidesDataSource(), GuidesTarget, NotionGuidesError, plainTitle(), titlePropertyName()
 
-### Community 52 - "binaries.ts"
-Cohesion: 0.31
-Nodes (7): BINARIES, BinarySpec, detectBinary(), detected, firstLine(), MediaBinaryError, missingMessage()
+### Community 52 - "run-facts.tsx"
+Cohesion: 0.33
+Nodes (8): Fact, FactList(), numberFormat, processingFacts(), seconds(), sourceFacts(), text(), uploadDate()
 
 ### Community 53 - "run-detail.tsx"
-Cohesion: 0.05
-Nodes (50): ExternalLink(), hostOf(), Linkify(), Token, tokenize(), PublishedPanel(), dateFormat, RunDetailHeader() (+42 more)
+Cohesion: 0.13
+Nodes (15): dateFormat, RunDetail(), FACTS, RunDetailSkeleton(), STAGES, RunTranscript(), Segment, stamp() (+7 more)
 
 ### Community 54 - "rays.ts"
-Cohesion: 0.24
-Nodes (11): RayProviderId, rayCallbackSchema, configuredRayIds(), getProvider(), isConfigured(), providers, RayProvider, redirectUri() (+3 more)
+Cohesion: 0.31
+Nodes (9): RayProviderId, configuredRayIds(), getProvider(), isConfigured(), providers, RayProvider, redirectUri(), stateCookieName() (+1 more)
 
 ### Community 55 - "Gemini wired for extraction"
 Cohesion: 0.24
 Nodes (10): Agent sprawl: the router was the cause, disposition(): 5xx is next-model, not fail, Gemini wired for extraction, The gemma `excludes` wrong turn, isolate() and the unterminated trailing fence, Capability-driven model ranking heuristics, Ollama local + cloud provider, Every prompt lives in the database with Redis hot cache (+2 more)
 
 ### Community 56 - "json-view.tsx"
-Cohesion: 0.18
-Nodes (11): JsonPanel(), onCopy(), useCollapseAll(), JSON_EDITOR_BASE, THEME, JsonInput(), JsonView(), RunRawData() (+3 more)
+Cohesion: 0.27
+Nodes (7): JsonPanel(), onCopy(), useCollapseAll(), JSON_EDITOR_BASE, THEME, JsonInput(), JsonView()
 
-### Community 57 - "settings/page.tsx"
-Cohesion: 0.19
-Nodes (11): dynamic, metadata, SettingsPage(), ProviderOrderCard(), SecurityCard(), authAccounts, settingKeys, extractionOrderQueryOptions() (+3 more)
+### Community 57 - "linkify.tsx"
+Cohesion: 0.36
+Nodes (6): ExternalLink(), hostOf(), Linkify(), Token, tokenize(), PublishedPanel()
 
-### Community 58 - "admission.ts"
-Cohesion: 0.32
-Nodes (12): acquire(), acquireUserSlot(), Admission, admitRun(), budgetKey(), chargeBudget(), checkWindow(), credentialLockKey() (+4 more)
+### Community 58 - "logger"
+Cohesion: 0.17
+Nodes (20): logger, acquire(), acquireUserSlot(), Admission, admitRun(), budgetKey(), chargeBudget(), checkWindow() (+12 more)
 
 ### Community 59 - "dependencies"
 Cohesion: 0.22
 Nodes (9): @base-ui/react, @dnd-kit/utilities, hono, @openobserve/browser-rum, dependencies, @base-ui/react, @dnd-kit/utilities, hono (+1 more)
 
-### Community 60 - "lib/runs.ts"
-Cohesion: 0.28
-Nodes (12): MEDIA_SOURCES, MediaSource, parseSourceUrl(), sourceLabel(), createRun(), deleteRun(), getRun(), listRuns() (+4 more)
+### Community 60 - "notion.ts"
+Cohesion: 0.15
+Nodes (17): VerificationSummary, DocNode, RelayDocument, factLine(), NotionBlock, richText(), TextOptions, toBlocks() (+9 more)
 
 ### Community 61 - "run-models.tsx"
 Cohesion: 0.29
 Nodes (6): MODE_LABEL, Phase, phasesFrom(), ProviderChip(), RunModels(), STAGE_BAR
 
 ### Community 62 - "getDb"
-Cohesion: 0.41
-Nodes (10): DuplicateAgentNameError, nameTaken(), createAgent(), deleteAgent(), listAgents(), setAgentActive(), toSummary(), updateAgent() (+2 more)
+Cohesion: 0.24
+Nodes (15): DuplicateAgentNameError, nameTaken(), createAgent(), deleteAgent(), listAgents(), setAgentActive(), toSummary(), updateAgent() (+7 more)
 
 ### Community 63 - "§4.2 withSourceCookies (materialize and destroy)"
 Cohesion: 0.33
 Nodes (6): Per-credential jar lock (correctness), Jar write-back on a FAILED download (bug), §3.6 getSecretByType (vault widening), §4.2 Jar rotation write-back (--cookies is read-write), §4.2 withSourceCookies (materialize and destroy), §4.2b YouTube's stricter cookie rules
 
-### Community 64 - "agents/page.tsx"
-Cohesion: 0.24
-Nodes (7): dynamic, metadata, metadata, AgentsTable(), ShellContent(), ShellHeader(), DashboardNotFoundPanel()
+### Community 64 - "import-session-dialog.tsx"
+Cohesion: 0.36
+Nodes (4): ConnectRail(), RailStep, IMPORT_FORM_ID, ImportUploadForm()
 
-### Community 65 - "verify-ytdlp.ts"
-Cohesion: 0.47
-Nodes (5): attempt(), CHAIN, FIXTURES, label(), main()
+### Community 65 - "run-raw-data.tsx"
+Cohesion: 0.53
+Nodes (4): RunRawData(), Collapsible(), CollapsibleContent(), CollapsibleTrigger()
 
 ### Community 66 - "§1.1 YouTube GVS 403 (settled by measurement)"
 Cohesion: 0.60
 Nodes (5): Phase 0: YouTube GVS 403 and player_client fallbacks, bun run verify:ytdlp acceptance test, §1.1b PO tokens rejected, §1.1 YouTube GVS 403 (settled by measurement), Risk #8: the yt-dlp pin is stale with no bump cadence
 
-### Community 67 - "vault/page.tsx"
-Cohesion: 0.26
-Nodes (9): dynamic, metadata, VaultData(), VaultPage(), VaultActions(), VaultNotices(), agentKeys, credentialKeys (+1 more)
-
-### Community 68 - "media/cookies.ts"
-Cohesion: 0.29
-Nodes (9): decrypt(), EncryptedPayload, getMasterKey(), persistRotation(), SourceCookies, withSourceCookies(), getSecretByType(), recordSessionOutcome() (+1 more)
+### Community 67 - "run-status-badge.tsx"
+Cohesion: 0.53
+Nodes (4): RunStatusBadge(), Badge(), badgeVariants, runStatusMeta
 
 ### Community 69 - "proxy.ts"
 Cohesion: 0.60
 Nodes (4): config, proxy(), redact(), sendTrace()
 
-### Community 110 - "EditCredentialDialog"
-Cohesion: 0.60
-Nodes (5): currentAccount(), EditCredentialDialog(), reset(), submit(), useUpdateCredential()
-
-### Community 111 - "db/index.ts"
-Cohesion: 0.18
-Nodes (9): db, indexes, raw, tables, { construct }, { createClient }, createDb(), globalForDb (+1 more)
-
-### Community 112 - "sheet.tsx"
-Cohesion: 0.18
-Nodes (7): Sheet(), SheetContent(), SheetDescription(), SheetFooter(), SheetHeader(), SheetOverlay(), SheetTitle()
-
-### Community 113 - "schema-pipeline.ts"
-Cohesion: 0.20
-Nodes (9): authUsers, ModelCatalog, NewModelCatalog, NewPrompt, NewUserSetting, Prompt, prompts, UserSetting (+1 more)
-
-### Community 114 - "models.ts"
-Cohesion: 0.36
-Nodes (9): asArray(), asNumber(), isFree(), normaliseCatalog(), normaliseModel(), parameterCount(), rankModels(), sizeScore() (+1 more)
-
-### Community 115 - "download.ts"
-Cohesion: 0.31
-Nodes (9): download(), DownloadResult, downloadWithYtDlp(), DROPPED_INFO_KEYS, isPlaceholderTitle(), pruneInfo(), runYtDlp(), withSyntheticTitle() (+1 more)
-
-### Community 116 - "requireSession"
-Cohesion: 0.33
-Nodes (8): AgentsPage(), DashboardCatchAll(), generateMetadata(), Params, sectionTitle(), titleCase(), DashboardLayout(), requireSession()
+### Community 111 - "smoke-test.ts"
+Cohesion: 0.40
+Nodes (4): db, indexes, raw, tables
 
 ### Community 117 - "OpenObserveStream"
 Cohesion: 0.48
@@ -481,24 +450,24 @@ Nodes (3): flushAll(), OpenObserveStream, installShutdownHandlers()
   public/google81b6e6165b427f27.html · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **350 isolated node(s):** `$schema`, `enabled`, `clientKind`, `useIgnoreFile`, `src/**` (+345 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 460 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **39 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **358 isolated node(s):** `$schema`, `enabled`, `clientKind`, `useIgnoreFile`, `src/**` (+353 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 468 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **38 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Project layout (src/app, lib/db, observability, crypto, schemas)` and `Google Search Console site-verification file`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `cn()` connect `cn` to `credentials-row.tsx`, `sidebar.tsx`, `utils.ts`, `profile-card.tsx`, `button.tsx`, `query/agents.ts`, `nav-user.tsx`, `import-session-dialog.tsx`, `lib/providers.ts`, `add-credential-dialog.tsx`, `notion.ts`, `json-panel.tsx`, `prompts/page.tsx`, `toast.tsx`, `field.tsx`, `run-detail.tsx`, `json-view.tsx`, `run-models.tsx`, `sheet.tsx`?**
-  _High betweenness centrality (0.123) - this node is a cross-community bridge._
-- **Why does `config` connect `config/index.ts` to `sidebar.tsx`, `utils.ts`, `vault.ts`, `chat.ts`, `ingest.ts`, `notion.ts`, `logger.ts`, `extraction/route.ts`, `catalog.ts`, `toast.tsx`, `lib/settings.ts`, `[[...route]]/route.ts`, `auth-session.ts`, `logger`, `binaries.ts`, `rays.ts`, `admission.ts`, `verify-ytdlp.ts`, `media/cookies.ts`, `db/index.ts`, `download.ts`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
-- **Why does `getDb()` connect `getDb` to `prompts/page.tsx`, `vault/page.tsx`, `catalog.ts`, `media/cookies.ts`, `lib/settings.ts`, `[[...route]]/route.ts`, `db/index.ts`, `auth-session.ts`, `evidence.ts`, `logger`, `vault.ts`, `chat.ts`, `settings/page.tsx`, `admission.ts`, `lib/runs.ts`, `extraction/route.ts`?**
-  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+- **Why does `cn()` connect `cn` to `runs-table.tsx`, `sidebar.tsx`, `link-icon.tsx`, `profile-card.tsx`, `delete-agent.tsx`, `query/agents.ts`, `nav-user.tsx`, `button.tsx`, `utils.ts`, `add-credential-dialog.tsx`, `shape.ts`, `toast.tsx`, `edit-credential-dialog.tsx`, `pagination.tsx`, `run-stage-timeline.tsx`, `run-detail.tsx`, `json-view.tsx`, `linkify.tsx`, `run-models.tsx`, `import-session-dialog.tsx`, `run-raw-data.tsx`, `run-status-badge.tsx`?**
+  _High betweenness centrality (0.112) - this node is a cross-community bridge._
+- **Why does `config` connect `config/index.ts` to `sidebar.tsx`, `extraction/prompts.ts`, `link-icon.tsx`, `catalog.ts`, `toast.tsx`, `vault.ts`, `auth-request.ts`, `chat.ts`, `notion.ts`, `ingest.ts`, `pipeline.ts`, `rays.ts`, `logger`, `logger.ts`, `getDb`?**
+  _High betweenness centrality (0.050) - this node is a cross-community bridge._
+- **Why does `getDb()` connect `getDb` to `settings/page.tsx`, `extraction/prompts.ts`, `catalog.ts`, `schemas.ts`, `transcription/index.ts`, `notion.ts`, `auth-request.ts`, `chat.ts`, `evidence.ts`, `vault.ts`, `pipeline.ts`, `logger`, `logger.ts`, `lib/runs.ts`, `extraction/index.ts`?**
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._
 - **What connects `$schema`, `enabled`, `clientKind` to the rest of the system?**
-  _350 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `credentials-row.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.07394366197183098 - nodes in this community are weakly interconnected._
+  _358 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `runs-table.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.05225885225885226 - nodes in this community are weakly interconnected._
 - **Should `sidebar.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.08048780487804878 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07641196013289037 - nodes in this community are weakly interconnected._
