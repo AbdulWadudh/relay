@@ -86,11 +86,19 @@ export function TypeBadge({ type }: { type: MaskedCredential["type"] }) {
 }
 
 /**
- * Shown only once the jar has been rejected `staleAfterRejects` times in a
- * row (SESSION_AUTH.md §4.3) — a healthy session needs no call to action,
- * and a single transient checkpoint should not nag. Row-scoped per
- * RULES.md:60: this operates on an existing record, so it lives in the
- * record's own row rather than the page header.
+ * Offered on EVERY cookie row, not only a stale one.
+ *
+ * SESSION_AUTH.md §4.3 gates the *prompt* on `staleAfterRejects` so a
+ * single transient checkpoint does not nag, and that still holds — but a
+ * jar can be dead long before Relay has tried it twice (the user signed
+ * out elsewhere, or Google rotated the session), and until then the row
+ * offered no way to replace it at all. Gating the alarm is right; gating
+ * the *action* left the only fix unreachable.
+ *
+ * So the button is always here and stale only changes its urgency: amber
+ * and "expired" once rejected, quiet otherwise. Row-scoped per
+ * RULES.md:60 — it operates on an existing record, so it lives in that
+ * record's row rather than the page header.
  */
 function ReconnectSession({ credential }: { credential: MaskedCredential }) {
   const [open, setOpen] = React.useState(false)
@@ -103,7 +111,12 @@ function ReconnectSession({ credential }: { credential: MaskedCredential }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              className="text-amber-700 transition-all duration-200 hover:-translate-y-px hover:bg-amber-600 hover:text-white dark:text-amber-300 dark:hover:bg-amber-600"
+              className={cn(
+                "transition-all duration-200 hover:-translate-y-px hover:text-white",
+                credential.stale
+                  ? "text-amber-700 hover:bg-amber-600 dark:text-amber-300 dark:hover:bg-amber-600"
+                  : "hover:bg-fuchsia-600 dark:hover:bg-fuchsia-600",
+              )}
               aria-label={`Reconnect ${label}`}
               onClick={() => setOpen(true)}
             />
@@ -112,13 +125,26 @@ function ReconnectSession({ credential }: { credential: MaskedCredential }) {
           <HugeiconsIcon icon={RefreshIcon} strokeWidth={1.5} />
         </TooltipTrigger>
         <TooltipContent>
-          Session expired — sign in to {label} again
+          {credential.stale
+            ? `Session expired. Sign in to ${label} again`
+            : `Replace this ${label} session with a fresh export`}
         </TooltipContent>
       </Tooltip>
       <ImportSessionDialog
         provider={credential.provider}
         open={open}
         onOpenChange={setOpen}
+        // Names the row being reconnected, so the fresh jar REPLACES this
+        // credential instead of landing beside it. YouTube publishes no
+        // non-secret account id, so this row's own id is the only identity
+        // the import has to dedupe on.
+        replaces={credential.id}
+        // `account_name`, not `credential.label` — the import route stores
+        // the name the user typed under the registry's generic account key,
+        // while `toMasked` derives `label` from `meta_data.label`, which a
+        // cookie credential never has. Reading the wrong one silently
+        // prefilled nothing and a reconnect dropped the account's name.
+        defaultLabel={metaString(credential, "account_name") ?? undefined}
       />
     </>
   )
@@ -137,7 +163,7 @@ export function StaleBadge({ credential }: { credential: MaskedCredential }) {
 export function RowActions({ credential }: { credential: MaskedCredential }) {
   return (
     <div className="flex items-center justify-end gap-1">
-      {credential.type === "cookie" && credential.stale ? (
+      {credential.type === "cookie" ? (
         <ReconnectSession credential={credential} />
       ) : null}
       {credential.type === "oauth" ? (

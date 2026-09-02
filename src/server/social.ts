@@ -65,6 +65,12 @@ socialModule.post("/:provider/import", async (c) => {
    * `createCredential` replaces on (user, provider, account_id), so
    * re-importing the same account updates in place rather than
    * accumulating rows — inherited behaviour, no special casing here.
+   *
+   * `replaces` covers the case that key cannot: a provider whose jar
+   * carries no non-secret account id (YouTube) has nothing to dedupe on,
+   * so a Reconnect names the row it came from. Scoped to this user and
+   * provider inside `createCredential`, so an id from elsewhere matches
+   * nothing rather than deleting someone else's credential.
    */
   const credential = await createCredential(
     {
@@ -84,6 +90,7 @@ socialModule.post("/:provider/import", async (c) => {
       },
     },
     session.user.id,
+    parsed.data.replaces,
   )
 
   logger.info("Social session imported", {

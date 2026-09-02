@@ -30,6 +30,8 @@ export function useImportCookies() {
       provider: string
       cookieJar: string
       label?: string
+      /** Credential this import supersedes, when reconnecting a row. */
+      replaces?: string
     }): Promise<ImportResult> =>
       await apiFetch<ImportResult>(
         `/social/${encodeURIComponent(input.provider)}/import`,
@@ -38,6 +40,7 @@ export function useImportCookies() {
           body: JSON.stringify({
             cookieJar: input.cookieJar,
             label: input.label,
+            replaces: input.replaces,
           }),
         },
       ),

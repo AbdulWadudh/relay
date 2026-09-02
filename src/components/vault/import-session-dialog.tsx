@@ -51,10 +51,20 @@ export function ImportSessionDialog({
   provider: providerId,
   open,
   onOpenChange,
+  replaces,
+  defaultLabel,
 }: {
   provider: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * Set when the wizard was opened from a Vault row's Reconnect action:
+   * the credential this import supersedes. Without it a provider that
+   * exposes no account id would gain a second row beside the old one.
+   */
+  replaces?: string
+  /** The replaced credential's label, so reconnecting does not lose it. */
+  defaultLabel?: string
 }) {
   const provider = socialProvider(providerId)
   const importCookies = useImportCookies()
@@ -63,7 +73,7 @@ export function ImportSessionDialog({
   // they came from. Spatial continuity, not decoration.
   const [back, setBack] = React.useState(false)
   const [jar, setJar] = React.useState("")
-  const [label, setLabel] = React.useState("")
+  const [label, setLabel] = React.useState(defaultLabel ?? "")
   const [fileName, setFileName] = React.useState<string | null>(null)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const name = providerLabel(providerId)
@@ -74,9 +84,9 @@ export function ImportSessionDialog({
     setStep(0)
     setBack(false)
     setJar("")
-    setLabel("")
+    setLabel(defaultLabel ?? "")
     setFileName(null)
-  }, [open])
+  }, [open, defaultLabel])
 
   if (!provider) return null
 
@@ -105,12 +115,13 @@ export function ImportSessionDialog({
         provider: providerId,
         cookieJar: jar,
         label: label.trim() || undefined,
+        replaces,
       },
       {
         onSuccess: (result) => {
           toast.add({
             type: "success",
-            title: `${name} session connected`,
+            title: `${name} session ${replaces ? "replaced" : "connected"}`,
             description:
               result.discarded > 0
                 ? `Kept ${result.kept} ${name} cookies and discarded ${result.discarded} belonging to other sites.`
@@ -152,10 +163,13 @@ export function ImportSessionDialog({
       */}
       <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90svh] overflow-hidden sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Connect {name}</DialogTitle>
+          <DialogTitle>
+            {replaces ? "Reconnect" : "Connect"} {name}
+          </DialogTitle>
           <DialogDescription>
-            Export your session from a browser you are already signed in to.
-            Relay never sees your password.
+            {replaces
+              ? "Export a fresh session and it will replace the one stored now. Relay never sees your password."
+              : "Export your session from a browser you are already signed in to. Relay never sees your password."}
           </DialogDescription>
         </DialogHeader>
 
@@ -302,7 +316,7 @@ export function ImportSessionDialog({
               className="transition-transform active:scale-[0.98]"
             >
               {importCookies.isPending ? <Spinner /> : null}
-              Connect {name}
+              {replaces ? "Reconnect" : "Connect"} {name}
             </Button>
           ) : (
             <Button

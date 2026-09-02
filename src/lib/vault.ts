@@ -91,6 +91,14 @@ export async function listCredentials(
 export async function createCredential(
   input: CredentialInput,
   userId: string,
+  /**
+   * An existing credential this one replaces, used when the caller knows
+   * the identity the record itself cannot supply — a re-imported cookie
+   * jar carrying no `account_id`, for instance. Scoped to `userId` and to
+   * the same provider, so it can only ever retire a row the caller was
+   * already looking at.
+   */
+  replacesId?: string,
 ): Promise<MaskedCredential> {
   const db = getDb()
   const access = await encrypt(input.accessToken)
@@ -106,6 +114,18 @@ export async function createCredential(
   // (every registry entry maps its own concept onto it), so multiple
   // accounts of one provider coexist and reconnecting updates in place.
   const accountId = input.metaData?.account_id
+  if (replacesId) {
+    await db
+      .delete(credentials)
+      .where(
+        and(
+          eq(credentials.userId, userId),
+          eq(credentials.provider, input.provider),
+          eq(credentials.id, replacesId),
+        ),
+      )
+      .run()
+  }
   if (input.type === "api_key") {
     await db
       .delete(credentials)

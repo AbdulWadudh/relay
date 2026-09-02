@@ -1,19 +1,27 @@
 "use client"
 
 import {
-  Alert02Icon,
-  Copy01Icon,
   LinkSquare02Icon,
   Login03Icon,
   PuzzleIcon,
   Shield01Icon,
-  Tick02Icon,
+  SmartPhone01Icon,
   Upload04Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import * as React from "react"
 
 import { Button } from "@/components/ui/button"
+import {
+  type ConnectPlatform,
+  DEFAULT_GUIDE,
+  FIREFOX_ANDROID_STORE,
+  useBrowserGuide,
+} from "@/components/vault/connect-browsers"
+import {
+  CopyableUrl,
+  Note,
+  SubStep,
+} from "@/components/vault/connect-step-parts"
 import { providerLabel } from "@/lib/providers"
 import type { SocialProvider } from "@/lib/social/providers"
 
@@ -36,128 +44,59 @@ export const CONNECT_STEPS = [
   { id: "upload", title: "Upload", icon: Upload04Icon },
 ] as const
 
-const BROWSERS = {
-  chromium: {
-    store:
-      "https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc",
-    storeLabel: "Add to Chrome or Edge",
-    // NOT a link, deliberately. Browsers refuse to navigate to a
-    // `chrome://` URL from page content, so an <a> here would look
-    // clickable and do nothing. It is handed over to be copied instead.
-    settingsUrl: "chrome://extensions",
-    privateName: "incognito",
-    shortcut: "Ctrl+Shift+N",
-    allowLabel: "Allow in incognito",
-  },
-  firefox: {
-    store:
-      "https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/",
-    storeLabel: "Add to Firefox",
-    settingsUrl: "about:addons",
-    privateName: "private",
-    shortcut: "Ctrl+Shift+P",
-    allowLabel: "Run in Private Windows",
-  },
-}
-
 /**
- * Sends the user to the right store and names the right settings page
- * instead of making them work out which browser they are in.
+ * The dead end, stated plainly.
  *
- * Read in an effect, not during render: `navigator` does not exist on the
- * server and reading it while rendering would desync hydration. Chromium
- * is the default because it is both the majority case and the safer wrong
- * guess (a Firefox user sent to the Chrome store notices immediately; the
- * reverse is equally obvious, and neither loses data).
+ * Chrome for Android has no extensions and neither does anything on iOS,
+ * and the session cookies are httpOnly, so nothing that runs inside a page
+ * can reach them. Sending this user to a store would waste their time, so
+ * the step names the one thing that does work on their device instead.
  */
-function useBrowser(): (typeof BROWSERS)["chromium"] {
-  const [firefox, setFirefox] = React.useState(false)
-  React.useEffect(() => {
-    setFirefox(navigator.userAgent.includes("Firefox"))
-  }, [])
-  return firefox ? BROWSERS.firefox : BROWSERS.chromium
-}
-
-/** Warnings the user must read BEFORE acting, so they sit above the action. */
-function Note({ children }: { children: React.ReactNode }) {
+function NoExtensions({ platform }: { platform: ConnectPlatform }) {
   return (
-    <div className="flex gap-3 rounded-lg border border-amber-600 bg-amber-50 p-4 dark:bg-amber-950">
-      <HugeiconsIcon
-        icon={Alert02Icon}
-        size={18}
-        strokeWidth={2}
-        className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-300"
-      />
-      <p className="text-amber-900 text-sm leading-relaxed dark:text-amber-100">
-        {children}
-      </p>
-    </div>
-  )
-}
-
-/**
- * One action inside a step that is itself a short ordered sequence.
- *
- * The number is the point: these have to happen in order, and the export
- * step in particular breaks if the user does them in any other one.
- */
-function SubStep({
-  index,
-  title,
-  children,
-}: {
-  index: number
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <li className="flex gap-3">
-      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border font-mono text-muted-foreground text-xs">
-        {index}
-      </span>
-      <div className="min-w-0 flex-1 space-y-2">
-        <p className="font-medium text-sm">{title}</p>
-        <div className="text-muted-foreground text-sm leading-relaxed">
-          {children}
+    <div className="space-y-4">
+      <Note>
+        This browser takes no extensions, and the export needs one. There is no
+        way around it from a web page: the cookies that hold your session are
+        marked httpOnly, so nothing running inside a page can read them,
+        including Relay.
+      </Note>
+      <div className="space-y-3 rounded-lg border border-border bg-muted p-4">
+        <div className="flex items-center gap-3">
+          <HugeiconsIcon
+            icon={SmartPhone01Icon}
+            size={18}
+            strokeWidth={2}
+            className="shrink-0 text-muted-foreground"
+          />
+          <p className="font-medium text-sm">
+            {platform === "android"
+              ? "Use Firefox for Android"
+              : "Export on a computer"}
+          </p>
         </div>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          {platform === "android"
+            ? "It is the one mobile browser that still takes add-ons, and the cookie exporter is published for it. Install it, open Relay there, and start this wizard again."
+            : "Sign in and export on a desktop browser, then finish there or send yourself the file and upload it from this device. The file does not care which device made it."}
+        </p>
+        {platform === "android" ? (
+          <Button
+            size="lg"
+            className="transition-transform active:scale-[0.98]"
+            nativeButton={false}
+            render={
+              <a
+                href={FIREFOX_ANDROID_STORE}
+                target="_blank"
+                rel="noreferrer noopener"
+              />
+            }
+          >
+            Get Firefox for Android
+          </Button>
+        ) : null}
       </div>
-    </li>
-  )
-}
-
-/** A URL the user must open in ANOTHER browser, so it is copyable. */
-function CopyableUrl({ url }: { url: string }) {
-  const [copied, setCopied] = React.useState(false)
-
-  // Cleared on a timer, so the timer is cleaned up if the step changes
-  // before it fires.
-  React.useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => setCopied(false), 2000)
-    return () => clearTimeout(timer)
-  }, [copied])
-
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2 pl-4">
-      <code className="flex-1 truncate font-mono text-foreground text-xs">
-        {url}
-      </code>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onClick={() => {
-          void navigator.clipboard.writeText(url).then(() => setCopied(true))
-        }}
-        className="shrink-0 transition-colors hover:text-sky-700 active:scale-[0.97] dark:hover:text-sky-300"
-      >
-        <HugeiconsIcon
-          icon={copied ? Tick02Icon : Copy01Icon}
-          size={15}
-          strokeWidth={2}
-        />
-        {copied ? "Copied" : "Copy"}
-      </Button>
     </div>
   )
 }
@@ -170,9 +109,10 @@ export function ConnectStepBody({
   step: (typeof CONNECT_STEPS)[number]["id"]
 }) {
   const label = providerLabel(provider.name)
-  const browser = useBrowser()
+  const { platform, guide } = useBrowserGuide()
 
   if (step === "install") {
+    if (!guide) return <NoExtensions platform={platform} />
     return (
       <div className="space-y-4">
         <p className="text-muted-foreground text-sm leading-relaxed">
@@ -187,18 +127,17 @@ export function ConnectStepBody({
           // it navigates to a store in a new tab.
           nativeButton={false}
           render={
-            <a href={browser.store} target="_blank" rel="noreferrer noopener" />
+            <a href={guide.store} target="_blank" rel="noreferrer noopener" />
           }
         >
           <HugeiconsIcon icon={PuzzleIcon} size={17} strokeWidth={2} />
-          {browser.storeLabel}
+          {guide.storeLabel}
         </Button>
         <Note>
           Install the one called{" "}
-          <span className="font-semibold">Get cookies.txt LOCALLY</span>. The
-          word LOCALLY matters: similarly named extensions upload what they read
-          to someone else's server, and a session file is enough to sign in as
-          you.
+          <span className="font-semibold">{guide.extension}</span>, exactly. The
+          name matters: similarly named extensions upload what they read to
+          someone else's server, and a session file is enough to sign in as you.
         </Note>
         {/*
           Extensions are DISABLED in private windows by default, and the
@@ -209,26 +148,34 @@ export function ConnectStepBody({
         {provider.requiresPrivateWindow ? (
           <div className="space-y-2 rounded-lg border border-border bg-muted p-4">
             <p className="font-medium text-sm">
-              Then allow it in {browser.privateName} windows
+              Then allow it in {guide.privateName} windows
             </p>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Extensions are off in {browser.privateName} windows by default,
-              and the next step needs one. Open this page, find{" "}
+              Extensions are off in {guide.privateName} windows by default, and
+              the next step needs one. Open{" "}
               <span className="font-medium text-foreground">
-                Get cookies.txt LOCALLY
+                {guide.settingsPath}
+              </span>
+              , find{" "}
+              <span className="font-medium text-foreground">
+                {guide.extension}
               </span>
               , and turn on{" "}
               <span className="font-medium text-foreground">
-                {browser.allowLabel}
+                {guide.allowLabel}
               </span>
               .
             </p>
-            <CopyableUrl url={browser.settingsUrl} />
+            {guide.settingsUrl ? <CopyableUrl url={guide.settingsUrl} /> : null}
           </div>
         ) : null}
       </div>
     )
   }
+
+  // From here the steps happen in whichever browser has the extension, so
+  // a device with no route of its own follows the desktop wording.
+  const active = guide ?? DEFAULT_GUIDE
 
   if (step === "signin") {
     return (
@@ -249,11 +196,18 @@ export function ConnectStepBody({
         {provider.requiresPrivateWindow ? (
           <div className="space-y-2">
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Press{" "}
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-foreground text-xs">
-                {browser.shortcut}
-              </kbd>{" "}
-              to open a {browser.privateName} window, then paste this into it.
+              {active.shortcut ? (
+                <>
+                  Press{" "}
+                  <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-foreground text-xs">
+                    {active.shortcut}
+                  </kbd>{" "}
+                  to open a new {active.privateName} window, then paste this
+                  into it.
+                </>
+              ) : (
+                <>{active.privateHow} Then paste this into that tab.</>
+              )}
             </p>
             <CopyableUrl url={provider.loginUrl} />
             {/*
@@ -307,7 +261,10 @@ export function ConnectStepBody({
           <SubStep index={1} title="Navigate that tab to this address">
             <CopyableUrl url={provider.exportUrl} />
           </SubStep>
-          <SubStep index={2} title="Click the extension, then Export">
+          <SubStep
+            index={2}
+            title={`Open the extension ${active.extensionLocation}, then Export`}
+          >
             Keep the default{" "}
             <span className="font-medium text-foreground">Netscape</span>{" "}
             format. If you are offered JSON, do not pick it. You will get a{" "}

@@ -135,6 +135,17 @@ export type ExtractionOrderInput = z.infer<typeof extractionOrderSchema>
 export const cookieImportSchema = z.object({
   cookieJar: z.string().min(1).max(1_000_000),
   label: z.string().trim().max(80).optional(),
+  /**
+   * The credential this import replaces, set when the wizard was opened
+   * from a Vault row's Reconnect action.
+   *
+   * Needed because `createCredential` dedupes on `meta_data.account_id`
+   * and Google exposes no non-secret account id, so a re-imported YouTube
+   * session has nothing to match on and would land as a SECOND row beside
+   * the dead one. The row the user clicked is the identity the jar itself
+   * cannot supply.
+   */
+  replaces: z.string().min(1).max(64).optional(),
 })
 
 export type CookieImportInput = z.infer<typeof cookieImportSchema>
