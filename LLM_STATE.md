@@ -1127,3 +1127,39 @@ that hits `relay` and `worker`, independent of the Chromium one.
 
 **Not yet done:** no deploy has been run against this. Image size and build
 time are claimed from what was removed, not from a measured build.
+
+## Connect wizard: incognito gap and a small-phone blocker (2026-09-02)
+
+Two gaps the operator spotted, both real:
+
+* **Extensions are disabled in private windows by default.** The wizard sent
+  YouTube users into an incognito window without saying so, and they would
+  have reached the export step, found no extension in the toolbar, and had no
+  way to tell that apart from a failed install. Step 1 now carries the enable
+  instruction with a COPYABLE `chrome://extensions` / `about:addons` -
+  copyable rather than a link because browsers refuse to navigate to those
+  schemes from page content, so a link would look clickable and do nothing.
+* **No web page can open an incognito window.** The "Open sign-in" button
+  opened a normal tab, which is precisely the mistake the warning one line
+  above it was describing. Where a private window is required the wizard now
+  leads with the keyboard shortcut plus a copyable sign-in URL, and the button
+  is demoted to ghost and relabelled "Open in a normal tab instead" so it
+  cannot be mistaken for the happy path.
+
+Driven by a new `requiresPrivateWindow` flag on the registry rather than more
+prose, because it changes what the UI can OFFER, not just what it says.
+Instagram is false and is visually unchanged - verified.
+
+**Blocking bug found while verifying this, not by typecheck or lint.** The
+added content pushed the tallest step to 848px, and on an iPhone SE (375x667)
+the dialog centred at top:-90 / bottom:757: header clipped off the top, Next
+below the fold, nothing to scroll. The wizard was unfinishable on a small
+phone. Fixed with `max-h-[90svh]` plus `grid-rows-[auto_minmax(0,1fr)_auto]`
+and a ScrollArea body - the max-height alone was NOT enough, because a grid's
+auto rows do not shrink to a capped container and the footer still rendered
+outside the panel. Re-measured: dialog 600px in a 667 viewport, Next at
+538-574, reachable.
+
+Verified with agent-browser: both providers, dark and light, 1280x950, 390x844
+and 375x667, reduced motion forced. Zero console errors after a clean dev
+restart.

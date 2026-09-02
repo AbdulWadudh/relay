@@ -36,26 +36,46 @@ export const CONNECT_STEPS = [
   { id: "upload", title: "Upload", icon: Upload04Icon },
 ] as const
 
-const EXTENSION = {
-  chromium:
-    "https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc",
-  firefox:
-    "https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/",
+const BROWSERS = {
+  chromium: {
+    store:
+      "https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc",
+    storeLabel: "Add to Chrome or Edge",
+    // NOT a link, deliberately. Browsers refuse to navigate to a
+    // `chrome://` URL from page content, so an <a> here would look
+    // clickable and do nothing. It is handed over to be copied instead.
+    settingsUrl: "chrome://extensions",
+    privateName: "incognito",
+    shortcut: "Ctrl+Shift+N",
+    allowLabel: "Allow in incognito",
+  },
+  firefox: {
+    store:
+      "https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/",
+    storeLabel: "Add to Firefox",
+    settingsUrl: "about:addons",
+    privateName: "private",
+    shortcut: "Ctrl+Shift+P",
+    allowLabel: "Run in Private Windows",
+  },
 }
 
 /**
- * Sends the user to the right store instead of making them find it. Read
- * in an effect, not during render: `navigator` does not exist on the
- * server and reading it while rendering would desync hydration.
+ * Sends the user to the right store and names the right settings page
+ * instead of making them work out which browser they are in.
+ *
+ * Read in an effect, not during render: `navigator` does not exist on the
+ * server and reading it while rendering would desync hydration. Chromium
+ * is the default because it is both the majority case and the safer wrong
+ * guess (a Firefox user sent to the Chrome store notices immediately; the
+ * reverse is equally obvious, and neither loses data).
  */
-function useExtensionUrl(): { url: string; label: string } {
+function useBrowser(): (typeof BROWSERS)["chromium"] {
   const [firefox, setFirefox] = React.useState(false)
   React.useEffect(() => {
     setFirefox(navigator.userAgent.includes("Firefox"))
   }, [])
-  return firefox
-    ? { url: EXTENSION.firefox, label: "Add to Firefox" }
-    : { url: EXTENSION.chromium, label: "Add to Chrome or Edge" }
+  return firefox ? BROWSERS.firefox : BROWSERS.chromium
 }
 
 /** Warnings the user must read BEFORE acting, so they sit above the action. */
@@ -120,7 +140,7 @@ export function ConnectStepBody({
   step: (typeof CONNECT_STEPS)[number]["id"]
 }) {
   const label = providerLabel(provider.name)
-  const extension = useExtensionUrl()
+  const browser = useBrowser()
 
   if (step === "install") {
     return (
@@ -137,11 +157,11 @@ export function ConnectStepBody({
           // it navigates to a store in a new tab.
           nativeButton={false}
           render={
-            <a href={extension.url} target="_blank" rel="noreferrer noopener" />
+            <a href={browser.store} target="_blank" rel="noreferrer noopener" />
           }
         >
           <HugeiconsIcon icon={PuzzleIcon} size={17} strokeWidth={2} />
-          {extension.label}
+          {browser.storeLabel}
         </Button>
         <Note>
           Install the one called{" "}
@@ -150,6 +170,32 @@ export function ConnectStepBody({
           to someone else's server, and a session file is enough to sign in as
           you.
         </Note>
+        {/*
+          Extensions are DISABLED in private windows by default, and the
+          next step sends this user into one. Without this they reach the
+          export step, find no extension in the toolbar, and have no way to
+          tell that from a failed install. Only shown where it can bite.
+        */}
+        {provider.requiresPrivateWindow ? (
+          <div className="space-y-2 rounded-lg border border-border bg-muted p-4">
+            <p className="font-medium text-sm">
+              Then allow it in {browser.privateName} windows
+            </p>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Extensions are off in {browser.privateName} windows by default,
+              and the next step needs one. Open this page, find{" "}
+              <span className="font-medium text-foreground">
+                Get cookies.txt LOCALLY
+              </span>
+              , and turn on{" "}
+              <span className="font-medium text-foreground">
+                {browser.allowLabel}
+              </span>
+              .
+            </p>
+            <CopyableUrl url={browser.settingsUrl} />
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -163,9 +209,28 @@ export function ConnectStepBody({
           password, and 2FA works normally because this happens in your own
           browser.
         </p>
+        {/*
+          NO web page can open a private window, so where one is required
+          the button below cannot do the job and the URL has to be copied
+          into a window the user opens themselves. The button stays, but it
+          is demoted and relabelled to say plainly what it actually does,
+          because one line above we are telling them not to do that.
+        */}
+        {provider.requiresPrivateWindow ? (
+          <div className="space-y-2">
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Press{" "}
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-foreground text-xs">
+                {browser.shortcut}
+              </kbd>{" "}
+              to open a {browser.privateName} window, then paste this into it.
+            </p>
+            <CopyableUrl url={provider.loginUrl} />
+          </div>
+        ) : null}
         <Button
-          variant="outline"
-          size="lg"
+          variant={provider.requiresPrivateWindow ? "ghost" : "outline"}
+          size={provider.requiresPrivateWindow ? "default" : "lg"}
           className="transition-colors hover:border-sky-600 hover:text-sky-700 active:scale-[0.98] dark:hover:text-sky-300"
           nativeButton={false}
           render={
@@ -177,7 +242,9 @@ export function ConnectStepBody({
           }
         >
           <HugeiconsIcon icon={Login03Icon} size={17} strokeWidth={2} />
-          Open {label} sign-in
+          {provider.requiresPrivateWindow
+            ? "Open in a normal tab instead"
+            : `Open ${label} sign-in`}
         </Button>
       </div>
     )

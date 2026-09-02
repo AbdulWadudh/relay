@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
@@ -134,13 +135,22 @@ export function ImportSessionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/*
+        TWO measured fixes, both invisible to typecheck and lint.
+
         `sm:` prefix is load-bearing. DialogContent's base class ends in
         `sm:max-w-sm`, and an unprefixed `max-w-3xl` lands in a different
         tailwind-merge group, so both survive and the responsive one wins
-        above 640px. Measured: the dialog rendered at ~385px and the step
-        content overflowed its own panel.
+        above 640px. The dialog rendered at ~385px with the step content
+        spilling out of its own panel.
+
+        `max-h-[90svh]` with a scrolling body, because the tallest step is
+        848px and an iPhone SE viewport is 667. Measured: without it the
+        dialog centred at top:-90 / bottom:757, clipping the header off the
+        top AND putting Next below the fold with nothing to scroll — the
+        wizard was unfinishable on a small phone. `svh`, not `vh`, so the
+        mobile address bar cannot re-clip it.
       */}
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90svh] overflow-hidden sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Connect {name}</DialogTitle>
           <DialogDescription>
@@ -156,7 +166,7 @@ export function ImportSessionDialog({
           and every sibling with it — the header description overflowed the
           panel too, which is what gave the cause away.
         */}
-        <div className="flex min-w-0 flex-col gap-6 sm:flex-row sm:gap-8">
+        <div className="flex min-h-0 min-w-0 flex-col gap-6 sm:flex-row sm:gap-8">
           <ConnectRail steps={CONNECT_STEPS} current={step} onSelect={goTo} />
 
           {/*
@@ -165,7 +175,7 @@ export function ImportSessionDialog({
             pushed this column WIDER than the dialog and overflowed its right
             edge at 390px. Measured before adding it.
           */}
-          <div className="min-h-[19rem] min-w-0 flex-1">
+          <ScrollArea className="min-h-0 min-w-0 flex-1 sm:min-h-[19rem]">
             {/*
               Keyed on the step id so React remounts on change, which is what
               re-fires the entrance animation. `motion-safe:` gates it, and
@@ -259,7 +269,7 @@ export function ImportSessionDialog({
                 </form>
               ) : null}
             </div>
-          </div>
+          </ScrollArea>
         </div>
 
         <DialogFooter>

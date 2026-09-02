@@ -49,6 +49,18 @@ export interface SocialProvider {
     export: string | null
   }
   /**
+   * The sign-in must happen in a private/incognito window.
+   *
+   * A FLAG rather than more prose, because it changes what the UI can
+   * offer rather than just what it says. A link cannot open an incognito
+   * window - no web page can - so where this is true the wizard hands the
+   * user a copyable URL to paste into a window they opened themselves,
+   * and tells them to allow the extension in incognito, which is off by
+   * default and would otherwise leave them staring at a toolbar with no
+   * extension in it.
+   */
+  requiresPrivateWindow: boolean
+  /**
    * CONTRACT, identical to RayProvider.mapMetaData: MUST return the
    * generic `account_*` keys. Provider vocabulary is translated here and
    * nowhere else. Cookie VALUES must never be returned — meta_data is
@@ -92,6 +104,7 @@ const providers: Partial<Record<MediaSourceId, SocialProvider>> = {
     // ordinary use does not churn an Instagram session the way it does a
     // Google one. Nothing extra for the user to be careful about.
     notes: { signIn: null, export: null },
+    requiresPrivateWindow: false,
     mapAccount: (cookies) => ({
       // A numeric account id, not a secret — safe in plaintext meta_data,
       // and it is the dedupe key createCredential already replaces on.
@@ -116,6 +129,7 @@ const providers: Partial<Record<MediaSourceId, SocialProvider>> = {
       export:
         "This should be the only private tab open. Export, then close the whole window and do not reopen YouTube in it.",
     },
+    requiresPrivateWindow: true,
     mapAccount: () => ({
       // Google exposes no non-secret account id in the cookie jar, so the
       // account is identified by the label the user gives the credential.

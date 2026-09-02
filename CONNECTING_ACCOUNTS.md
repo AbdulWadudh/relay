@@ -111,14 +111,26 @@ Open a **new incognito / private browsing window**.
 `Ctrl+Shift+N` on Chrome/Edge, `Ctrl+Shift+P` on Firefox. On a Mac, `Cmd`
 instead of `Ctrl`.
 
+> **Allow the extension in private windows first.** Extensions are switched
+> **off** in incognito by default, so if you skip this you will get to step 4,
+> find no extension in the toolbar, and have no way to tell that apart from a
+> failed install.
+>
+> | Browser | Where | Turn on |
+> | --- | --- | --- |
+> | Chrome, Edge, Brave | `chrome://extensions` → Get cookies.txt LOCALLY → **Details** | **Allow in Incognito** |
+> | Firefox | `about:addons` → Get cookies.txt LOCALLY | **Run in Private Windows** |
+>
+> Those addresses cannot be links — browsers refuse to open a `chrome://`
+> address from a web page. Copy and paste them into the address bar.
+
 ### 2. Sign in to YouTube
 
-In that window, go to
-<https://accounts.google.com/ServiceLogin?service=youtube> and sign in.
+In that private window, go to
+`https://accounts.google.com/ServiceLogin?service=youtube` and sign in.
 
-You may need to enable the extension for incognito first — Chrome:
-`chrome://extensions` → Get cookies.txt LOCALLY → **Details** → **Allow in
-Incognito**.
+**Copy that address, do not click it.** A link opens in a normal window,
+which is exactly what breaks the export.
 
 ### 3. Navigate to robots.txt — in the same tab
 
@@ -287,6 +299,14 @@ without editing it.
 Your session expired. See
 ["When a session dies"](#making-a-session-last) above. This is normal and
 expected eventually — reconnect.
+
+### The extension is missing from the toolbar in a private window
+
+Extensions are disabled in private/incognito windows by default. Turn it on:
+`chrome://extensions` → Get cookies.txt LOCALLY → **Details** → **Allow in
+Incognito** (Firefox: `about:addons` → **Run in Private Windows**). Those
+addresses have to be pasted into the address bar; a web page is not allowed to
+link to them.
 
 ### The Instagram card says "Soon"
 
