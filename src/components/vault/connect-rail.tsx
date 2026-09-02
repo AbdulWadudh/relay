@@ -42,13 +42,24 @@ export function ConnectRail({
     steps.length > 1 ? Math.min(current / (steps.length - 1), 1) : 1
 
   return (
-    <nav aria-label="Progress" className="sm:w-52 sm:shrink-0">
-      <ol className="flex gap-1 sm:relative sm:block sm:gap-0">
-        {/* Track and fill sit behind the nodes on desktop only; the mobile
-            layout is a row of segments and needs neither. */}
+    <nav
+      aria-label="Progress"
+      className="landscape:sm:w-52 landscape:sm:shrink-0"
+    >
+      <ol className="flex gap-1 landscape:sm:relative landscape:sm:block landscape:sm:gap-0">
+        {/* Track and fill sit behind the nodes in the side-by-side layout
+            only; the stacked layout is a row of segments and needs neither.
+
+            Every breakpoint here is `landscape:sm:`, not `sm:`. Width alone
+            put a portrait tablet on the desktop rail -- an iPad is 768px
+            across, well past `sm`, but it has a phone's proportions and the
+            vertical rail eats the width the step content needs. Orientation
+            is the honest signal: a portrait screen gets the stacked layout
+            whatever its width, and a landscape one gets the rail once it is
+            wide enough for both columns. */}
         <li
           aria-hidden
-          className="pointer-events-none absolute top-4 bottom-4 left-[15px] hidden w-px bg-border sm:block"
+          className="pointer-events-none absolute top-4 bottom-4 left-[15px] hidden w-px bg-border landscape:sm:block"
         >
           <span
             className="block h-full w-full origin-top bg-emerald-600 transition-transform duration-500 ease-out motion-reduce:transition-none"
@@ -64,7 +75,7 @@ export function ConnectRail({
           return (
             <li
               key={step.id}
-              className="flex-1 sm:flex-none sm:pb-6 sm:last:pb-0"
+              className="flex-1 landscape:sm:flex-none landscape:sm:pb-6 landscape:sm:last:pb-0"
             >
               <button
                 type="button"
@@ -73,24 +84,24 @@ export function ConnectRail({
                 aria-current={active ? "step" : undefined}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-lg text-start transition-colors",
-                  "sm:relative sm:bg-transparent",
+                  "landscape:sm:relative landscape:sm:bg-transparent",
                   reachable
                     ? "cursor-pointer hover:text-foreground"
                     : "cursor-not-allowed",
                 )}
               >
-                {/* Mobile: a segment bar. Desktop: a numbered node. */}
+                {/* Stacked: a segment bar. Side-by-side: a numbered node. */}
                 <span
                   aria-hidden
                   className={cn(
-                    "h-1 w-full rounded-full transition-colors duration-300 sm:hidden",
+                    "h-1 w-full rounded-full transition-colors duration-300 landscape:sm:hidden",
                     done || active ? "bg-emerald-600" : "bg-border",
                   )}
                 />
                 <span
                   aria-hidden
                   className={cn(
-                    "hidden size-8 shrink-0 items-center justify-center rounded-full border-2 font-mono text-xs transition-all duration-300 sm:flex",
+                    "hidden size-8 shrink-0 items-center justify-center rounded-full border-2 font-mono text-xs transition-all duration-300 landscape:sm:flex",
                     done && "border-emerald-600 bg-emerald-600 text-white",
                     active &&
                       "border-emerald-600 bg-background text-emerald-700 dark:text-emerald-300",
@@ -112,7 +123,7 @@ export function ConnectRail({
                 </span>
                 <span
                   className={cn(
-                    "hidden text-sm transition-colors sm:block",
+                    "hidden text-sm transition-colors landscape:sm:block",
                     active
                       ? "font-medium text-foreground"
                       : "text-muted-foreground",

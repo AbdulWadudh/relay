@@ -41,15 +41,27 @@ export type ModalSize = "sm" | "md" | "lg" | "xl" | "full"
 
 /**
  * Widths climb in real steps rather than by a few pixels, so picking a
- * size is a meaningful choice. `full` is viewport-bound with a margin
- * kept on every side so the modal never looks welded to the screen edge.
+ * size is a meaningful choice.
+ *
+ * Every step is `min(width, calc(100% - 4rem))`, not a bare `max-w-*`.
+ * A bare cap only bounds the modal from ABOVE: once the viewport is
+ * narrower than the step, the width falls through to `DialogContent`'s own
+ * `max-w-[calc(100%-2rem)]` and the modal goes edge-to-edge with a 16px
+ * sliver each side. That is exactly what an `xl` modal did on a ~874px
+ * screen — 896px wanted, 858px granted, no margin worth the name. The
+ * `min()` keeps a real 2rem gutter on both sides at every width, and
+ * costs nothing on a screen wide enough for the step itself.
+ *
+ * `100%`, not `100vw`: the popup is `fixed`, so percentages already
+ * resolve against the viewport, and `100vw` would include the scrollbar
+ * and push the modal a few pixels wider than the space available.
  */
 const SIZE: Record<ModalSize, string> = {
-  sm: "sm:max-w-sm",
-  md: "sm:max-w-lg",
-  lg: "sm:max-w-2xl",
-  xl: "sm:max-w-4xl",
-  full: "sm:max-w-[min(96rem,calc(100vw-4rem))]",
+  sm: "sm:max-w-[min(24rem,calc(100%-4rem))]",
+  md: "sm:max-w-[min(32rem,calc(100%-4rem))]",
+  lg: "sm:max-w-[min(42rem,calc(100%-4rem))]",
+  xl: "sm:max-w-[min(56rem,calc(100%-4rem))]",
+  full: "sm:max-w-[min(96rem,calc(100%-4rem))]",
 }
 
 /** Solid tile behind the header icon (RULES.md: solid colours, no glass). */
@@ -166,8 +178,12 @@ export function Modal({
           <div className={cn("px-6 py-4", bodyClassName)}>{children}</div>
         </ScrollArea>
 
+        {/* Footer is `py-3` where the header is `py-4`. It holds nothing but
+            buttons, which carry their own height, so the extra 8px was
+            padding around padding and read as a dead band under the content.
+            The header stacks a title over a subtitle and keeps the room. */}
         {footer ? (
-          <footer className="flex flex-wrap items-center justify-end gap-3 border-t px-6 py-4">
+          <footer className="flex flex-wrap items-center justify-end gap-3 border-t px-6 py-3">
             {footer}
           </footer>
         ) : null}
