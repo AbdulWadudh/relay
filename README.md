@@ -124,3 +124,5 @@ Treat the graph as a snapshot: on any disagreement with the source, the source w
 - `DESIGN.md` — UI/typography/observability guidelines
 - `RULES.md` — **canonical agent execution rules** (Bun-first, config, validation, circuit breakers)
 - `LLM_STATE.md` — task execution state
+- `CONNECTING_ACCOUNTS.md` — **user guide**: exporting a session from your browser and importing it, per provider, with every error message and its fix
+- `SESSION_AUTH.md` — the engineering rationale behind that flow
