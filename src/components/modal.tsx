@@ -129,7 +129,7 @@ export function Modal({
         showCloseButton={false}
         className={cn(
           "grid gap-0 overflow-hidden p-0",
-          "grid-rows-[auto_minmax(0,1fr)_auto]",
+          "grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto]",
           "max-h-[calc(100svh-2rem)] sm:max-h-[calc(100svh-4rem)]",
           size === "full" && "h-[calc(100svh-2rem)] sm:h-[calc(100svh-4rem)]",
           SIZE[size],
