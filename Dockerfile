@@ -16,6 +16,23 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
+# ----------------------------------------------------------- prod-deps ---
+# The SHIPPED dependency tree, resolved separately from the one the build
+# uses. Measured against this lockfile: 998MB full, 830MB production, so
+# ~168MB of the image was Tailwind and Biome — tools that run at build time
+# and are dead weight in a running container.
+#
+# `--production` and NOT a package.json edit, deliberately. drizzle-kit is a
+# devDependency but is genuinely needed at runtime (`db:migrate` runs on
+# container start), and it survives here as a transitive resolution — the
+# alternative, promoting it to `dependencies`, would rewrite the lockfile to
+# buy nothing. Verified against the real tree: next, react, drizzle-orm and
+# drizzle-kit present; tailwindcss and @biomejs/biome gone.
+FROM oven/bun:${BUN_VERSION}-slim AS prod-deps
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
+
 # ------------------------------------------------------------- builder ---
 # Compiles the Next.js app, and nothing else — no media binaries here, they
 # belong to the process that shells out to them. Splitting the build off
@@ -73,6 +90,13 @@ ENV NODE_ENV=production \
 # with it, and the §1.2 experiment measured no metadata loss — so Python is
 # gone from the image entirely.
 #
+# curl is purged again at the end of the same RUN. It exists only to fetch
+# yt-dlp; nothing at runtime shells out to it, since the healthchecks use
+# `bun -e fetch`. Removing it in a LATER layer would not shrink anything --
+# the bytes would already be committed -- so it has to leave the way it came
+# in. `--auto-remove` cannot take ca-certificates with it: that was
+# installed explicitly above, which marks it manual, and TLS still works.
+#
 # First instruction of the stage on purpose: it depends only on the base
 # image and this version, so it stays cached across every deploy that
 # touches app code — apt is not re-run and yt-dlp is not re-downloaded.
@@ -92,9 +116,11 @@ RUN set -eux; \
       "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/${asset}"; \
     chmod +x /usr/local/bin/yt-dlp; \
     yt-dlp --version; \
-    ffmpeg -version | head -n 1
+    ffmpeg -version | head -n 1; \
+    apt-get purge -y --auto-remove curl; \
+    rm -rf /var/lib/apt/lists/*
 
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 
 # One image runs two things, and each needs a different slice of the repo:

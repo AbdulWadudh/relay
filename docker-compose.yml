@@ -1,57 +1,84 @@
+# Shared fragments. `x-` keys are ignored by Docker and exist only to be
+# anchored into the services below.
+
+# ONE build definition for both app services, and that is the point.
+#
+# `relay` and `worker` run the same image from the same Dockerfile. If their
+# build blocks drift by so much as one arg, Docker computes a different cache
+# key and compiles the whole Next.js app a SECOND time on every deploy --
+# these args are baked into ENV in the builder stage, so they are part of
+# that key even though the worker never serves a browser bundle. Anchoring
+# the block makes the two builds identical by construction rather than by
+# somebody remembering to edit both copies.
+#
+# `target` is explicit and load-bearing. With no target, Docker builds the
+# LAST stage in the Dockerfile. `runtime` is last today, but a stage appended
+# below it would silently become what ships here -- that exact mistake once
+# put Chromium in the web image and took prod down.
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+  target: runtime
+  args:
+    NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
+    NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID: ${NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID:-relay-app}
+    NEXT_PUBLIC_OPENOBSERVE_SITE: ${NEXT_PUBLIC_OPENOBSERVE_SITE}
+    NEXT_PUBLIC_OPENOBSERVE_ORG: ${NEXT_PUBLIC_OPENOBSERVE_ORG}
+    NEXT_PUBLIC_OPENOBSERVE_SERVICE: ${NEXT_PUBLIC_OPENOBSERVE_SERVICE:-relay-app}
+    NEXT_PUBLIC_OPENOBSERVE_VERSION: ${NEXT_PUBLIC_OPENOBSERVE_VERSION:-0.1.0}
+
+# Container logs are unbounded by default and the deploy target is a single
+# VPS; Coolify's scheduled cleanup prunes images, not log files.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-timing: &healthcheck-timing
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+
+# What every app process needs to reach its own data. The web and the worker
+# talk to the same database, the same queue and the same vault key -- a
+# mismatch here is a class of bug that only shows up at runtime, so they read
+# from one definition.
+x-app-env: &app-env
+  NODE_ENV: production
+  VAULT_KEY: ${VAULT_KEY}
+  DATABASE_URL: ${DATABASE_URL}
+  DATABASE_TOKEN: ${DATABASE_TOKEN}
+  REDIS_URL: redis://dragonfly:6379
+  OPENOBSERVE_URL: ${OPENOBSERVE_URL}
+  OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
+  OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
+
 services:
   relay:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # EXPLICIT, and load-bearing. With no `target`, Docker builds the LAST
-      # stage in the Dockerfile. `runtime` is the last stage today, but a
-      # stage appended below it would silently become what ships here — that
-      # exact mistake once put Chromium in the web image and took prod down.
-      target: runtime
-      args:
-        NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
-        NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID: ${NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID:-relay-app}
-        NEXT_PUBLIC_OPENOBSERVE_SITE: ${NEXT_PUBLIC_OPENOBSERVE_SITE}
-        NEXT_PUBLIC_OPENOBSERVE_ORG: ${NEXT_PUBLIC_OPENOBSERVE_ORG}
-        NEXT_PUBLIC_OPENOBSERVE_SERVICE: ${NEXT_PUBLIC_OPENOBSERVE_SERVICE:-relay-app}
-        NEXT_PUBLIC_OPENOBSERVE_VERSION: ${NEXT_PUBLIC_OPENOBSERVE_VERSION:-0.1.0}
+    build: *app-build
     restart: unless-stopped
     expose:
       - "3000"
     healthcheck:
+      <<: *healthcheck-timing
       test:
         - CMD
         - bun
         - -e
         - "fetch('http://127.0.0.1:3000/api/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    # Container logs are unbounded by default and the deploy target is a
-    # single VPS; Coolify's scheduled cleanup prunes images, not log files.
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
     environment:
-      NODE_ENV: production
+      <<: *app-env
       NEXT_TELEMETRY_DISABLED: "1"
       APP_BASE_URL: ${APP_BASE_URL}
       PORT: "3000"
       HOST: 0.0.0.0
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      VAULT_KEY: ${VAULT_KEY}
-      DATABASE_URL: ${DATABASE_URL}
-      DATABASE_TOKEN: ${DATABASE_TOKEN}
       NOTION_CLIENT_ID: ${NOTION_CLIENT_ID}
       NOTION_CLIENT_SECRET: ${NOTION_CLIENT_SECRET}
-      OPENOBSERVE_URL: ${OPENOBSERVE_URL}
-      OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
-      OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
-      REDIS_URL: redis://dragonfly:6379
     depends_on:
       dragonfly:
         condition: service_healthy
@@ -59,65 +86,34 @@ services:
       - relay_data:/app/data
 
   # Runs the pipeline out of band so a download/transcription never occupies
-  # a request handler. Builds from the same Dockerfile as `relay` rather
-  # than reusing a shared tag: Coolify rewrites every service's image to
+  # a request handler. Builds from the same Dockerfile as `relay` rather than
+  # reusing a shared tag: Coolify rewrites every service's image to
   # <resource-uuid>_<service>:<sha>, so a hand-pinned `relay-app:latest`
   # would not exist at deploy time.
-  #
-  # The NEXT_PUBLIC build args are repeated here even though the worker
-  # never serves a browser bundle. They are baked into ENV in the builder
-  # stage, so a service that omits them produces a different cache key and
-  # Docker recompiles the whole Next.js app a second time. Passing the same
-  # values makes this build a cache hit against the one above.
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # Same reason as `relay` above.
-      target: runtime
-      args:
-        NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN: ${NEXT_PUBLIC_OPENOBSERVE_CLIENT_TOKEN}
-        NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID: ${NEXT_PUBLIC_OPENOBSERVE_APPLICATION_ID:-relay-app}
-        NEXT_PUBLIC_OPENOBSERVE_SITE: ${NEXT_PUBLIC_OPENOBSERVE_SITE}
-        NEXT_PUBLIC_OPENOBSERVE_ORG: ${NEXT_PUBLIC_OPENOBSERVE_ORG}
-        NEXT_PUBLIC_OPENOBSERVE_SERVICE: ${NEXT_PUBLIC_OPENOBSERVE_SERVICE:-relay-app}
-        NEXT_PUBLIC_OPENOBSERVE_VERSION: ${NEXT_PUBLIC_OPENOBSERVE_VERSION:-0.1.0}
+    build: *app-build
     restart: unless-stopped
     command: ["bun", "scripts/worker.ts"]
-    # yt-dlp and ffmpeg are spawned as children of this
-    # process. Bun as PID 1 does not reap orphaned grandchildren, so without
-    # an init the container accumulates zombies one run at a time.
+    # yt-dlp and ffmpeg are spawned as children of this process. Bun as PID 1
+    # does not reap orphaned grandchildren, so without an init the container
+    # accumulates zombies one run at a time.
     init: true
     # `restart` only covers a worker that exits; this covers one that is
     # still alive but no longer consuming, and is what Coolify reports.
     healthcheck:
+      <<: *healthcheck-timing
       test:
         - CMD
         - bun
         - -e
         - "fetch('http://127.0.0.1:${QUEUE_HEALTH_PORT:-3001}/').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
     environment:
-      NODE_ENV: production
-      VAULT_KEY: ${VAULT_KEY}
-      DATABASE_URL: ${DATABASE_URL}
-      DATABASE_TOKEN: ${DATABASE_TOKEN}
-      REDIS_URL: redis://dragonfly:6379
+      <<: *app-env
       QUEUE_CONCURRENCY: ${QUEUE_CONCURRENCY:-2}
       QUEUE_HEALTH_PORT: ${QUEUE_HEALTH_PORT:-3001}
-      OPENOBSERVE_URL: ${OPENOBSERVE_URL}
-      OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
-      OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
     depends_on:
-      # Not a runtime dependency — the worker only needs Dragonfly and the
+      # Not a runtime dependency -- the worker only needs Dragonfly and the
       # database. It waits because `relay` runs `db:migrate` on start, and a
       # worker that picks up a job against an unmigrated schema fails it.
       relay:
@@ -130,12 +126,12 @@ services:
   # Redis-compatible queue backend for BullMQ.
   # `--default_lua_flags=allow-undeclared-keys` is REQUIRED: BullMQ's Lua
   # scripts build key names at runtime, which Dragonfly rejects by default
-  # with "script tried accessing undeclared key" — every job fails on the
+  # with "script tried accessing undeclared key" -- every job fails on the
   # first enqueue without it.
   #
   # Pinned, not `:latest`: Coolify pulls on every deploy, so a floating tag
-  # means the queue backend can change underneath a deploy that only
-  # touched app code.
+  # means the queue backend can change underneath a deploy that only touched
+  # app code.
   dragonfly:
     image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1
     restart: unless-stopped
@@ -151,11 +147,7 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
     volumes:
       - dragonfly_data:/data
 

@@ -22,6 +22,13 @@ data
 .qa
 .vscode
 .idea
+graphify-out
 *.md
 Dockerfile
 docker-compose.yml
+
+# Throwaway verification probes. `_`-prefixed by convention and never
+# committed, but the runtime stage does `COPY scripts ./scripts`, so without
+# this an untracked script that decrypts the vault would ship to production
+# just because it happened to be in the working tree at build time.
+scripts/_*.ts
