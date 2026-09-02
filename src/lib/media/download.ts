@@ -139,7 +139,27 @@ const CLIENT_REFUSED = /\b403\b|forbidden/i
  * a single client's quirk failed the whole run twice over.
  */
 const CLIENT_RETRYABLE =
-  /\b403\b|forbidden|page needs to be reloaded|not a bot|player response|failed to extract/i
+  /\b403\b|forbidden|page needs to be reloaded|not a bot|player response|failed to extract|requested format is not available|no video formats/i
+
+/**
+ * The format selector matched nothing THIS client offers.
+ *
+ * Load-bearing, and it must be tested BEFORE `UNAVAILABLE`: yt-dlp phrases
+ * it "Requested format is not available", which contains the substring
+ * "not available" and therefore matches the unavailable family. In
+ * production that misfire reported a format-selection failure as
+ * `SESSION_EXPIRED` — telling the user to reconnect a session that was
+ * working, burning a reject against a credential they had just refreshed,
+ * and classifying the run permanent so it never retried.
+ *
+ * It says NOTHING about the session or the item. Different player clients
+ * expose different formats: measured 2026-09-02, `bestaudio/best` resolves
+ * on web_safari, web_embedded and mweb but matches nothing on ios,
+ * android_vr or tv_simply for the same video. So it is also in
+ * CLIENT_RETRYABLE above — the right response is the NEXT client, not a
+ * verdict on the credential.
+ */
+const FORMAT_MISSING = /requested format is not available|no video formats/i
 
 interface YtDlpAttempt {
   ok: boolean
@@ -268,6 +288,16 @@ async function downloadWithYtDlp(
       throw new MediaIngestError(
         "SOURCE_UNAVAILABLE",
         `Could not fetch the media for this ${source.label} — the source refused every available client (HTTP 403). This often clears on its own; if it persists, the yt-dlp version may need updating.`,
+      )
+    }
+    // BEFORE the login-shaped branch, and that order is the whole point:
+    // "Requested format is not available" contains "not available", so
+    // without this it falls into UNAVAILABLE and — because a jar was
+    // supplied — is reported as an expired session.
+    if (FORMAT_MISSING.test(stderr)) {
+      throw new MediaIngestError(
+        "SOURCE_UNAVAILABLE",
+        `Could not fetch the media for this ${source.label} — no client offered a downloadable audio format. This is a source or extractor problem, not your session.`,
       )
     }
     if (UNAVAILABLE.test(stderr)) {
