@@ -119,6 +119,28 @@ const UNAVAILABLE =
  */
 const CLIENT_REFUSED = /\b403\b|forbidden/i
 
+/**
+ * Worth re-running on a different `player_client`. A SUPERSET of
+ * CLIENT_REFUSED, and deliberately a separate pattern rather than more
+ * alternatives bolted onto it.
+ *
+ * The two answer different questions. This one decides whether to KEEP
+ * TRYING; CLIENT_REFUSED decides how to CLASSIFY what is left once every
+ * client has failed. Merging them would let "sign in to confirm you're
+ * not a bot" — bot detection, not an expired session — reach the 403
+ * branch and be reported as a source that refused every client, or worse,
+ * fall into the login-shaped branch below and burn a reject against a
+ * credential that is perfectly alive.
+ *
+ * MEASURED 2026-09-02, against the video that failed in production: the
+ * `tv` client returns "The page needs to be reloaded" for a Short that
+ * `web_safari`, `web_embedded` and `mweb` all resolve. It matches neither
+ * 403 nor the unavailable family, so the fallback chain never engaged and
+ * a single client's quirk failed the whole run twice over.
+ */
+const CLIENT_RETRYABLE =
+  /\b403\b|forbidden|page needs to be reloaded|not a bot|player response|failed to extract/i
+
 interface YtDlpAttempt {
   ok: boolean
   /** Last stderr line — the line carrying the actual reason. */
@@ -204,18 +226,33 @@ async function downloadWithYtDlp(
 
   // The default client chain first — it resolves the richest format set,
   // and for every source but YouTube it is the only thing tried. Fallbacks
-  // engage ONLY on a 403, so a private or deleted item still fails once
-  // rather than being re-fetched under three more clients.
+  // engage only on a client-shaped failure, so a private or deleted item
+  // still fails once rather than being re-fetched under three more clients.
   let attempt = await runYtDlp(source, dir, pathFile, null, cookiesPath)
+  // Every client tried and what it said. A run that exhausts the chain
+  // previously surfaced only the LAST stderr, which is why diagnosing the
+  // `tv` failure took a local reproduction rather than a read of the logs.
+  const attempts: string[] = [`default: ${attempt.ok ? "ok" : attempt.stderr}`]
   for (const extractorArgs of config.media.ytDlpFallbacks[source.source] ??
     []) {
-    if (attempt.ok || !CLIENT_REFUSED.test(attempt.stderr)) break
-    logger.warn("Download refused, retrying on a fallback client", {
+    if (attempt.ok || !CLIENT_RETRYABLE.test(attempt.stderr)) break
+    logger.warn("Download failed on this client, trying the next", {
       source: source.source,
       item_id: source.itemId,
       extractor_args: extractorArgs,
+      // Never the URL or the jar — a client name and yt-dlp's own reason.
+      previous_error: attempt.stderr.slice(0, 200),
     })
     attempt = await runYtDlp(source, dir, pathFile, extractorArgs, cookiesPath)
+    attempts.push(`${extractorArgs}: ${attempt.ok ? "ok" : attempt.stderr}`)
+  }
+
+  if (!attempt.ok && attempts.length > 1) {
+    logger.error("Every player client failed", {
+      source: source.source,
+      item_id: source.itemId,
+      attempts: attempts.map((line) => line.slice(0, 200)),
+    })
   }
 
   if (!attempt.ok) {

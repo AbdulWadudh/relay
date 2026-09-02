@@ -4,9 +4,25 @@ const BASE_URL = process.env.APP_BASE_URL ?? `http://localhost:${PORT}`
 /**
  * yt-dlp `player_client` values tried, in order, when YouTube refuses the
  * media fetch on the default client chain. See `media.ytDlpFallbacks`.
+ *
+ * MEASURED 2026-09-02 against a real Short WITH a signed-in jar and our
+ * own `-f bestaudio/best`, which is the part a client list picked off a
+ * forum post gets wrong:
+ *
+ *   web_safari   ok (96|mp4)      tv          "page needs to be reloaded"
+ *   web_embedded ok (251|webm)    tv_simply   no matching format
+ *   mweb         ok (251|webm)    ios         no matching format
+ *                                 android_vr  no matching format
+ *
+ * The previous list led with `tv_simply`, which cannot satisfy that format
+ * selector at all — it would have failed even once reached. `web_safari`
+ * leads now because yt-dlp's own wiki notes its HLS formats need no PO
+ * token, which is the property that matters on a server: `web_embedded`
+ * and `mweb` both sit in the PO-token-requiring set and are kept only as
+ * backups behind it.
  */
 const YOUTUBE_CLIENTS = (
-  process.env.YT_DLP_YOUTUBE_CLIENTS ?? "web_embedded,mweb,tv_simply"
+  process.env.YT_DLP_YOUTUBE_CLIENTS ?? "web_safari,web_embedded,mweb"
 )
   .split(",")
   .map((client) => client.trim())
