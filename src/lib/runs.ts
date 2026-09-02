@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm"
+import { and, count, desc, eq } from "drizzle-orm"
 
 import { getDb } from "@/lib/db"
 import { type RunStatus, relayRuns } from "@/lib/db/schema"
@@ -67,14 +67,60 @@ function toDetail(row: typeof relayRuns.$inferSelect): RunDetail {
   return { ...toSummary(row), additionalData: row.additionalData ?? {} }
 }
 
-export async function listRuns(userId: string): Promise<RunSummary[]> {
-  const rows = await getDb()
+/** Rows per page. One number, so the API, the UI and the SSR prefetch
+ * cannot disagree about where a page boundary falls. */
+export const RUNS_PER_PAGE = 20
+
+export interface RunPage {
+  runs: RunSummary[]
+  /** Total matching rows, so the UI can size the pager without fetching. */
+  total: number
+  /** Clamped to the range that actually exists — see below. */
+  page: number
+  perPage: number
+}
+
+/**
+ * One page of runs, newest first.
+ *
+ * `page` is CLAMPED rather than trusted. It arrives from a URL the user can
+ * type, and an out-of-range value would otherwise render an empty table
+ * that looks like data loss — `?page=99` on a two-page list, or `?page=0`
+ * producing a negative offset. Clamping means every reachable URL shows
+ * real rows, and the response reports the page actually served so the UI
+ * can highlight the right number.
+ *
+ * The count runs as its own query rather than being derived from the rows:
+ * the whole point of a page is not to load the other 900.
+ */
+export async function listRuns(
+  userId: string,
+  page = 1,
+  perPage = RUNS_PER_PAGE,
+): Promise<RunPage> {
+  const db = getDb()
+  const scope = eq(relayRuns.userId, userId)
+
+  const counted = await db
+    .select({ total: count() })
+    .from(relayRuns)
+    .where(scope)
+    .get()
+  const total = counted?.total ?? 0
+
+  const pages = Math.max(1, Math.ceil(total / perPage))
+  const current = Math.min(Math.max(1, Math.trunc(page) || 1), pages)
+
+  const rows = await db
     .select()
     .from(relayRuns)
-    .where(eq(relayRuns.userId, userId))
+    .where(scope)
     .orderBy(desc(relayRuns.createdAt))
+    .limit(perPage)
+    .offset((current - 1) * perPage)
     .all()
-  return rows.map(toSummary)
+
+  return { runs: rows.map(toSummary), total, page: current, perPage }
 }
 
 export async function getRun(

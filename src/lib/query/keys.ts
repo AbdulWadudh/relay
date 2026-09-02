@@ -22,7 +22,9 @@ export const agentKeys = {
 export const runKeys = {
   all: ["runs"] as const,
   lists: () => [...runKeys.all, "list"] as const,
-  list: () => [...runKeys.lists()] as const,
+  /** Page is part of the key: pages cache separately and a refetch of
+   *  page 2 must not clobber page 1. */
+  list: (page = 1) => [...runKeys.lists(), page] as const,
   details: () => [...runKeys.all, "detail"] as const,
   detail: (id: string) => [...runKeys.details(), id] as const,
 }

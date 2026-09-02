@@ -10,7 +10,7 @@ import {
 import { apiFetch } from "@/lib/query/http"
 import { runKeys } from "@/lib/query/keys"
 import { isTerminal } from "@/lib/run-status"
-import type { RunDetail, RunSummary } from "@/lib/runs"
+import type { RunDetail, RunPage, RunSummary } from "@/lib/runs"
 import type { RelayProcessInput } from "@/lib/schemas"
 
 /**
@@ -22,20 +22,25 @@ import type { RelayProcessInput } from "@/lib/schemas"
 
 const POLL_INTERVAL_MS = 2000
 
-async function fetchRuns(): Promise<RunSummary[]> {
-  const { runs } = await apiFetch<{ runs: RunSummary[] }>("/runs")
-  return runs
+async function fetchRuns(page: number): Promise<RunPage> {
+  return await apiFetch<RunPage>(`/runs?page=${page}`)
 }
 
-/** True while at least one run is still being worked on. */
-export function hasActiveRuns(runs: RunSummary[] | undefined): boolean {
-  return (runs ?? []).some((run) => !isTerminal(run.status))
+/**
+ * True while at least one run ON THIS PAGE is still being worked on.
+ *
+ * Per-page on purpose. Polling exists to follow a run through its stages,
+ * and the runs that are moving are the newest ones, which are on page 1.
+ * Sitting on page 5 of old finished runs should cost no requests.
+ */
+export function hasActiveRuns(data: RunPage | undefined): boolean {
+  return (data?.runs ?? []).some((run) => !isTerminal(run.status))
 }
 
-export function runsQueryOptions() {
+export function runsQueryOptions(page = 1) {
   return queryOptions({
-    queryKey: runKeys.list(),
-    queryFn: fetchRuns,
+    queryKey: runKeys.list(page),
+    queryFn: () => fetchRuns(page),
     // In-flight runs are stale the instant they're read.
     staleTime: 0,
     // Polling stops on its own once nothing is in flight, so an idle queue
@@ -45,8 +50,8 @@ export function runsQueryOptions() {
   })
 }
 
-export function useRuns() {
-  return useQuery(runsQueryOptions())
+export function useRuns(page = 1) {
+  return useQuery(runsQueryOptions(page))
 }
 
 async function fetchRun(id: string): Promise<RunDetail> {
@@ -91,8 +96,18 @@ export function useCreateRun() {
       return run
     },
     onSuccess: (run) => {
-      queryClient.setQueryData<RunSummary[]>(runKeys.list(), (previous) =>
-        previous ? [run, ...previous] : [run],
+      // Page 1 only, and trimmed: a new run is the newest, so it belongs at
+      // the top of the first page and pushes the oldest row on that page
+      // down onto page 2. Without the trim the first page would render 21
+      // rows and quietly disagree with the pager beneath it.
+      queryClient.setQueryData<RunPage>(runKeys.list(1), (previous) =>
+        previous
+          ? {
+              ...previous,
+              runs: [run, ...previous.runs].slice(0, previous.perPage),
+              total: previous.total + 1,
+            }
+          : previous,
       )
     },
     onSettled: () => {
@@ -110,15 +125,29 @@ export function useDeleteRun() {
       apiFetch<{ ok: true }>(`/runs/${id}`, { method: "DELETE" }),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: runKeys.lists() })
-      const previous = queryClient.getQueryData<RunSummary[]>(runKeys.list())
-      queryClient.setQueryData<RunSummary[]>(runKeys.list(), (runs) =>
-        runs?.filter((run) => run.id !== id),
+      // EVERY cached page, not just page 1. The row being deleted is on
+      // whichever page the user is looking at, and after paging around
+      // there is more than one page in the cache — targeting `list()`
+      // alone left the visible row on screen until the refetch landed.
+      const previous = queryClient.getQueriesData<RunPage>({
+        queryKey: runKeys.lists(),
+      })
+      queryClient.setQueriesData<RunPage>(
+        { queryKey: runKeys.lists() },
+        (page) =>
+          page?.runs.some((run) => run.id === id)
+            ? {
+                ...page,
+                runs: page.runs.filter((run) => run.id !== id),
+                total: Math.max(0, page.total - 1),
+              }
+            : page,
       )
       return { previous }
     },
     onError: (_error, _id, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(runKeys.list(), context.previous)
+      for (const [key, page] of context?.previous ?? []) {
+        queryClient.setQueryData(key, page)
       }
     },
     onSettled: (_data, _error, id) => {

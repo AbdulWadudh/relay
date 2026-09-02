@@ -11,6 +11,7 @@ import { ExternalLink } from "@/components/queue/linkify"
 import { NewRunDialog } from "@/components/queue/new-run-dialog"
 import { canRetry, RetryRun } from "@/components/queue/retry-run"
 import { RunStatusBadge } from "@/components/queue/run-status-badge"
+import { RunsPagination } from "@/components/queue/runs-pagination"
 import { RunsTableSkeleton } from "@/components/queue/runs-table-skeleton"
 import { SourceIcon } from "@/components/queue/source-icon"
 import {
@@ -94,9 +95,9 @@ function RunsEmpty() {
   )
 }
 
-export function RunsTable() {
+export function RunsTable({ page = 1 }: { page?: number }) {
   const {
-    data: runs,
+    data,
     isPending,
     isError,
     error,
@@ -104,17 +105,17 @@ export function RunsTable() {
     isFetching,
     isStale,
     refetch,
-  } = useRuns()
+  } = useRuns(page)
 
   if (isPending) return <RunsTableSkeleton />
 
-  if (isError && !runs) {
+  if (isError && !data) {
     return (
       <QueryErrorState entity="runs" error={error} onRetry={() => refetch()} />
     )
   }
 
-  const rows = runs ?? []
+  const rows = data?.runs ?? []
 
   return (
     <div className="flex flex-col gap-2">
@@ -222,6 +223,14 @@ export function RunsTable() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Outside both layouts: the cards and the table are two renderings
+              of the same page, and the pager belongs to the page. */}
+          <RunsPagination
+            page={data?.page ?? page}
+            total={data?.total ?? rows.length}
+            perPage={data?.perPage ?? rows.length}
+          />
         </>
       )}
     </div>

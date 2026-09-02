@@ -19,7 +19,16 @@ export const runsModule = new Hono()
 runsModule.get("/", async (c) => {
   const session = await getRequestSession(c.req.raw.headers)
   if (!session) return c.json({ error: "Unauthorized" }, 401)
-  return c.json({ runs: await listRuns(session.user.id) })
+  // The page object IS the response body — `{ runs, total, page, perPage }`
+  // rather than nested under a `runs` key, so the client reads the counts
+  // it needs to size the pager without a second call.
+  //
+  // Unparseable or absent becomes page 1; `listRuns` clamps the rest, so a
+  // hand-typed `?page=99` serves the last real page instead of nothing.
+  const requested = Number.parseInt(c.req.query("page") ?? "1", 10)
+  return c.json(
+    await listRuns(session.user.id, Number.isNaN(requested) ? 1 : requested),
+  )
 })
 
 runsModule.get("/:id", async (c) => {
