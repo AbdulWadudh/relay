@@ -125,12 +125,6 @@
     "ast_hash": "a32d7b7ea32bacdef41803f34daf384a",
     "semantic_hash": "a32d7b7ea32bacdef41803f34daf384a"
   },
-  "scripts/_ig1.ts": {
-    "mtime": 1788307064.8145597,
-    "seen": 1788329635.779295,
-    "ast_hash": "34bbe8cc7031abd6ee301651a27ec35c",
-    "semantic_hash": "34bbe8cc7031abd6ee301651a27ec35c"
-  },
   "scripts/free-port.ts": {
     "mtime": 1788172744.5070956,
     "seen": 1788329635.779295,
@@ -1326,9 +1320,9 @@
     "semantic_hash": "d6d41fd9dd4edf4bf0dc9d32c217bb18"
   },
   "README.md": {
-    "mtime": 1788331151.7348163,
-    "seen": 1788332820.683902,
-    "ast_hash": "37580b2f3c725ed5889622f745b715f3",
+    "mtime": 1788333880.3356738,
+    "seen": 1788333932.1675727,
+    "ast_hash": "900c507116d1f656965468bc001413f3",
     "semantic_hash": ""
   },
   "RULES.md": {
@@ -1374,15 +1368,15 @@
     "semantic_hash": "06eee6094ac44b4c7896d7f5004c1c6a"
   },
   "src/components/vault/cookie-import-steps.tsx": {
-    "mtime": 1788332237.5163817,
-    "seen": 1788332820.683902,
-    "ast_hash": "5f903478e6d59a707e30376e2382fd98",
+    "mtime": 1788333654.3631954,
+    "seen": 1788333932.1675727,
+    "ast_hash": "1bf200dc64d25bf57eb506c3910cb616",
     "semantic_hash": ""
   },
   "src/components/vault/import-session-dialog.tsx": {
-    "mtime": 1788332041.169948,
-    "seen": 1788332820.683902,
-    "ast_hash": "050957039a81c0096de575b7f24165db",
+    "mtime": 1788333804.18172,
+    "seen": 1788333932.1675727,
+    "ast_hash": "232aabb40372f2e429f9a44b0aa5ff72",
     "semantic_hash": ""
   },
   "src/lib/query/social.ts": {
@@ -1404,15 +1398,27 @@
     "semantic_hash": ""
   },
   "src/lib/social/providers.ts": {
-    "mtime": 1788331857.3523042,
-    "seen": 1788332820.683902,
-    "ast_hash": "b7b23da6adf680baea6cd92a6158b675",
+    "mtime": 1788333076.197297,
+    "seen": 1788333932.1675727,
+    "ast_hash": "cd7626c910fdd8661e084a1171ecc162",
     "semantic_hash": ""
   },
   "src/server/social.ts": {
     "mtime": 1788332237.4803379,
     "seen": 1788332820.683902,
     "ast_hash": "3fef77f82d9dfb17d1ccc783eb9ba84f",
+    "semantic_hash": ""
+  },
+  "src/components/vault/connect-rail.tsx": {
+    "mtime": 1788333225.3559456,
+    "seen": 1788333932.1675727,
+    "ast_hash": "3f52fae57864b37c508b73cd7a0b0683",
+    "semantic_hash": ""
+  },
+  "CONNECTING_ACCOUNTS.md": {
+    "mtime": 1788332976.0897472,
+    "seen": 1788333932.1675727,
+    "ast_hash": "60e9a62871ab6bdf622a1e9e2ac4df8c",
     "semantic_hash": ""
   }
 }
