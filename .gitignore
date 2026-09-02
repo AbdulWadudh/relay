@@ -51,6 +51,11 @@ local.db*
 # `graphify export html` (needs only graph.json — no LLM, no API key)
 /graphify-out/graph.html
 
+# Dated backups of the previous curated graph, written by `graphify update`.
+# 2.1MB per rebuild DAY and fully reconstructible from git history — the
+# committed graph is the record, these are just the tool's undo buffer.
+/graphify-out/20*/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
