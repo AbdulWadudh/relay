@@ -1,6 +1,6 @@
 import config from "@/config"
 
-import { scrubProxy } from "@/lib/media/download"
+import { scrubProxy } from "@/lib/media/ytdlp"
 import { isSensitiveKey, redactLogValue } from "@/lib/observability/logger"
 
 /**

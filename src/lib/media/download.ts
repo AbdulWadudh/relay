@@ -1,13 +1,13 @@
-import { $ } from "bun"
-
 import config from "@/config"
 import { classifyFailure, type YtDlpAttempt } from "@/lib/media/classify"
-import { lastLine, MediaIngestError } from "@/lib/media/errors"
+import { MediaIngestError } from "@/lib/media/errors"
 import {
   CLIENT_RETRYABLE,
   PROXY_UNREACHABLE,
 } from "@/lib/media/failure-patterns"
+import { pruneInfo, withSyntheticTitle } from "@/lib/media/info"
 import type { ParsedSource } from "@/lib/media/sources"
+import { runYtDlp } from "@/lib/media/ytdlp"
 import { logger } from "@/lib/observability/logger"
 
 /**
@@ -19,89 +19,6 @@ import { logger } from "@/lib/observability/logger"
  * user's own jar it reaches them fine, so that toolchain is gone
  * (SESSION_AUTH.md §1.2, Branch B).
  */
-
-/**
- * yt-dlp's info JSON is ~500 KB, almost all of it `automatic_captions` and
- * per-format tables. These keys are dropped (along with every `_`-prefixed
- * internal), leaving ~2.5 KB of genuinely analysable source metadata —
- * title, description, channel, view/like counts, tags, upload date,
- * availability. `url`/`downloader_options`/`http_headers` carry short-lived
- * signed CDN URLs that are meaningless once the run ends.
- */
-const DROPPED_INFO_KEYS = new Set([
-  "automatic_captions",
-  "subtitles",
-  "formats",
-  "requested_formats",
-  "requested_downloads",
-  "thumbnails",
-  "heatmap",
-  "chapters",
-  "comments",
-  "fragments",
-  "http_headers",
-  "downloader_options",
-  "url",
-])
-
-function pruneInfo(raw: unknown): Record<string, unknown> {
-  if (!raw || typeof raw !== "object") return {}
-  return Object.fromEntries(
-    Object.entries(raw as Record<string, unknown>).filter(
-      ([key]) => !DROPPED_INFO_KEYS.has(key) && !key.startsWith("_"),
-    ),
-  )
-}
-
-/**
- * A title that says nothing but who posted it — measured 2026-09-02, a
- * Reel yt-dlp titles `"Video by aathirasethumadhavan"` whose caption
- * begins "29g protein & 405 calories per serving".
- *
- * Extractors for caption-first platforms have no title field to report, so
- * they synthesize one from the uploader. Agent routing reads `title`, so
- * left alone it would degrade on every such item.
- *
- * Matched on the DATA, not on a source id: any extractor whose title is
- * empty or is exactly the uploader's name restated gets the same
- * treatment, and `src/lib/media/download.ts` stays provider-generic
- * (RULES.md:57-58).
- */
-function isPlaceholderTitle(
-  title: string,
-  info: Record<string, unknown>,
-): boolean {
-  if (title.trim().length === 0) return true
-  const names = [info.channel, info.uploader, info.uploader_id]
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.toLowerCase())
-  const stripped = title.toLowerCase().replace(/^(video|post|reel)\s+by\s+/, "")
-  return stripped !== title.toLowerCase() && names.includes(stripped.trim())
-}
-
-/**
- * Gives caption-first sources a title a person would recognise, taken from
- * the caption's first line. This is `mapInfo`'s old behaviour from the
- * deleted instaloader path, carried over onto yt-dlp's info shape — the
- * §1.2 experiment found the caption intact in `description`, so nothing is
- * lost by dropping the second downloader.
- *
- * Exported for the acceptance check in scripts/verify-ytdlp.ts, which
- * runs it against a real Reel's info JSON — the placeholder rule is
- * matched on data, so a yt-dlp release that changes the shape of a
- * synthesized title has to be caught by running it, not by reading it.
- */
-export function withSyntheticTitle(
-  info: Record<string, unknown>,
-): Record<string, unknown> {
-  const title = typeof info.title === "string" ? info.title : ""
-  if (!isPlaceholderTitle(title, info)) return info
-
-  const description =
-    typeof info.description === "string" ? info.description : ""
-  const firstLine = description.split("\n")[0]?.trim().slice(0, 200)
-  return firstLine ? { ...info, title: firstLine } : info
-}
 
 export interface DownloadResult {
   /** Absolute path to the downloaded media, in whatever container served. */
@@ -127,123 +44,6 @@ export async function download(
   // metadata, and the caption yt-dlp puts in `description` is exactly what
   // instaloader's `mapInfo` built its title from — see `withSyntheticTitle`.
   return await downloadWithYtDlp(source, dir, cookiesPath ?? null)
-}
-
-async function runYtDlp(
-  source: ParsedSource,
-  dir: string,
-  pathFile: string,
-  extractorArgs: string | null,
-  cookiesPath: string | null,
-  proxy: string,
-): Promise<YtDlpAttempt> {
-  // The three facts that describe this ONE invocation, derived once here
-  // and carried on the returned attempt. The classifier needs them
-  // per-attempt rather than per-run: whether a jar was actually sent is
-  // what separates a dead session from a dead video, and whether the
-  // proxy was actually in the path is what stops someone else's use of
-  // the word "proxy" being read as our egress falling over.
-  const client = extractorArgs ?? "default"
-  const withCookies = Boolean(cookiesPath)
-  const proxied = Boolean(proxy) && source.proxied
-
-  // `--print-to-file` APPENDS. A line left by a previous attempt would be
-  // read as this attempt's output, so the file is cleared each time.
-  await $`rm -f ${pathFile}`.nothrow().quiet()
-
-  // A newline inside a Bun `$` template is a command separator, so the
-  // invocation stays one line and passes its arguments as an array — each
-  // element is escaped into exactly one argv entry.
-  const args = [
-    "--no-playlist",
-    "--no-warnings",
-    "--no-progress",
-    "--no-simulate",
-    "-f",
-    "bestaudio/best",
-    "-o",
-    `${dir}/source.%(ext)s`,
-    "--write-info-json",
-    // `after_move:` resolves after yt-dlp renames the file to its final
-    // name; the default (`video:`) prints "NA" because it runs too early.
-    "--print-to-file",
-    "after_move:%(filepath)s",
-    pathFile,
-    ...(extractorArgs ? ["--extractor-args", extractorArgs] : []),
-    // Read-write: yt-dlp writes the rotated jar back here on exit, which
-    // src/lib/media/cookies.ts persists.
-    ...(cookiesPath ? ["--cookies", cookiesPath] : []),
-    // Whether to proxy is the SOURCE's property, read off the parsed
-    // source, so this file still names no platform. Both halves must be
-    // true: a source that wants a proxy but has none configured runs
-    // direct rather than failing, which is what keeps the default
-    // deployment and local development working untouched.
-    ...(proxied ? ["--proxy", proxy] : []),
-    source.canonicalUrl,
-  ]
-  const result = await $`${config.media.ytDlpPath} ${args}`.nothrow().quiet()
-  const raw = result.stderr.toString()
-
-  // yt-dlp's OWN output, into the run's log stream.
-  //
-  // WHY IT IS WORTH THE NOISE. `lastLine` keeps one line, which is the
-  // right thing to SHOW a user but throws away the diagnosis: a run that
-  // walks four player clients reports only the last client's complaint,
-  // and the first client's failure — usually the interesting one — is
-  // gone. The run detail view's stage log shows all of it.
-  //
-  // Scrubbed like everything else derived from this stderr, and capped:
-  // yt-dlp can emit hundreds of lines and this is not a tool for reading
-  // hundreds of lines.
-  if (!result.exitCode) {
-    logger.debug("yt-dlp finished", { client, proxied })
-  } else {
-    for (const line of raw
-      .split("\n")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0)
-      .slice(-12)) {
-      logger.debug("yt-dlp", {
-        client,
-        line: scrubProxy(line).slice(0, 400),
-      })
-    }
-  }
-
-  return {
-    ok: result.exitCode === 0,
-    client,
-    // Scrubbed HERE, at the single point stderr enters the program, rather
-    // than at each of the places it leaves — `lastLine` output reaches the
-    // user-visible `run.error`, the logs, and the attempts list, and one
-    // missed call site would be a credential leak.
-    stderr: scrubProxy(lastLine(raw)),
-    exitCode: result.exitCode,
-    proxied,
-    withCookies,
-  }
-}
-
-/**
- * Removes the proxy URL from anything derived from yt-dlp's output.
- *
- * yt-dlp echoes the proxy it was given when it cannot reach it — "Unable
- * to connect to proxy" carries the URL verbatim. `config.media.proxyUrl`
- * may legitimately be `socks5://user:pass@host`, and `lastLine`'s result
- * is stored on the run and shown to the user, so unscrubbed that puts a
- * credential on a page. Replaced with a fixed token so the failure is
- * still diagnosable as "the proxy", just not as "the proxy's password".
- */
-export function scrubProxy(text: string): string {
-  const proxy = config.media.proxyUrl
-  if (!proxy) return text
-  // The bare `host:port` is scrubbed as well as the full URL: yt-dlp and
-  // the SOCKS layer below it report the endpoint in both shapes.
-  const forms = [proxy, proxy.replace(/^[a-z0-9+.-]+:\/\//i, "")]
-  return forms.reduce(
-    (acc, form) => (form ? acc.split(form).join("[proxy]") : acc),
-    text,
-  )
 }
 
 async function downloadWithYtDlp(
