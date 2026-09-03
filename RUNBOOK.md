@@ -197,7 +197,7 @@ measurement that justifies it, are in `src/lib/media/failure-patterns.ts`.
 | --- | --- | --- | --- |
 | 1 | proxy unreachable, **on an attempt that actually used the proxy** | `DOWNLOAD_FAILED` (retryable) | The SOCKS layer reports a refused tunnel as a `403` in some yt-dlp versions. Read as a client 403 it classifies **permanent**, so a brief proxy restart would fail every overlapping run for good |
 | 2 | `403` | `SOURCE_UNAVAILABLE` | Means the same with or without a jar, so it must never read as an expired session |
-| 3 | bot check | `SOURCE_UNAVAILABLE` | A jar cannot answer a challenge aimed at the server's address; counting it against the credential would retire a working session |
+| 3 | bot check | `DOWNLOAD_FAILED` (retryable) | A jar cannot answer a challenge aimed at the server's address; counting it against the credential would retire a working session. Retryable since 2026-09-04 — a challenge is aimed at an ADDRESS, and addresses stop being flagged, so classifying it permanent contradicted the message it showed the user |
 | 4 | no matching format | `SOURCE_UNAVAILABLE` | Its text contains "not available", so without this it falls into the login branch and — with a jar present — reports as an expired session |
 | 5 | login-shaped | `SESSION_EXPIRED` **only if that attempt sent a jar**, else `SOURCE_UNAVAILABLE` | The one case that genuinely means "your session died" |
 

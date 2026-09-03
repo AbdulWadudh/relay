@@ -104,12 +104,26 @@ const LADDER: readonly Rung[] = [
     // Also above the login-shaped rung. Never SESSION_EXPIRED: a jar
     // cannot answer a challenge aimed at the server's address, so counting
     // this against the credential would retire a working session.
+    //
+    // DOWNLOAD_FAILED, so the queue retries it -- the same reasoning as
+    // `egress-degraded` below, which is this failure's other half. A
+    // challenge is aimed at an ADDRESS, and an address stops being
+    // flagged; SOURCE_UNAVAILABLE classifies PERMANENT
+    // (src/lib/pipeline-errors.ts) and would never try again.
+    //
+    // MEASURED 2026-09-04, and it is why this rung changed: a Short that
+    // failed all six attempts in production (three anonymous, three with a
+    // jar, all proxied) downloaded 641KB on the DEFAULT client from a
+    // residential connection -- same yt-dlp build, same format selector,
+    // minutes apart. Nothing about the item was permanent. The old
+    // classification told the user it "usually clears on its own" and then
+    // guaranteed it could not, which is the contradiction this fixes.
     id: "bot-check",
     matches: (attempt) => BOT_CHECK.test(attempt.stderr),
     resolve: (_attempt, source) =>
       new MediaIngestError(
-        "SOURCE_UNAVAILABLE",
-        `Could not fetch this ${source.label}: the source is challenging this server as automated traffic, not refusing the item itself. Your connected account is fine. This usually clears on its own; if it does not, the server's network is the thing to change.`,
+        "DOWNLOAD_FAILED",
+        `Could not fetch this ${source.label}: the source is challenging this server as automated traffic, not refusing the item itself. Your connected account is fine. This will retry on its own; if it keeps happening, the server's network is the thing to change.`,
       ),
   },
   {

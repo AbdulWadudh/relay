@@ -104,6 +104,43 @@ The registration lives in the container's `/var/lib/cloudflare-warp/`. If the
 exit address is ever blocked, delete it and restart: it re-enrols anonymously
 with a fresh address. Nothing of yours is tied to it.
 
+### 2a. Rotating the exit address
+
+**A plain restart does NOT rotate it.** `warp_data` is a named volume
+specifically so a restart keeps the address the measurements were taken on
+(see the comment on the volume in `docker-compose.yml`). Bouncing the app
+therefore costs downtime and changes nothing. Only dropping the registration
+draws a new address.
+
+In the container, which leaves the app running:
+
+```bash
+docker exec -it $(docker ps -qf name=warp) sh -c '
+  warp-cli --accept-tos registration delete
+  warp-cli --accept-tos registration new
+  warp-cli --accept-tos connect
+'
+# then confirm the tunnel is up AND the address actually moved
+docker exec $(docker ps -qf name=warp)   curl -s --socks5-hostname 127.0.0.1:1080 https://cloudflare.com/cdn-cgi/trace   | grep -E '^(warp|ip)='
+```
+
+Or by wiping the volume, which is the same thing with a container recycle:
+
+```bash
+docker compose stop warp
+docker volume rm "$(docker volume ls -q | grep warp_data)"
+docker compose up -d warp
+```
+
+Record the `ip=` before and after — if it did not change, the delete did not
+take and there is no point testing a download.
+
+**It is a dice roll, not a fix.** Free WARP draws from Cloudflare's own WARP
+range, so if the source has flagged the RANGE rather than one address, a
+fresh enrolment lands somewhere equally flagged. Worth two or three attempts
+because it is free and takes a minute; if none of them take, the address pool
+is the problem and §1 residential is the answer.
+
 ---
 
 ## 3. THE MANUAL STEP, AND WHY THERE ISN'T ONE ANY MORE
@@ -221,7 +258,7 @@ authenticated proxy.**
 | symptom | meaning | action |
 | --- | --- | --- |
 | `DOWNLOAD_FAILED` + "outbound proxy is unavailable" | proxy unreachable. Was the missing network attach; now look at the `warp` healthcheck | §4 |
-| `SOURCE_UNAVAILABLE` + "challenging this server as automated traffic" | traffic went **direct**; the proxy was not used | check `MEDIA_PROXY_URL` is non-empty and `proxied` is set for the source |
+| `DOWNLOAD_FAILED` + "challenging this server as automated traffic" | the exit address is being challenged. **Read `proxied` on the `Download failed` log line** — this was written as "traffic went direct", which was only ever one of the two cases and mis-sent the 2026-09-04 outage looking for an unset variable | `proxied=true`: the WARP exit itself is flagged — rotate it (§2a) or switch `MEDIA_PROXY_URL`. `proxied=false`: check `MEDIA_PROXY_URL` is non-empty and `proxied` is set for the source |
 | `SOURCE_UNAVAILABLE` + "no client offered a downloadable audio format" | source-side, and **no client said anything more useful** | A/B the yt-dlp pin first (§1a), then reproduce from residential |
 | `SOURCE_UNAVAILABLE` + "refused this server with HTTP 403" | a CDN refusal was the most informative thing any client returned | A/B the yt-dlp pin (§1a) |
 | every YouTube run fails at once | the shared exit was flagged | delete WARP registration and restart, or switch `MEDIA_PROXY_URL` to another proxy |
