@@ -5,15 +5,24 @@ import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
 /**
- * The figure contract: label, value, optional delta, optional sparkline.
+ * The figure contract: label, value, optional delta, and a visual.
  *
  * A headline number is a TILE, not a one-bar bar chart — that is the most
- * common way a chart misses its own point. `hero` renders the one number
- * the dashboard leads with at display size; there is exactly one per view.
+ * common way a chart misses its own point.
+ *
+ * THERE IS NO `hero` VARIANT AND NO ACCENT STRIPE. Data-viz convention
+ * wants one display-size figure per view, and success rate had it: 48px,
+ * an accent stripe the others lacked, a two-column span, and no chart
+ * child, so it was shorter too. Four differences at once stopped reading
+ * as emphasis and started reading as a broken card. Giving every tile its
+ * own stripe fixed the inconsistency but added five bars of colour that
+ * encoded nothing the value did not already say, so they came out too
+ * (human decisions 2026-09-04). Hierarchy is carried by ORDER; the number
+ * is the tile.
  *
  * No `tabular-nums` on the value, deliberately. Equal-width digits make
- * `121` look loose at 48px; tabular figures are for columns that align
- * vertically, which these do not.
+ * `121` look loose at display sizes; tabular figures are for columns that
+ * align vertically, which these do not.
  */
 
 export function StatTile({
@@ -21,43 +30,19 @@ export function StatTile({
   value,
   hint,
   delta,
-  hero = false,
-  accent,
   children,
 }: React.PropsWithChildren<{
   label: string
   value: string
   hint?: React.ReactNode
   delta?: { text: string; good: boolean | null }
-  hero?: boolean
-  /** A solid colour bar down the start edge — never a translucent tint. */
-  accent?: string
 }>) {
   return (
     <Card
-      className={cn(
-        "relative h-full gap-0 overflow-hidden px-3 py-4 sm:px-5 sm:py-5",
-        CARD_SURFACE,
-      )}
+      className={cn("h-full gap-0 px-3 py-4 sm:px-5 sm:py-5", CARD_SURFACE)}
     >
-      {accent ? (
-        // Inset and rounded, NOT a full-height bar at start-0. Flush and
-        // square, it fought the card's rounded corner (the overflow clip
-        // sheared its ends) and sat exactly where the card's own border
-        // should be, so the tile looked like it had lost its left edge.
-        <span
-          aria-hidden="true"
-          className="absolute inset-y-3 start-0 w-1 rounded-e-full"
-          style={{ background: accent }}
-        />
-      ) : null}
       <p className="font-medium text-muted-foreground text-sm">{label}</p>
-      <p
-        className={cn(
-          "mt-2 font-heading font-semibold text-foreground leading-none",
-          hero ? "text-5xl" : "text-3xl",
-        )}
-      >
+      <p className="mt-2 font-heading font-semibold text-3xl text-foreground leading-none">
         {value}
       </p>
       {delta ? (
@@ -79,26 +64,25 @@ export function StatTile({
           {hint}
         </p>
       ) : null}
-      {children ? <div className="mt-3">{children}</div> : null}
+      {/* One reserved height for the visual, whatever it is. A meter is
+          three stacked lines and a sparkline is one, so without this the
+          sparkline tile sat 20px shorter than its neighbours and the row
+          lost its rhythm. */}
+      {children ? <div className="mt-3 min-h-[52px]">{children}</div> : null}
     </Card>
   )
 }
 
-export function StatTileSkeleton({ hero = false }: { hero?: boolean }) {
+export function StatTileSkeleton() {
   return (
     <Card
       className={cn("h-full gap-0 px-3 py-4 sm:px-5 sm:py-5", CARD_SURFACE)}
     >
       <div className="h-5 w-24 animate-pulse rounded bg-muted" />
-      <div
-        className={cn(
-          "mt-2 animate-pulse rounded bg-muted",
-          hero ? "h-12 w-32" : "h-9 w-24",
-        )}
-      />
+      <div className="mt-2 h-9 w-24 animate-pulse rounded bg-muted" />
       <div className="mt-2 h-5 w-20 animate-pulse rounded bg-muted" />
       <div className="mt-2 h-4 w-28 animate-pulse rounded bg-muted" />
-      <div className="mt-3 h-8 w-full animate-pulse rounded bg-muted" />
+      <div className="mt-3 h-[52px] w-full animate-pulse rounded bg-muted" />
     </Card>
   )
 }

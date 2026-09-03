@@ -46,17 +46,22 @@ export function Dashboard() {
       <ShellHeader title="Dashboard">
         <RangeFilter range={range} onChange={setRange} />
       </ShellHeader>
-      <ShellContent fill>
+      {/* Tighter horizontal padding than the shell default on a phone:
+          16px of shell plus the scroller's own 12px put 28px of nothing
+          either side of a 390px screen. Vertical padding is untouched, and
+          so is every other page. */}
+      <ShellContent fill className="px-2 sm:px-8">
         <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4">
           <ScrollPanel bordered={false}>
             <div
               className={cn(
-                // The card ring is an OUTWARD box-shadow, so it needs room
-                // on EVERY edge or the scrollport clips it — top included,
-                // where the first card's ring would otherwise sit a pixel
-                // above the viewport. pe-4 also clears the 10px overlay
-                // scrollbar.
-                "flex flex-col gap-4 ps-1 pe-4 pt-1 pb-2 transition-opacity duration-200",
+                // Gutters are SYMMETRIC. The card ring is an outward
+                // box-shadow, so every edge needs room or the scrollport
+                // clips it — but 4px start against 16px end (to clear the
+                // 10px overlay scrollbar) read as the whole page sitting
+                // off-centre. px-3 clears the bar on the right and matches
+                // it on the left.
+                "flex flex-col gap-4 px-3 pt-1 pb-2 transition-opacity duration-200",
                 query.isFetching && !query.isPending && "opacity-60",
               )}
             >

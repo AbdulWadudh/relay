@@ -15,18 +15,23 @@ import { ANALYTICS_RANGES, type AnalyticsRange } from "@/lib/analytics/window"
 /**
  * Numbers first, shape second.
  *
- * Success rate is the HERO figure — the one number the page leads with,
- * at display size, in the same sans as everything else. There is exactly
- * one per view.
+ * FIVE IDENTICAL TILES. Success rate used to be a display-size hero
+ * spanning two columns with an accent stripe and no chart child — four
+ * differences at once, which read as a broken card rather than as
+ * emphasis (human decision 2026-09-04). Now every tile carries a label, a
+ * value at the same size, a hint and a visual of one reserved height, so
+ * the row is one rhythm. No accent stripes: five bars of colour down the
+ * left encoded nothing the values did not already say. Hierarchy is
+ * carried by ORDER — success rate is still first.
  *
- * The two latency tiles are METERS against the PRD's 30s target rather
- * than bare numbers, because "19s" and "7 minutes" mean nothing without
- * the line they are being measured against, and a meter puts the line on
- * screen. The p95 meter is deliberately allowed to blow past its track:
- * pinning it at 100% would hide the entire tail.
+ * The latency tiles are METERS against the PRD's 30s target rather than
+ * bare numbers, because "19s" and "7 minutes" mean nothing without the
+ * line they are measured against, and a meter puts the line on screen.
+ * The p95 meter is deliberately allowed to blow past its track: pinning
+ * it at 100% would hide the entire tail.
  */
 
-const GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6"
+const GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5"
 
 function deltaFor(
   kpis: Kpis,
@@ -50,16 +55,21 @@ export function KpiRow({ kpis, range }: { kpis: Kpis; range: AnalyticsRange }) {
 
   return (
     <div className={GRID}>
-      <div className="xl:col-span-2">
-        <StatTile
-          hero
-          label="Success rate"
-          value={formatPercent(kpis.successRate, 1)}
-          accent={statusColor(healthy ? "good" : "critical")}
-          delta={deltaFor(kpis, range)}
-          hint={`${kpis.done} done · ${kpis.failed} failed · ${kpis.inFlight} in flight`}
+      <StatTile
+        label="Success rate"
+        value={formatPercent(kpis.successRate, 1)}
+        delta={deltaFor(kpis, range)}
+        hint={`${kpis.done} done · ${kpis.failed} failed · ${kpis.inFlight} in flight`}
+      >
+        <Meter
+          value={kpis.done}
+          limit={Math.max(kpis.done + kpis.failed, 1)}
+          label="of finished runs"
+          valueText={`${kpis.done}`}
+          limitText={`${kpis.done + kpis.failed}`}
+          fill={statusColor(healthy ? "good" : "critical")}
         />
-      </div>
+      </StatTile>
 
       <StatTile
         label="Runs"
@@ -128,9 +138,7 @@ export function KpiRow({ kpis, range }: { kpis: Kpis; range: AnalyticsRange }) {
 export function KpiRowSkeleton() {
   return (
     <div className={GRID}>
-      <div className="xl:col-span-2">
-        <StatTileSkeleton hero />
-      </div>
+      <StatTileSkeleton />
       <StatTileSkeleton />
       <StatTileSkeleton />
       <StatTileSkeleton />

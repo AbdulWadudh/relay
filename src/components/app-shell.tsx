@@ -1,5 +1,6 @@
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { cn } from "@/lib/utils"
 
 /**
  * Workbench chrome inside SidebarInset (RULES.md: root never scrolls;
@@ -23,10 +24,16 @@ export function ShellHeader({
 export function ShellContent({
   children,
   fill = false,
-}: React.PropsWithChildren<{ fill?: boolean }>) {
+  className,
+}: React.PropsWithChildren<{ fill?: boolean; className?: string }>) {
   if (fill) {
     return (
-      <div className="z-10 flex min-h-0 flex-1 flex-col p-4 sm:p-8">
+      <div
+        className={cn(
+          "z-10 flex min-h-0 flex-1 flex-col p-4 sm:p-8",
+          className,
+        )}
+      >
         {children}
       </div>
     )
@@ -34,7 +41,7 @@ export function ShellContent({
 
   return (
     <ScrollArea className="z-10 min-h-0 flex-1">
-      <div className="p-4 sm:p-8">{children}</div>
+      <div className={cn("p-4 sm:p-8", className)}>{children}</div>
     </ScrollArea>
   )
 }
