@@ -52,7 +52,10 @@ export function RetryRun({
   run,
   variant = "icon",
 }: {
-  run: Pick<RunSummary, "sourceUrl" | "agentId" | "status" | "sourceLabel">
+  run: Pick<
+    RunSummary,
+    "sourceUrl" | "agentId" | "analysisMode" | "status" | "sourceLabel"
+  >
   /** `icon` in a table row; `button` on the detail page, which has room. */
   variant?: "icon" | "button"
 }) {
@@ -62,7 +65,11 @@ export function RetryRun({
   function retry() {
     if (createRun.isPending) return
     createRun.mutate(
-      { url: run.sourceUrl, agentId: run.agentId ?? undefined },
+      {
+        url: run.sourceUrl,
+        agentId: run.agentId ?? undefined,
+        analysisMode: run.analysisMode,
+      },
       {
         onSuccess: (created) => {
           toast.add({

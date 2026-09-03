@@ -1,5 +1,5 @@
 import { UnrecoverableError } from "bullmq"
-
+import { analyseMedia, analysisRecord } from "@/lib/analysis"
 import type { RunStatus } from "@/lib/db/schema"
 import { extract } from "@/lib/extraction"
 import { verifyExtraction } from "@/lib/extraction/verify"
@@ -15,7 +15,6 @@ import {
 } from "@/lib/pipeline-errors"
 import { publishRun } from "@/lib/render/publish"
 import { getRunForWorker, updateRun } from "@/lib/runs"
-import { NoSpeechError, transcribe } from "@/lib/transcription"
 
 /**
  * The processing pipeline (TRD §3 `POST /api/v1/relay/process`), executed
@@ -88,48 +87,17 @@ async function runPipeline(runId: string): Promise<void> {
         })
 
         await enter("transcribing")
-        const transcription = await transcribe({
-          audioPath: audio.audioPath,
+        // Whisper, the frames path, or both — decided by the mode the
+        // submitter chose (src/lib/analysis.ts). Every branch returns the
+        // same timestamped segments, so nothing below this point changes.
+        const analysis = await analyseMedia({
+          mode: run.analysisMode,
+          audio,
           userId: run.userId,
           runId,
         })
-
-        if (!transcription.hasSpeech) {
-          // Task 4.3b (frame/vision extraction) takes over here for the many
-          // Reels that are music over on-screen text. Until it lands there is
-          // no other source, so the run fails rather than publishing
-          // fabricated speech.
-          await updateRun(runId, {
-            additionalData: {
-              no_speech: {
-                confidence: transcription.speech,
-                discarded_text: transcription.discardedText,
-              },
-            },
-          })
-          throw new NoSpeechError(transcription.speech)
-        }
-
-        await updateRun(runId, {
-          timings: {
-            transcribe_ms: transcription.timings.transcribeMs,
-            transliterate_ms: transcription.timings.transliterateMs,
-          },
-          additionalData: {
-            // Both streams are retained in full — the English segments are
-            // what Task 4.5 verifies evidence quotes against, and the Roman
-            // stream is the record of what was actually said.
-            transcript: {
-              provider: transcription.provider,
-              audio_model: transcription.audioModel,
-              language: transcription.language,
-              duration_seconds: transcription.durationSeconds,
-              roman: transcription.roman,
-              english: transcription.english,
-              speech: transcription.speech,
-            },
-          },
-        })
+        const { transcription, screen } = analysis
+        await updateRun(runId, analysisRecord(analysis, run.analysisMode))
 
         // ── Tasks 4.5–4.6 slot in below, while audio.audioPath exists ──
         await enter("extracting")
@@ -139,7 +107,7 @@ async function runPipeline(runId: string): Promise<void> {
           requestedAgentId: run.agentId,
           title: titleOf(audio.info),
           description: descriptionOf(audio.info),
-          segments: transcription.english.segments,
+          segments: analysis.segments,
         })
 
         // Every claim is checked against the English transcript before it
@@ -149,7 +117,7 @@ async function runPipeline(runId: string): Promise<void> {
         const verifyStart = performance.now()
         const verification = verifyExtraction(
           extraction.data,
-          transcription.english.segments,
+          analysis.segments,
           descriptionOf(audio.info),
         )
         const verifyMs = Math.round(performance.now() - verifyStart)
@@ -221,15 +189,23 @@ async function runPipeline(runId: string): Promise<void> {
           // script and `toRomanScript` transliterates in place, so there
           // is no separate original-script text to publish -- `roman` IS
           // the verbatim record, in Latin script.
+          // Only the streams this run actually produced: a frames-only run
+          // has no spoken transcript to publish, and a speech run has no
+          // screen reading.
           transcripts: [
-            {
-              label: "Transcript — original (Roman script)",
-              text: transcription.roman.text,
-            },
-            {
-              label: "Transcript — English translation",
-              text: transcription.english.text,
-            },
+            ...(transcription?.hasSpeech
+              ? [
+                  {
+                    label: "Transcript — original (Roman script)",
+                    text: transcription.roman.text,
+                  },
+                  {
+                    label: "Transcript — English translation",
+                    text: transcription.english.text,
+                  },
+                ]
+              : []),
+            ...(screen ? [{ label: "On-screen text", text: screen.text }] : []),
           ],
         })
       },

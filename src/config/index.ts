@@ -1,17 +1,6 @@
 const PORT = Number(process.env.PORT ?? 3000)
 const BASE_URL = process.env.APP_BASE_URL ?? `http://localhost:${PORT}`
 
-/**
- * yt-dlp `player_client` fallbacks, tried in order when the default chain
- * cannot get a downloadable format. Which clients YouTube serves is a
- * moving target, hence env-overridable.
- *
- * `web_safari` led this list until 2026-09-03, chosen because its HLS
- * formats needed no PO token. That stopped being true: measured from a
- * RESIDENTIAL connection on yt-dlp 2026.08.19, it failed 3 of 4 real
- * Shorts with "Requested format is not available" while `web_embedded`
- * and `mweb` took all 4. See LLM_STATE.md.
- */
 const YOUTUBE_CLIENTS = (
   process.env.YT_DLP_YOUTUBE_CLIENTS ?? "web_embedded,mweb"
 )
@@ -79,29 +68,7 @@ export const config = {
     attempts: Number(process.env.QUEUE_ATTEMPTS ?? 2),
     backoffMs: Number(process.env.QUEUE_BACKOFF_MS ?? 5000),
     healthPort: Number(process.env.QUEUE_HEALTH_PORT ?? 3001),
-    /**
-     * How many runs ONE user may have executing at once, enforced by a
-     * Dragonfly semaphore because BullMQ OSS has no job groups and its
-     * `limiter` is global rather than per-key (SESSION_AUTH.md §5.4).
-     *
-     * Fairness is the visible benefit — with `concurrency: 2` global, one
-     * user submitting 20 URLs would otherwise occupy both slots. But it is
-     * also CORRECTNESS: two runs sharing one cookie jar both write the
-     * rotated jar back on exit, and the loser's clobber can invalidate a
-     * live session. Serializing per user serializes per credential, since
-     * a credential belongs to exactly one user.
-     *
-     * ⚠ If this is ever raised above 1, the semaphore key MUST move from
-     * the user id to the credential id for cookie-bearing runs, or that
-     * clobber comes back.
-     */
     perUserConcurrency: Number(process.env.QUEUE_PER_USER_CONCURRENCY ?? 1),
-    /**
-     * Crash-safety net on the semaphore, not a runtime budget: a worker
-     * killed mid-run releases its slot by expiry instead of wedging that
-     * user forever. Must exceed the longest plausible run — sized off the
-     * 328.7 s worst case observed in LLM_STATE with a wide margin.
-     */
     userSlotTtlMs: Number(process.env.QUEUE_USER_SLOT_TTL_MS ?? 1_800_000),
     /** How long a run waits before re-checking a busy user slot. */
     deferMs: Number(process.env.QUEUE_DEFER_MS ?? 2000),
@@ -109,69 +76,16 @@ export const config = {
   llm: {
     timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 120000),
   },
-  /**
-   * Lifecycle of an imported social session once it is in use
-   * (SESSION_AUTH.md §5.3, §5.5).
-   */
   social: {
-    /**
-     * Consecutive SESSION_EXPIRED rejections before the Vault row offers
-     * "Reconnect". Two, not one: a single transient checkpoint should not
-     * nag a user whose session is in fact fine. Any success resets it.
-     */
     staleAfterRejects: Number(process.env.SOCIAL_STALE_AFTER_REJECTS ?? 2),
-    /**
-     * Rolling-window download budget for ONE captured session, keyed on the
-     * credential id rather than the user — the ACCOUNT is what gets
-     * flagged, and a user could hold several (SESSION_AUTH.md §5.3).
-     *
-     * Each yt-dlp fetch is several requests; anonymous Instagram tolerates
-     * low hundreds of requests/hour before throttling. 10 downloads/hour
-     * keeps us about an order of magnitude under, and well inside what a
-     * human browsing Reels generates.
-     */
     ratePerHour: Number(process.env.SOCIAL_RATE_PER_HOUR ?? 10),
-    /**
-     * Catches the slow burn an hourly cap misses — 10/hr sustained would
-     * be 240/day, which looks nothing like a person. 50/day is far more
-     * than a curator saves, so it should never bind in practice; it exists
-     * to stop a runaway loop.
-     */
     ratePerDay: Number(process.env.SOCIAL_RATE_PER_DAY ?? 50),
   },
   ollama: {
-    /**
-     * Local Ollama is a DEVELOPMENT convenience and is OFF by default.
-     *
-     * It is keyless, so if it were always registered it would be
-     * "configured" on every deploy — including production, where nothing
-     * is listening on 11434 — and every extraction would waste an attempt
-     * failing to connect before falling through. Opt in explicitly.
-     */
     localEnabled: process.env.OLLAMA_LOCAL_ENABLED === "true",
     localBaseUrl: process.env.OLLAMA_LOCAL_URL ?? "http://127.0.0.1:11434/v1",
-    /**
-     * Ollama Cloud speaks the same OpenAI-compatible surface as the local
-     * server — verified 2026-09-01: GET /v1/models returns 200 with an
-     * OpenAI-shaped list, POST /v1/chat/completions returns 401 without a
-     * bearer token. So it needs no special client, only a key in the vault.
-     */
     cloudBaseUrl: process.env.OLLAMA_CLOUD_URL ?? "https://ollama.com/v1",
-    /**
-     * Ollama's OpenAI-compat layer wants an Authorization header but
-     * ignores its value locally (per Ollama's own docs, which pass the
-     * literal "ollama"). Sending this placeholder keeps the keyless path
-     * from having to special-case the shared HTTP client. NOT a secret.
-     */
     localApiKey: "ollama",
-    /**
-     * Context window Ollama is SERVING, which is not the model's maximum.
-     * Measured 2026-09-01: gemma4:12b advertises 262144, but a default
-     * `ollama serve` loaded it at 4096 — too small for a transcript plus a
-     * JSON schema. The server default is set by OLLAMA_CONTEXT_LENGTH, so
-     * this value must be kept in step with it; it is what the ranker sees,
-     * because Ollama's /v1/models advertises no context at all.
-     */
     contextLength: Number(process.env.OLLAMA_CONTEXT_LENGTH ?? 32768),
   },
   cache: {
@@ -180,8 +94,6 @@ export const config = {
     catalogTtlSeconds: Number(process.env.CACHE_CATALOG_TTL ?? 86400),
   },
   media: {
-    // Host binaries (TRD §1). Overridable so operators can point at an
-    // absolute path when the binaries aren't on the service account's PATH.
     ytDlpPath: process.env.YT_DLP_PATH ?? "yt-dlp",
     ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
     /**
@@ -241,6 +153,32 @@ export const config = {
       channels: "1",
       bitrate: "64k",
     },
+    /**
+     * The frames path (PRD §4.2, "no speech" branch). Every value here was
+     * measured against a real 64s Short, not guessed — LLM_STATE.md
+     * 2026-09-04 has the numbers.
+     */
+    frames: {
+      /**
+       * `bv*` with a res SORT, not `bv*[height<=480]` — the filter form
+       * picked 240x426, too narrow for small overlay text. This gives
+       * 480x854 h264 video-only, ~1.5 MB for a 20s Reel.
+       */
+      format: process.env.FRAMES_FORMAT ?? "bv*",
+      formatSort: process.env.FRAMES_FORMAT_SORT ?? "res:480,+size",
+      /** 2x2. Four frames cover a Short; more shrinks every cell. */
+      columns: Number(process.env.FRAMES_COLUMNS ?? 2),
+      rows: Number(process.env.FRAMES_ROWS ?? 2),
+      /**
+       * Per-cell width. 480 is legible for burned-in captions and street
+       * signage; 360 is marginal, and for a Short the overlay text IS the
+       * content, so this is not the thing to economise on.
+       */
+      cellWidth: Number(process.env.FRAMES_CELL_WIDTH ?? 480),
+      /** ffmpeg `scene` score above which a frame counts as a cut. */
+      sceneThreshold: Number(process.env.FRAMES_SCENE_THRESHOLD ?? 0.15),
+      jpegQuality: Number(process.env.FRAMES_JPEG_QUALITY ?? 3),
+    },
   },
   notion: {
     clientId: process.env.NOTION_CLIENT_ID ?? "",
@@ -253,45 +191,14 @@ export const config = {
     redirectPath: "/api/v1/rays/oauth/notion/callback",
   },
   observability: {
-    /**
-     * Local log file, so both processes (web, worker) can be
-     * read in one place without tailing three terminals.
-     *
-     * Inside `data/`, which is gitignored — logs are operational data, and
-     * although this codebase never logs a secret (see the redaction list in
-     * src/lib/observability/logger.ts), a log file is still not something to
-     * commit. Set to "" to disable and log to stdout only.
-     */
     logFile: process.env.LOG_FILE ?? "./data/logs/relay.log",
-    /** Which process wrote a line — all three share the one file. */
     service: process.env.SERVICE_NAME ?? "relay-api",
     url: process.env.OPENOBSERVE_URL ?? "",
     org: process.env.OPENOBSERVE_ORG ?? "default",
     token: process.env.OPENOBSERVE_TOKEN ?? "",
-    /**
-     * The per-run log stream behind the run detail view's stage rail.
-     *
-     * Two sources, deliberately: Dragonfly holds the LIVE window (fast,
-     * complete, expires on its own) and OpenObserve answers for anything
-     * older (durable, costs no new storage because the logger already
-     * ships there). Neither needed a migration, which is why the split
-     * exists at all.
-     */
     runLogs: {
-      /**
-       * Cap per run. Trimmed from the OLDEST end — a run that fails after
-       * thousands of lines is diagnosed from its tail. Also the `size` of
-       * the historical query, so one pathological run cannot return a
-       * million rows into a request handler.
-       */
       maxLines: Number(process.env.RUN_LOG_MAX_LINES ?? 500),
-      /**
-       * How long the live window lasts. A day covers "something just
-       * broke, show me why", which is the whole use case; past that the
-       * OpenObserve path takes over and the user sees no difference.
-       */
       ttlSeconds: Number(process.env.RUN_LOG_TTL_SECONDS ?? 86400),
-      /** How far back the historical query looks. */
       historyDays: Number(process.env.RUN_LOG_HISTORY_DAYS ?? 30),
     },
     streams: {

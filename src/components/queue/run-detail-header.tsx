@@ -27,7 +27,10 @@ export function RunDetailHeader({
   title: string
   sourceUrl: string
   /** Enough of the run to resubmit it; see RetryRun. */
-  run: Pick<RunSummary, "sourceUrl" | "agentId" | "status" | "sourceLabel">
+  run: Pick<
+    RunSummary,
+    "sourceUrl" | "agentId" | "analysisMode" | "status" | "sourceLabel"
+  >
 }) {
   return (
     <header className="flex flex-col gap-3">

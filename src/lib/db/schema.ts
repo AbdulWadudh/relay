@@ -125,6 +125,14 @@ export const relayRuns = sqliteTable(
     source: text("source").notNull(),
     // Null means "route automatically" (System agent, else synthesized).
     agentId: text("agent_id"),
+    // Which text sources the run may use. "auto" walks speech -> captions
+    // -> frames and stops at the first that yields; "vision" goes straight
+    // to frames; "both" reads speech AND frames and merges them, for a clip
+    // whose instructions are split between the two. TEXT with no CHECK
+    // constraint, so adding a member here needs no migration.
+    analysisMode: text("analysis_mode", { enum: ["auto", "vision", "both"] })
+      .notNull()
+      .default("auto"),
     status: text("status", {
       enum: [
         "queued",
@@ -234,3 +242,4 @@ export type NewAgent = typeof agents.$inferInsert
 export type RelayRun = typeof relayRuns.$inferSelect
 export type NewRelayRun = typeof relayRuns.$inferInsert
 export type RunStatus = RelayRun["status"]
+export type AnalysisMode = RelayRun["analysisMode"]

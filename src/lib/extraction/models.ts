@@ -194,6 +194,12 @@ export function rankModels(
   models: CatalogModel[],
   provider: ChatProvider,
   task: ChatTask,
+  /**
+   * Only models advertising image input. Not a soft preference: a text-only
+   * model handed a contact sheet either errors or, worse, answers
+   * confidently about an image it never received.
+   */
+  requireVision = false,
 ): CatalogModel[] {
   const capabilitiesPublished = models.some(
     (model) => model.contextLength > 0 || model.json,
@@ -201,6 +207,7 @@ export function rankModels(
 
   const eligible = models.filter((model) => {
     if (NOT_A_CHAT_MODEL.test(model.id)) return false
+    if (requireVision && !model.vision) return false
     if (provider.freeOnly && !model.free) return false
     if (!capabilitiesPublished) return true
     if (model.contextLength > 0 && model.contextLength < provider.minContext) {

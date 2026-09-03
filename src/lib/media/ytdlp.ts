@@ -16,6 +16,20 @@ import { logger } from "@/lib/observability/logger"
  * proxy URL is stripped out of anything derived from stderr.
  */
 
+/**
+ * What to fetch, when it is not the default audio stream. The frames path
+ * wants video-only at a modest resolution and no info JSON (the audio
+ * download already stored it), so those are the only two knobs.
+ */
+export interface YtDlpFetch {
+  format: string
+  /** yt-dlp `-S`, which is how a resolution TARGET is expressed. */
+  formatSort?: string
+  /** Basename inside `dir`; the extension stays yt-dlp's own. */
+  outputName?: string
+  writeInfoJson?: boolean
+}
+
 export async function runYtDlp(
   source: ParsedSource,
   dir: string,
@@ -23,6 +37,7 @@ export async function runYtDlp(
   extractorArgs: string | null,
   cookiesPath: string | null,
   proxy: string,
+  fetch: YtDlpFetch = { format: "bestaudio/best", writeInfoJson: true },
 ): Promise<YtDlpAttempt> {
   // The three facts that describe this ONE invocation, derived once here
   // and carried on the returned attempt. The classifier needs them
@@ -47,10 +62,11 @@ export async function runYtDlp(
     "--no-progress",
     "--no-simulate",
     "-f",
-    "bestaudio/best",
+    fetch.format,
+    ...(fetch.formatSort ? ["-S", fetch.formatSort] : []),
     "-o",
-    `${dir}/source.%(ext)s`,
-    "--write-info-json",
+    `${dir}/${fetch.outputName ?? "source"}.%(ext)s`,
+    ...(fetch.writeInfoJson ? ["--write-info-json"] : []),
     // `after_move:` resolves after yt-dlp renames the file to its final
     // name; the default (`video:`) prints "NA" because it runs too early.
     "--print-to-file",

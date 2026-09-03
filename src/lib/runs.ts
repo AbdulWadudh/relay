@@ -1,7 +1,7 @@
 import { and, count, desc, eq } from "drizzle-orm"
 
 import { getDb } from "@/lib/db"
-import { type RunStatus, relayRuns } from "@/lib/db/schema"
+import { type AnalysisMode, type RunStatus, relayRuns } from "@/lib/db/schema"
 import { parseSourceUrl, sourceLabel } from "@/lib/media/sources"
 
 // Status labels/terminal checks live in src/lib/run-status.ts, which is
@@ -17,11 +17,10 @@ export interface RunSummary {
   id: string
   sourceUrl: string
   source: string
-  /** "YouTube Short" / "Instagram Reel" — derived, never stored. */
   sourceLabel: string
-  /** Video title once ingest has reported it; null until then. */
   title: string | null
   agentId: string | null
+  analysisMode: AnalysisMode
   status: RunStatus
   error: string | null
   timings: Record<string, number>
@@ -44,6 +43,7 @@ function toSummary(row: typeof relayRuns.$inferSelect): RunSummary {
     sourceLabel: sourceLabel(row.source),
     title: typeof info?.title === "string" ? info.title : null,
     agentId: row.agentId,
+    analysisMode: row.analysisMode,
     status: row.status,
     error: row.error,
     timings: row.timings,
@@ -53,12 +53,6 @@ function toSummary(row: typeof relayRuns.$inferSelect): RunSummary {
   }
 }
 
-/**
- * Everything the run captured. The list endpoint deliberately returns the
- * lean `RunSummary` (source_info alone is ~2.5 KB per run); the detail view
- * is the one place the full `additional_data` blob is shipped to the
- * browser.
- */
 export interface RunDetail extends RunSummary {
   additionalData: Record<string, unknown>
 }
@@ -67,32 +61,15 @@ function toDetail(row: typeof relayRuns.$inferSelect): RunDetail {
   return { ...toSummary(row), additionalData: row.additionalData ?? {} }
 }
 
-/** Rows per page. One number, so the API, the UI and the SSR prefetch
- * cannot disagree about where a page boundary falls. */
 export const RUNS_PER_PAGE = 20
 
 export interface RunPage {
   runs: RunSummary[]
-  /** Total matching rows, so the UI can size the pager without fetching. */
   total: number
-  /** Clamped to the range that actually exists — see below. */
   page: number
   perPage: number
 }
 
-/**
- * One page of runs, newest first.
- *
- * `page` is CLAMPED rather than trusted. It arrives from a URL the user can
- * type, and an out-of-range value would otherwise render an empty table
- * that looks like data loss — `?page=99` on a two-page list, or `?page=0`
- * producing a negative offset. Clamping means every reachable URL shows
- * real rows, and the response reports the page actually served so the UI
- * can highlight the right number.
- *
- * The count runs as its own query rather than being derived from the rows:
- * the whole point of a page is not to load the other 900.
- */
 export async function listRuns(
   userId: string,
   page = 1,
@@ -135,13 +112,8 @@ export async function getRun(
   return row ? toDetail(row) : null
 }
 
-/**
- * Creates the `queued` row. The caller enqueues afterwards, so a run always
- * exists in the database before it exists in the queue — never the reverse,
- * which would leave a job referencing a row that isn't there.
- */
 export async function createRun(
-  input: { url: string; agentId?: string },
+  input: { url: string; agentId?: string; analysisMode?: AnalysisMode },
   userId: string,
 ): Promise<RunSummary> {
   const parsed = parseSourceUrl(input.url)
@@ -157,6 +129,7 @@ export async function createRun(
       sourceUrl: parsed.canonicalUrl,
       source: parsed.source,
       agentId: input.agentId ?? null,
+      analysisMode: input.analysisMode ?? "auto",
       status: "queued",
       timings: {},
       additionalData: {
@@ -177,23 +150,12 @@ export async function createRun(
 export interface RunPatch {
   status?: RunStatus
   error?: string | null
-  /**
-   * Set by the router (Task 4.4) once an agent is chosen, so a run
-   * submitted without one still records which agent processed it.
-   */
   agentId?: string | null
   result?: Record<string, unknown> | null
-  /** Merged into the existing timings, not replacing them. */
   timings?: Record<string, number>
-  /** Merged into the existing additional_data, not replacing it. */
   additionalData?: Record<string, unknown>
 }
 
-/**
- * Worker-side update. Timings and additional_data accumulate across the
- * stages of one run, so both are read-merge-written rather than
- * overwritten — a `publishing` update must not erase the download timing.
- */
 export async function updateRun(
   id: string,
   patch: RunPatch,

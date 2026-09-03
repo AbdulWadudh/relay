@@ -29,6 +29,12 @@ export { MediaIngestError } from "@/lib/media/errors"
 export interface IngestedAudio {
   /** Absolute path to the extracted MP3, valid only inside the scope. */
   audioPath: string
+  /**
+   * The run's temp directory, so a later step can put its own artifacts
+   * beside the audio and have them purged by the same `finally` — the
+   * frames path writes a video and a contact sheet here.
+   */
+  dir: string
   audioBytes: number
   source: ParsedSource
   title: string | null
@@ -125,6 +131,7 @@ async function ingest(
   const duration = info.duration
   return {
     audioPath,
+    dir,
     audioBytes: Bun.file(audioPath).size,
     source,
     title: typeof info.title === "string" ? info.title : null,

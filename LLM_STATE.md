@@ -2543,3 +2543,135 @@ Two of them, both hit during this work:
   name CONTAINS the inner arrow labels. `agent-browser find role button
   --name "Move ... up"` matches the row and clicks nothing. Snapshot for
   the ref and click that.
+
+## Frames path: measured before building (2026-09-04)
+
+An analysis mode now travels with the run (`relay_runs.analysis_mode`,
+migration 0008): `auto` walks speech -> captions -> frames and stops at the
+first that yields, `vision` goes straight to frames, `both` reads speech
+AND frames and merges them. `both` exists because many Reels split their
+instructions between spoken audio and on-screen text (human decision
+2026-09-04). TEXT with no CHECK constraint, so a fourth member needs no
+migration.
+
+Four things were measured against a real Short
+(`youtube.com/shorts/eakngayy0V0`, 64.5s) before writing any of the frames
+code, and three of them changed the plan:
+
+**There is no video on disk to take frames from.** `download()` selects
+`-f bestaudio/best`, and for YouTube that resolves to format 251 with
+`vcodec: none`. The frames path therefore needs its OWN fetch, not just an
+ffmpeg call against what ingest already downloaded.
+
+**Storyboards are useless here.** yt-dlp exposes `sb0..sb3` mosaics, which
+look like a free contact sheet, but the largest is 101x180 per tile —
+nothing readable. Overlay text is the whole point, so this shortcut is out.
+
+**Video-only at ~480px is cheap enough.** `-f "bv*" -S "res:480,+size"`
+gives 480x854 h264 at 5.3 MB for 64s (so ~1.5 MB for a typical 20s Reel).
+`bv*[height<=480]` is NOT the same thing — it picked 240x426, too narrow
+for small overlay text.
+
+**Naive scene selection clusters at the start.** The proposed
+`select='gt(scene,0.3)'` with `-frames:v 6` takes the FIRST six cuts. This
+clip has 37 cuts and the first six all land before 12s of 64s. Fix: pass 1
+collects `(pts_time, scene_score)` via `metadata=print`, then the highest
+scorer in each of N equal-duration buckets is kept, falling back to the
+bucket midpoint when a bucket holds no cut. Measured picks: 6.6s, 29.5s,
+32.6s, 62.0s.
+
+**2x2 at 480px per cell is legible.** One 960x1708 JPEG at ~159 KB, and
+burned-in subtitles, Turkish street signage and a PayPal UI screenshot all
+read cleanly. 3x2 at 360px would be marginal — for a Short the overlay text
+IS the content, so cell resolution is not the thing to economise on.
+Timestamps are NOT burned in (no font dependency, and `drawtext` is not
+guaranteed on Windows); the prompt states the frame times in reading order
+instead.
+
+### Still open
+
+Vision output must adapt to the EXISTING contract, not fork it: everything
+downstream (agent routing, then `extraction/evidence.ts` and `verify.ts`)
+verifies quotes against timestamped segments, so the frames step emits
+`TranscriptSegment[]` — "00:14 on-screen: ..." — rather than a prose
+summary, which would have no verifiable quotes. Model choice goes through
+`rankModels` with `CatalogModel.vision` (already present,
+src/lib/extraction/models.ts:22) so the fallback chain, 429 handling and
+catalog cache all apply — no model id is written down.
+
+Captions are still unfetched: there are no `--write-auto-subs`/`--sub-langs`
+flags at all, and the `automatic_captions` key `pruneInfo` drops only ever
+held per-language track URLs, never text.
+
+## Frames path built and measured (2026-09-04)
+
+Implemented, not just planned. `src/lib/analysis.ts` is the new single
+entry: it turns a downloaded clip into `TranscriptSegment[]` and is the
+only thing pipeline.ts calls. Two producers feed it — Whisper and a
+contact sheet read by a vision model — and both emit the SAME shape, which
+is what let agent routing, `extraction/evidence.ts` and `verify.ts` stay
+untouched.
+
+  auto     speech; frames only if the audio carried none
+  vision   frames alone — Whisper is never called or paid for
+  both     speech AND frames, merged by startMs
+
+`src/lib/media/frames.ts` fetches its own video (`-f bv*` with
+`-S res:480,+size`), scores every cut in one `metadata=print` pass, keeps
+the strongest per equal-duration bucket, and tiles 2x2 at 480px per cell.
+`src/lib/vision/` turns that sheet into segments via `runChat`, so the
+account fallback chain, 429 handling and catalog cache all apply and NO
+model id is written down — passing `imageDataUrl` narrows `rankModels` to
+catalog entries with `vision: true`.
+
+### Measured end to end, against youtube.com/shorts/eakngayy0V0 (64.5s)
+
+```
+vision  sources=frames        4 segments, Whisper never called
+  6.6s  already live in over 90 countries
+ 32.6s  and a sponsor bank partnership
+both    sources=speech+frames 20 segments, interleaved by time
+ 29.4s  (spoken) To enable UPI, Apple needs NPCI approval and a sponsor-bank partnership.
+ 32.6s  (screen) and a sponsor bank partnership
+ 34.5s  (spoken) Neither is ready yet.
+```
+
+The chain picked `openrouter / dots-studio/dots-3-note-preview:free` on
+its own. It read burned-in subtitles verbatim and every Turkish street
+sign with diacritics intact ("Hacıbayram Camii", "Anadolu Medeniyetleri
+Müzesi", "TÜRKİYE BANKASI").
+
+### Three defects the real run exposed, all fixed
+
+**The last window ran past the end of the clip.** Extrapolating a median
+gap put the final segment at 62.0s-84.9s on a 64.5s video. Evidence
+verification compares quotes to segment times, so that is a quote that
+never existed — `ContactSheet` now carries `durationSeconds` and the tail
+window clamps to it.
+
+**A frame of street signs came back as a bulleted list**, newlines and
+all, into something that is one line downstream. Collapsed to " · ".
+
+**"WISDOM LOOM" was transcribed as content.** It is the channel watermark,
+repeating on every frame; the prompt now says to ignore branding.
+
+### And one the `both` merge exposed
+
+Descriptions are noise when speech is present — the audio already says a
+man is talking. `ScreenReading` therefore returns `textSegments` as well,
+and only those merge alongside speech; a music-only clip still gets the
+descriptions, because there they are all there is.
+
+That filter did not work at first: models write "No text visible, showing
+a hand tapping a phone" INTO `on_screen_text` despite being told to leave
+it empty, so it looked like read text. The prompt now forbids the phrasing
+AND `NOT_ACTUAL_TEXT` rejects it defensively, keeping it as a description
+rather than discarding it. Segments for `both` went 22 -> 20.
+
+### Still open
+
+Captions are still not fetched, so `auto` is speech -> frames, with the
+caption rung missing. Nothing verified in a browser: the frames path was
+exercised through scripts against the live database, and the submit
+dialog's three-mode picker has only been typechecked — the app needs a
+login I do not have.

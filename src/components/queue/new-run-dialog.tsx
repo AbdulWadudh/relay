@@ -3,7 +3,7 @@
 import { Add01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import * as React from "react"
-
+import { ModePicker } from "@/components/queue/analysis-mode-picker"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import type { AnalysisMode } from "@/lib/db/schema"
 import { SUPPORTED_SOURCE_LABELS } from "@/lib/media/sources"
 import { useCreateRun } from "@/lib/query/runs"
 import { relayProcessSchema } from "@/lib/schemas"
@@ -33,15 +34,17 @@ import { relayProcessSchema } from "@/lib/schemas"
  * the API uses, so the inline error and the server's rejection can't
  * disagree about what a supported link is.
  */
+
 export function NewRunDialog({ full = false }: { full?: boolean }) {
   const [open, setOpen] = React.useState(false)
   const [url, setUrl] = React.useState("")
+  const [mode, setMode] = React.useState<AnalysisMode>("auto")
   const [error, setError] = React.useState<string | null>(null)
   const createRun = useCreateRun()
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
-    const parsed = relayProcessSchema.safeParse({ url })
+    const parsed = relayProcessSchema.safeParse({ url, analysisMode: mode })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Enter a supported link.")
       return
@@ -51,6 +54,7 @@ export function NewRunDialog({ full = false }: { full?: boolean }) {
       onSuccess: () => {
         setOpen(false)
         setUrl("")
+        setMode("auto")
         toast.add({ type: "success", title: "Run queued" })
       },
       onError: (mutationError) =>
@@ -69,6 +73,7 @@ export function NewRunDialog({ full = false }: { full?: boolean }) {
         setOpen(next)
         if (!next) {
           setUrl("")
+          setMode("auto")
           setError(null)
         }
       }}
@@ -115,6 +120,18 @@ export function NewRunDialog({ full = false }: { full?: boolean }) {
                 Public {SUPPORTED_SOURCE_LABELS} links.
               </FieldDescription>
               {error ? <FieldError>{error}</FieldError> : null}
+            </Field>
+
+            <Field>
+              {/* No htmlFor: the control below is a radiogroup, not one
+                  input, and pointing at the URL box was plain wrong. */}
+              <FieldLabel>Analysis</FieldLabel>
+              <ModePicker value={mode} onChange={setMode} />
+              <FieldDescription>
+                Auto reads speech first and falls back to captions, then to
+                video frames. Pick Frames to skip straight to them, or Speech +
+                frames when the instructions are split between the two.
+              </FieldDescription>
             </Field>
           </FieldGroup>
 

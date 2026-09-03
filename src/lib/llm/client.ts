@@ -45,6 +45,12 @@ export interface ChatRequest {
    * never supported rather than emitting a null.
    */
   jsonSchema?: { name: string; schema: Record<string, unknown> }
+  /**
+   * A `data:image/...;base64,...` URL sent alongside `user`, for a model
+   * that advertises image input. Providers accept the OpenAI multimodal
+   * content-part shape, so this stays one client rather than a second.
+   */
+  imageDataUrl?: string
   temperature?: number
   signal?: AbortSignal
 }
@@ -89,7 +95,21 @@ export async function chatCompletion(request: ChatRequest): Promise<string> {
           : {}),
       messages: [
         { role: "system", content: request.system },
-        { role: "user", content: request.user },
+        {
+          role: "user",
+          // A bare string when there is no image, because that is what
+          // every text-only provider has been verified against; the parts
+          // array is only introduced when it has to be.
+          content: request.imageDataUrl
+            ? [
+                { type: "text", text: request.user },
+                {
+                  type: "image_url",
+                  image_url: { url: request.imageDataUrl },
+                },
+              ]
+            : request.user,
+        },
       ],
     }),
     signal: withTimeout(request.signal),

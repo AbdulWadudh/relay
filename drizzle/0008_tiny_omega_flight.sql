@@ -1,0 +1,1 @@
+ALTER TABLE `relay_runs` ADD `analysis_mode` text DEFAULT 'auto' NOT NULL;

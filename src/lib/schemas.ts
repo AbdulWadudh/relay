@@ -17,8 +17,6 @@ export const telemetryEventSchema = z.looseObject({
 export type TelemetryEvent = z.infer<typeof telemetryEventSchema>
 
 export const credentialInputSchema = z.object({
-  // Mirrors the `credentials.type` column enum (src/lib/db/schema.ts).
-  // `cookie` is a captured social session jar — SESSION_AUTH.md §3.
   type: z.enum(["api_key", "oauth", "cookie"]),
   provider: z.enum(PROVIDER_IDS),
   accessToken: z.string().min(1),
@@ -29,12 +27,6 @@ export const credentialInputSchema = z.object({
 
 export type CredentialInput = z.infer<typeof credentialInputSchema>
 
-/**
- * User-editable credential fields. Every field is optional so the dialog
- * can send only what changed; an empty string clears that field.
- * `account` records which account an API key was generated from, and maps
- * onto the same `account_name` meta key the OAuth flow populates.
- */
 export const credentialUpdateSchema = z
   .object({
     label: z.string().trim().max(80).optional(),
@@ -57,9 +49,7 @@ export const agentInputSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().min(1).max(280),
   systemPrompt: z.string().min(1),
-  // JSON Schema object; persisted via the schema's json-mode column.
   expectedOutputSchema: z.record(z.string(), z.unknown()),
-  // Free-form agent configuration; persisted via its own json-mode column.
   config: z.record(z.string(), z.unknown()).default({}),
   isActive: z.boolean().default(true),
 })
@@ -70,11 +60,6 @@ export const agentUpdateSchema = agentInputSchema.partial()
 
 export type AgentUpdateInput = z.infer<typeof agentUpdateSchema>
 
-/**
- * Pipeline input (TRD §3 `POST /relay/process`). The URL is narrowed to a
- * supported public item by the source registry rather than a regex here,
- * so adding a source never touches this schema.
- */
 export const relayProcessSchema = z.object({
   url: z
     .string()
@@ -84,18 +69,12 @@ export const relayProcessSchema = z.object({
     .refine((value) => parseSourceUrl(value) !== null, {
       message: `Enter a public ${SUPPORTED_SOURCE_LABELS} link.`,
     }),
-  // Optional: falls back to the matching System agent, then to the dynamic
-  // schema synthesizer (PRD §4.3).
   agentId: z.string().min(1).max(64).optional(),
+  analysisMode: z.enum(["auto", "vision", "both"]).optional(),
 })
 
 export type RelayProcessInput = z.infer<typeof relayProcessSchema>
 
-/**
- * Pipeline prompt edit. `content` is the whole prompt — these are short
- * enough that a full replace beats a patch format, and a truncated prompt
- * would silently change how every run behaves.
- */
 export const promptUpdateSchema = z.object({
   content: z.string().trim().min(1).max(20_000),
 })
@@ -106,33 +85,12 @@ export const shareAutoRunSchema = z.object({ enabled: z.boolean() })
 
 export type ShareAutoRunInput = z.infer<typeof shareAutoRunSchema>
 
-/**
- * The extraction fallback chain: credential ids, plus a provider id for a
- * provider that holds no credential (local Ollama).
- *
- * Free strings rather than an enum, because most entries are uuids. Every
- * id is checked against the user's own credentials by `resolveChain`, which
- * drops anything it does not recognise — validation here only bounds the
- * shape and the size.
- */
 export const extractionChainSchema = z.object({
   chain: z.array(z.string().min(1).max(64)).max(100),
 })
 
 export type ExtractionChainInput = z.infer<typeof extractionChainSchema>
 
-/**
- * A cookies.txt file the user exported from their own browser
- * (SESSION_AUTH.md §2).
- *
- * The field is named `cookieJar` on purpose. `isSensitiveKey` splits
- * camelCase and matches the word "cookie", so the request-body tracing in
- * openObserveMiddleware redacts it — naming it `jar` or `text` would
- * log the user's entire social session on every import.
- *
- * The cap is a DoS bound, not a format hint: a whole-browser export is
- * routinely 50-200KB and this is parsed in-process.
- */
 export const cookieImportSchema = z.object({
   cookieJar: z.string().min(1).max(1_000_000),
   label: z.string().trim().max(80).optional(),

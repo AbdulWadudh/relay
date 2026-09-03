@@ -1,5 +1,5 @@
 import { UnrecoverableError } from "bullmq"
-
+import { NoFrameTextError } from "@/lib/analysis-errors"
 import { ExtractionError, NoExtractionKeyError } from "@/lib/extraction"
 import { MediaBinaryError } from "@/lib/media/binaries"
 import { MediaIngestError } from "@/lib/media/ingest"
@@ -45,6 +45,9 @@ export function isPermanent(error: unknown): boolean {
   // A missing key won't appear during a backoff. A model that failed
   // validation twice CAN succeed on a fresh attempt, so that one retries.
   if (error instanceof NoExtractionKeyError) return true
+  // The same frames yield the same reading, so a retry only re-downloads
+  // the video to reach the same empty answer.
+  if (error instanceof NoFrameTextError) return true
   if (isPermanentPublishError(error)) return true
   return isPermanentTranscriptionError(error)
 }
@@ -71,6 +74,7 @@ export function codeOf(error: unknown): string {
   if (error instanceof MediaIngestError) return error.code
   if (error instanceof NoTranscriptionKeyError) return error.code
   if (error instanceof NoSpeechError) return error.code
+  if (error instanceof NoFrameTextError) return error.code
   if (error instanceof NoExtractionKeyError) return error.code
   if (error instanceof ExtractionError) return error.code
   if (error instanceof NoNotionRayError) return error.code
