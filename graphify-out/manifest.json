@@ -1002,9 +1002,9 @@
     "semantic_hash": "382043985a84c48d2796e4edf218aaa7"
   },
   "src/lib/media/download.ts": {
-    "mtime": 1788429366.15933,
-    "seen": 1788430060.939253,
-    "ast_hash": "f0c507d5625abd37d8a3abbcdc851479",
+    "mtime": 1788433500.5910618,
+    "seen": 1788436790.4379416,
+    "ast_hash": "bcea014abc5d5ad614cecd506de4e44a",
     "semantic_hash": ""
   },
   "src/lib/media/errors.ts": {
@@ -1308,9 +1308,9 @@
     "semantic_hash": "902437562632b59f37f02c32fae8cc39"
   },
   "LLM_STATE.md": {
-    "mtime": 1788432198.1347928,
-    "seen": 1788432213.5937378,
-    "ast_hash": "54c37b630a91652ade83a43448c73c16",
+    "mtime": 1788435463.1193147,
+    "seen": 1788436790.4379416,
+    "ast_hash": "3b02c34e23cb70efb4b3e093a491b6c9",
     "semantic_hash": ""
   },
   "PRD.md": {
@@ -1344,9 +1344,9 @@
     "semantic_hash": "1a45aa60ae5dec17390abfdd8d353854"
   },
   "docker-compose.yml": {
-    "mtime": 1788427484.9888258,
-    "seen": 1788430060.939253,
-    "ast_hash": "4b61bac8dd94829c913a9072be73cb0b",
+    "mtime": 1788433586.9452798,
+    "seen": 1788436790.4379416,
+    "ast_hash": "2b16059b822f976c5dd3c2a39b01707e",
     "semantic_hash": ""
   },
   "public/google81b6e6165b427f27.html": {
@@ -1476,9 +1476,9 @@
     "semantic_hash": ""
   },
   "src/components/queue/run-stage-logs.tsx": {
-    "mtime": 1788429642.6490757,
-    "seen": 1788430060.939253,
-    "ast_hash": "eb583dbba9e91cfee5db4b4fca772cf4",
+    "mtime": 1788434941.81643,
+    "seen": 1788436790.4379416,
+    "ast_hash": "0d58a97616113cb14ffd21d189186840",
     "semantic_hash": ""
   },
   "src/lib/observability/redact.ts": {
@@ -1512,9 +1512,9 @@
     "semantic_hash": ""
   },
   "EGRESS_PROXY.md": {
-    "mtime": 1788430739.8738735,
-    "seen": 1788432213.5937378,
-    "ast_hash": "ce643294a31eb175be0146791ae7f42b",
+    "mtime": 1788433795.613808,
+    "seen": 1788436790.4379416,
+    "ast_hash": "954c35d9612abf875e09efef90b21a25",
     "semantic_hash": ""
   },
   "src/lib/render/notion-properties.ts": {
@@ -1524,9 +1524,21 @@
     "semantic_hash": ""
   },
   "RUNBOOK.md": {
-    "mtime": 1788432198.136792,
-    "seen": 1788432213.5937378,
-    "ast_hash": "7682db33a260e48c66337a936923e99c",
+    "mtime": 1788433976.9901779,
+    "seen": 1788436790.4379416,
+    "ast_hash": "d25b3bff472596be0f9234bd06438117",
+    "semantic_hash": ""
+  },
+  "src/lib/media/classify.ts": {
+    "mtime": 1788433424.443121,
+    "seen": 1788436790.4379416,
+    "ast_hash": "4cceb89f40edf0d47f236f375cf18772",
+    "semantic_hash": ""
+  },
+  "src/lib/media/failure-patterns.ts": {
+    "mtime": 1788433477.013458,
+    "seen": 1788436790.4379416,
+    "ast_hash": "7c1bb6517420e4694ad4cc9e486257b8",
     "semantic_hash": ""
   }
 }
