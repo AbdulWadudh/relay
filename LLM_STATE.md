@@ -1746,12 +1746,23 @@ Short end to end at 11:19:35Z:
   354861**, `duration_seconds` 44, `downloadMs` 6702, on the DEFAULT client,
   with no `trying the next` and no `Every player client failed` anywhere in
   the log. Transcribed, extracted, published to Notion, `Run completed`.
-* That is also the evidence that `warp` resolved with **no manual
-  `docker network connect`**: the compose service was about three minutes
-  old, nothing had been attached by hand, and direct-from-the-VPS is 0/12
-  per §1 of EGRESS_PROXY.md — so the tunnel was in the path. A cookie jar
-  was supplied on the run (`Session cookies rotated`) and it still
-  succeeded.
+* A tunnel was definitely in the path: direct-from-the-VPS is 0/12 per §1 of
+  EGRESS_PROXY.md, and this succeeded on the first client. A cookie jar was
+  supplied (`Session cookies rotated`) and it still succeeded.
+* **This run does NOT prove the compose service was the tunnel, and an
+  earlier write-up of it claimed otherwise.** The old standalone
+  `warp-egress` container was created at 09:18Z and was still running at
+  11:19Z, and the hand-run attach that gave it the alias `warp` on the app
+  network lives on the CONTAINER — which was never recreated, and the app
+  network is `external: true` so a deploy does not rebuild it. Two
+  containers can therefore both have answered to `warp` on that network,
+  Docker returning both A records, and the run may have gone through either.
+  Indirect evidence read as proof; recorded because the mistake is the exact
+  one this file keeps warning about.
+* `warp-egress` was stopped and DELETED at 11:37Z on the user's
+  instruction. The compose service is now the only thing that can resolve
+  as `warp` on the app network, so **the next successful YouTube run is the
+  decisive test** and it had not been taken at the time of writing.
 * Coolify's GENERATED compose — the file it actually deploys, not the one in
   the repo — keeps the service intact: `device_cgroup_rules`, `cap_add`,
   `sysctls`, `WARP_SLEEP` and the healthcheck all verbatim; `networks` set
@@ -1783,8 +1794,11 @@ healthcheck state, have not been read directly. Coolify's API has no exec,
 and the prod host was not reachable from the dev machine — of three
 candidates in `known_hosts`, one authenticates but runs only the Coolify
 control plane, one rejects both keys, and one presents a changed host key
-that was deliberately not auto-accepted. The end-to-end run above is strong
-indirect evidence for the first, but it is not that command.
+that was deliberately not auto-accepted.
+
+Now that `warp-egress` is deleted, either of two things closes this: that
+`getent` (it should return exactly ONE address, the compose service), or
+simply one more successful YouTube run.
 
 A forced proxy failure and a forced 403-then-no-formats have not been run IN
 PRODUCTION, because forcing them means pointing `MEDIA_PROXY_URL` at a dead
