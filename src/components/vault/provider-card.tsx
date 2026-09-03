@@ -4,7 +4,7 @@ import type * as React from "react"
 
 import { ProviderMark } from "@/components/provider-mark"
 import { Badge } from "@/components/ui/badge"
-import { providerAccent } from "@/lib/providers"
+import { providerAccent } from "@/lib/provider-styles"
 import { cn } from "@/lib/utils"
 
 /**

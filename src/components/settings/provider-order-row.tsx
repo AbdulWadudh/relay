@@ -9,7 +9,8 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import * as React from "react"
 import { ProviderMark } from "@/components/provider-mark"
 import { Button } from "@/components/ui/button"
-import { providerAccent, providerLabel } from "@/lib/providers"
+import { providerAccent } from "@/lib/provider-styles"
+import { providerLabel } from "@/lib/providers"
 import { cn } from "@/lib/utils"
 
 /**

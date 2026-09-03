@@ -4,7 +4,8 @@ import { Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { ProviderMark } from "@/components/provider-mark"
-import { KEYED_AI_PROVIDERS, providerAccent } from "@/lib/providers"
+import { providerAccent } from "@/lib/provider-styles"
+import { KEYED_AI_PROVIDERS } from "@/lib/providers"
 import { cn } from "@/lib/utils"
 
 /**

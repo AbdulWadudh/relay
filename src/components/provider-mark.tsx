@@ -2,10 +2,10 @@
 
 import {
   type ProviderIconWithVariant,
-  providerAccent,
   providerIcon,
   providerIconVariant,
-} from "@/lib/providers"
+} from "@/lib/provider-icons"
+import { providerAccent } from "@/lib/provider-styles"
 import { cn } from "@/lib/utils"
 
 /**
