@@ -74,6 +74,7 @@
 
 ## Code Hygiene
 - **Max 250 lines per file.** Split modules/components before they cross it.
+- **Comments are sparse and short** — human decision 2026-09-03. The reader is a developer who can read the code; do not narrate what it already says. One line, only where the code is genuinely non-obvious (a workaround, a measured tradeoff, a footgun that will be "fixed" back). No multi-paragraph block comments, no essays above a function, no restating a name in prose. **Reasoning belongs in `LLM_STATE.md` (what was tried and measured) and `RUNBOOK.md` (what breaks and how to fix it)** — that is what those files are for, and a decision recorded there is findable, whereas the same text above a function is just noise on every read.
 - **Backend naming:** there is exactly ONE Hono app (mounted in `src/app/api/v1/[[...route]]/route.ts`). Everything under `src/server/` is a *module* (`credentialsModule`, `raysModule`, ...) — never name sub-routers "app".
 - **Rays are provider-generic:** flows go through the registry in `src/server/ray-providers.ts` (`/rays/oauth/:provider`); no provider-specific routes, cookies, or hardcoded provider strings in flow logic.
 - **Provider-specific concepts NEVER leak into common files** (human decision 2026-08-29): registry entries map provider vocabulary (e.g. Notion's workspace) onto the generic `account_id` / `account_name` / `account_email` / `account_avatar` meta keys; the vault, routes, and UI consume ONLY the generic keys.
