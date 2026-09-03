@@ -1,6 +1,6 @@
 /**
- * Supported ingest sources (PRD §4.1: public Instagram Reels and YouTube
- * Shorts only).
+ * Supported ingest sources: public Instagram Reels, and YouTube Shorts and
+ * watch pages (PRD §4.1 said Shorts only — widened 2026-09-03).
  *
  * Single source of truth for source vocabulary, the same way
  * src/lib/providers.ts owns credential providers (RULES.md: no hardcoding).
@@ -12,18 +12,35 @@
  * from src/lib/schemas.ts, which client components also pull in.
  */
 
+/** One URL shape a source can be linked by. */
+interface MediaPatternBase {
+  /** Anchored. Capture group 1 is the item id, unless `param` is set. */
+  path: RegExp
+  /**
+   * Narrows the shape to some of the source's `hosts`. Needed because
+   * `youtu.be/<id>` is a bare segment, and that same pattern on
+   * youtube.com would match a legacy channel URL like /mrbeast6000.
+   */
+  hosts?: readonly string[]
+  canonical?: (itemId: string) => string
+}
+
+// The union makes `id` mandatory with `param`: an id from a query string is
+// unconstrained by the path regex and ends up in yt-dlp's argv.
+export type MediaPattern =
+  | (MediaPatternBase & { param?: never; id?: never })
+  | (MediaPatternBase & { param: string; id: RegExp })
+
+const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/
+
 export interface MediaSource {
   id: string
   /** Human-facing name of one item from this source, singular. */
   label: string
   /** Hostnames this source owns, after `www.`/`m.` are stripped. */
   hosts: readonly string[]
-  /**
-   * Paths that identify a supported item. Capture group 1 is the item id.
-   * Anchored on both ends so a merely similar path can't slip through.
-   */
-  patterns: readonly RegExp[]
-  /** Rebuilds a clean URL from the item id, dropping tracking params. */
+  patterns: readonly MediaPattern[]
+  /** Default rebuild, for shapes that don't declare their own. */
   canonical: (itemId: string) => string
   /**
    * Send this source's fetches through `config.media.proxyUrl`.
@@ -47,17 +64,36 @@ export const MEDIA_SOURCES = [
     hosts: ["instagram.com"],
     patterns: [
       // instagram.com/reel/<code> and the /reels/ alias.
-      /^\/reels?\/([A-Za-z0-9_-]+)\/?$/,
+      { path: /^\/reels?\/([A-Za-z0-9_-]+)\/?$/ },
       // instagram.com/<account>/reel/<code> — the share sheet's format.
-      /^\/[^/]+\/reels?\/([A-Za-z0-9_-]+)\/?$/,
+      { path: /^\/[^/]+\/reels?\/([A-Za-z0-9_-]+)\/?$/ },
     ],
     canonical: (itemId) => `https://www.instagram.com/reel/${itemId}/`,
   },
   {
     id: "youtube",
-    label: "YouTube Short",
-    hosts: ["youtube.com"],
-    patterns: [/^\/shorts\/([A-Za-z0-9_-]{5,})\/?$/],
+    // "video", not "Short": full watch pages are accepted too.
+    label: "YouTube video",
+    hosts: ["youtube.com", "youtu.be"],
+    patterns: [
+      // Keeps the /shorts/ canonical form the proxy work was measured
+      // against (EGRESS_PROXY.md).
+      { path: /^\/shorts\/([A-Za-z0-9_-]{5,})\/?$/, hosts: ["youtube.com"] },
+      {
+        path: /^\/watch\/?$/,
+        hosts: ["youtube.com"],
+        param: "v",
+        id: YOUTUBE_VIDEO_ID,
+        canonical: (itemId) => `https://www.youtube.com/watch?v=${itemId}`,
+      },
+      // A bare id says nothing about whether it's a Short; /watch?v=
+      // serves both.
+      {
+        path: /^\/([A-Za-z0-9_-]{11})\/?$/,
+        hosts: ["youtu.be"],
+        canonical: (itemId) => `https://www.youtube.com/watch?v=${itemId}`,
+      },
+    ],
     canonical: (itemId) => `https://www.youtube.com/shorts/${itemId}`,
     proxied: true,
   },
@@ -77,7 +113,7 @@ const SOURCES: readonly (Omit<MediaSource, "id"> & { id: MediaSourceId })[] =
 export interface ParsedSource {
   source: MediaSourceId
   label: string
-  /** The source's own item id (Reel shortcode / Shorts video id). */
+  /** The source's own item id (Reel shortcode / YouTube video id). */
   itemId: string
   /** Tracking-free URL handed to yt-dlp and stored on the run. */
   canonicalUrl: string
@@ -90,7 +126,7 @@ export interface ParsedSource {
   proxied: boolean
 }
 
-/** "Instagram Reel or YouTube Short" — for validation and empty-state copy. */
+/** "Instagram Reel or YouTube video" — validation and empty-state copy. */
 export const SUPPORTED_SOURCE_LABELS: string = (() => {
   const labels = SOURCES.map((source) => source.label)
   if (labels.length < 2) return labels.join("")
@@ -112,9 +148,9 @@ export function sourceIdForHost(host: string): MediaSourceId | null {
 
 /**
  * Returns null for anything that isn't a supported public item URL — a
- * different host, a YouTube watch/playlist page, an Instagram profile, or
- * a non-http(s) scheme. Whether the item is actually *public* can only be
- * settled by the download itself; that failure is mapped in ingest.ts.
+ * different host, a YouTube playlist or channel page, an Instagram profile,
+ * or a non-http(s) scheme. Whether the item is actually *public* can only
+ * be settled by the download itself; that failure is mapped in ingest.ts.
  */
 export function parseSourceUrl(raw: string): ParsedSource | null {
   let url: URL
@@ -129,14 +165,28 @@ export function parseSourceUrl(raw: string): ParsedSource | null {
 
   for (const source of SOURCES) {
     if (!source.hosts.includes(host)) continue
-    for (const pattern of source.patterns) {
-      const itemId = pattern.exec(url.pathname)?.[1]
-      if (!itemId) continue
+    for (const shape of source.patterns) {
+      if (shape.hosts && !shape.hosts.includes(host)) continue
+      const match = shape.path.exec(url.pathname)
+      if (!match) continue
+
+      // `continue`, not `return null`: another shape may still match.
+      let itemId: string
+      if (shape.param) {
+        const fromQuery = url.searchParams.get(shape.param)
+        if (!fromQuery || !shape.id.test(fromQuery)) continue
+        itemId = fromQuery
+      } else {
+        const fromPath = match[1]
+        if (!fromPath) continue
+        itemId = fromPath
+      }
+
       return {
         source: source.id,
         label: source.label,
         itemId,
-        canonicalUrl: source.canonical(itemId),
+        canonicalUrl: (shape.canonical ?? source.canonical)(itemId),
         proxied: source.proxied === true,
       }
     }
