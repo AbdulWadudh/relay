@@ -1331,17 +1331,25 @@ our own `-f bestaudio/best`, the same client chain, minutes apart:
 | through the WARP sidecar | **11/12** — all on the DEFAULT client |
 | a residential connection | **11/12** — byte-identical files |
 
-The twelfth (`LiH-P4rSkLI`) 403s from a residential connection too. **This
+The twelfth (`LiH-P4rSkLI`) 403'd from a residential connection too — on
+the yt-dlp pinned at the time; it downloads fine on `2026.08.19`. **This
 closes the gap to residential; it does not beat it.** Nothing in the code or
 its comments should be read as claiming otherwise.
 
-A trap worth recording: four long-form music videos (`dQw4w9WgXcQ`,
-`kJQP7kiw5Fk`, `9bZkp7q19f0`, `n5t23nvU_t0`) 403 through the proxy, and it
-looks exactly like a proxy limitation. The residential control fails on the
-**same four** and succeeds on the same five, byte-identical. It is
-source-side, unrelated to egress — and irrelevant here anyway, since
-`sources.ts` only accepts `/shorts/`. Run the residential control before
-attributing a failure to the network.
+A trap worth recording, INCLUDING the wrong conclusion first drawn from
+it: four long-form music videos (`dQw4w9WgXcQ`, `kJQP7kiw5Fk`,
+`9bZkp7q19f0`, `n5t23nvU_t0`) 403'd through the proxy, and it looked
+exactly like a proxy limitation. The residential control failed on the
+**same four**, byte-identical, so it was recorded as source-side and
+unrelated to egress.
+
+**SUPERSEDED 2026-09-03: it was a stale yt-dlp.** All four, plus
+`LiH-P4rSkLI` and the Shorts that broke in production, download fine on
+`2026.08.19`. The residential control did correctly rule out the network —
+but "fails everywhere" was then read as "unfixable", conflating a
+source-side problem with a bug in our own tool. A/B the version before
+concluding anything about a widespread 403; it is one download and it is
+decisive.
 
 ### The PO-token lever: works, and is not needed
 

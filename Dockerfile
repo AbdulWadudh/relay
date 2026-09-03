@@ -100,7 +100,29 @@ ENV NODE_ENV=production \
 # First instruction of the stage on purpose: it depends only on the base
 # image and this version, so it stays cached across every deploy that
 # touches app code — apt is not re-run and yt-dlp is not re-downloaded.
-ARG YT_DLP_VERSION=2026.03.17
+#
+# BUMPED 2026-09-03, from 2026.03.17, and it fixed a live outage rather
+# than being routine hygiene. The old pin 403'd on the MEDIA fetch for
+# roughly half of YouTube items — metadata resolved, the CDN then refused
+# the stream. A/B on the same connection, same format selector, minutes
+# apart:
+#
+#   I4OkD3G11fw  old FAIL  -> new OK (1996902B)
+#   4yrAeQzavCM  old FAIL  -> new OK (2238320B)
+#   LiH-P4rSkLI  old FAIL  -> new OK (1141287B)
+#   5mU6SRS2Bxo  old OK    -> new OK (byte-identical)
+#
+# All four `verify:ytdlp` fixtures that used to need the fallback chain now
+# succeed on the DEFAULT client, and the chain reports "never needed or
+# never worked". Do not read that as licence to delete it: which clients
+# YouTube serves is a moving target, and the chain is what absorbs the
+# next shift.
+#
+# The lesson worth keeping: those 403s reproduced from a residential
+# connection too, which read as a source-side problem and was written up as
+# one. It was a stale extractor. When a 403 is widespread, A/B the version
+# BEFORE concluding anything about the source or the network.
+ARG YT_DLP_VERSION=2026.08.19
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \

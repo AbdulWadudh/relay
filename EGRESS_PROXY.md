@@ -20,25 +20,39 @@ Instagram is unaffected and does not use the proxy.
 | through the WARP proxy | **11 / 12** — all on the DEFAULT client |
 | a residential connection | **11 / 12** — byte-identical files |
 
-The twelfth (`LiH-P4rSkLI`) returns 403 from a residential connection too.
+The twelfth (`LiH-P4rSkLI`) returned 403 from a residential connection too
+— on the yt-dlp pinned at the time. It downloads fine on `2026.08.19`; see
+§1a. The table above was measured on the old pin, and the egress conclusion
+is unaffected by the bump.
 
 **This closes the gap to residential. It does not beat it.** Do not read any
 number here as a claim that proxied production is better than a normal
 connection — it is equal to one, which was the entire goal.
 
-### The trap that will cost you an afternoon
+### 1a. The trap that cost an afternoon — and the wrong lesson drawn from it
 
 Four long-form music videos (`dQw4w9WgXcQ`, `kJQP7kiw5Fk`, `9bZkp7q19f0`,
-`n5t23nvU_t0`) return 403 through the proxy. It looks exactly like a proxy
-limitation. **It is not** — a residential control fails on the same four and
-succeeds on the same five, byte-identical.
+`n5t23nvU_t0`) returned 403 through the proxy. It looked exactly like a
+proxy limitation. A residential control failed on the same four and
+succeeded on the same five, byte-identical — so it was recorded as
+source-side and unrelated to egress.
 
-> Before attributing any YouTube failure to the proxy, reproduce it from a
-> residential connection with the same yt-dlp version. Most of the time the
-> proxy is innocent.
+**That conclusion was wrong.** All four download fine on `2026.08.19`. The
+403s were a STALE EXTRACTOR: metadata resolved, then the CDN refused the
+stream, equally on every network. The same cause broke real Shorts in
+production and produced the misleading "no client offered a downloadable
+audio format".
 
-It is also moot for this product: `src/lib/media/sources.ts` only accepts
-`/shorts/` URLs, and none of those four are Shorts.
+Two rules, in this order:
+
+> **1. A/B the yt-dlp version first** whenever a 403 is widespread. It is
+> one download and it is decisive:
+> `yt-dlp -f bestaudio/best -o t.%(ext)s <url>` on the pin, then on the
+> latest release.
+>
+> **2. Then run the residential control.** It correctly rules out the
+> proxy — but "fails everywhere" is NOT "unfixable". That step conflated a
+> source-side problem with a bug in our own tool.
 
 ### PO tokens are not the answer — tested, not assumed
 
