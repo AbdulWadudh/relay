@@ -4,6 +4,7 @@ import {
   Alert02Icon,
   CheckmarkCircle02Icon,
   Login03Icon,
+  PlayIcon,
   Queue01Icon,
   RefreshIcon,
 } from "@hugeicons/core-free-icons"
@@ -15,31 +16,28 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { authClient } from "@/lib/auth-client"
 import { useCreateRun } from "@/lib/query/runs"
-import { relayProcessSchema } from "@/lib/schemas"
-
+import type { ExistingRun } from "./existing-run"
 import {
   clearPendingShare,
   readPendingShare,
   writePendingShare,
 } from "./pending-share"
 import { resolveShare, type ShareResolution } from "./resolve-share"
+import { ShareExisting } from "./share-existing"
 import { SharePanel } from "./share-panel"
+import { ShareRejected } from "./share-rejected"
 
-// The refine's issue, not issues[0]: an empty url trips `.min(1)` first and
-// that message is Zod's own "Too small: expected string to have >=1
-// characters". The refine owns the supported-sources sentence.
-function rejectionMessage(url: string): string {
-  const parsed = relayProcessSchema.safeParse({ url })
-  if (parsed.success) return ""
-  const issues = parsed.error.issues
-  return (
-    issues.find((issue) => issue.code === "custom")?.message ??
-    issues[0]?.message ??
-    ""
-  )
-}
-
-export function ShareTarget({ incoming }: { incoming: ShareResolution }) {
+export function ShareTarget({
+  incoming,
+  autoRun,
+  existing,
+}: {
+  incoming: ShareResolution
+  /** `share_auto_run` for this user; false shows a Run button instead. */
+  autoRun: boolean
+  /** This user's newest run for the same canonical URL, if any. */
+  existing: ExistingRun | null
+}) {
   const { data: session, isPending: sessionPending } = authClient.useSession()
   const createRun = useCreateRun()
 
@@ -72,15 +70,26 @@ export function ShareTarget({ incoming }: { incoming: ShareResolution }) {
   // Ref, not mutation state: React runs effects twice in dev and a share
   // must never queue two runs.
   const submitted = React.useRef(false)
-  React.useEffect(() => {
-    if (!adopted || !target || sessionPending || submitted.current) return
-    if (!session) return
+  const queue = React.useCallback(() => {
+    if (!target) return
     submitted.current = true
     createRun.mutate(
       { url: target.source.canonicalUrl },
       { onSuccess: () => clearPendingShare() },
     )
-  }, [adopted, target, session, sessionPending, createRun])
+  }, [target, createRun])
+
+  // `existing` is what stops navigating BACK to this page from queueing a
+  // second run: the row is there the moment the first POST returns, so a
+  // re-render finds it and offers a choice instead of firing again.
+  const [runAgain, setRunAgain] = React.useState(false)
+  const blocked = existing !== null && !runAgain
+
+  React.useEffect(() => {
+    if (!autoRun || !adopted || !target || sessionPending || blocked) return
+    if (!session || submitted.current) return
+    queue()
+  }, [autoRun, adopted, target, session, sessionPending, blocked, queue])
 
   if (!adopted || (target && sessionPending)) {
     return (
@@ -96,24 +105,7 @@ export function ShareTarget({ incoming }: { incoming: ShareResolution }) {
   }
 
   if (!target) {
-    const raw = resolution.kind === "unsupported" ? resolution.raw : undefined
-    return (
-      <SharePanel
-        tone="warning"
-        icon={Alert02Icon}
-        title={raw ? "Relay can't process that link" : "Nothing was shared"}
-        description={rejectionMessage(raw ?? "")}
-        sharedUrl={raw}
-      >
-        <Button
-          nativeButton={false}
-          render={<Link href="/runs" />}
-          className="transition-all duration-200 hover:-translate-y-px"
-        >
-          Open Relay
-        </Button>
-      </SharePanel>
-    )
+    return <ShareRejected resolution={resolution} />
   }
 
   if (!session) {
@@ -135,6 +127,21 @@ export function ShareTarget({ incoming }: { incoming: ShareResolution }) {
           Sign in
         </Button>
       </SharePanel>
+    )
+  }
+
+  if (blocked && existing) {
+    return (
+      <ShareExisting
+        existing={existing}
+        label={target.source.label}
+        sharedUrl={target.raw}
+        source={target.source.source}
+        onRunAgain={() => {
+          setRunAgain(true)
+          queue()
+        }}
+      />
     )
   }
 
@@ -182,16 +189,40 @@ export function ShareTarget({ incoming }: { incoming: ShareResolution }) {
         source={target.source.source}
       >
         <Button
-          onClick={() =>
-            createRun.mutate(
-              { url: target.source.canonicalUrl },
-              { onSuccess: () => clearPendingShare() },
-            )
-          }
+          onClick={queue}
           className="transition-all duration-200 hover:-translate-y-px"
         >
           <HugeiconsIcon icon={RefreshIcon} data-icon="inline-start" />
           Try again
+        </Button>
+      </SharePanel>
+    )
+  }
+
+  if (!autoRun && !createRun.isPending) {
+    return (
+      <SharePanel
+        tone="neutral"
+        icon={PlayIcon}
+        title="Ready when you are"
+        description={`Relay checked this ${target.source.label} and can process it. Turn on "Run shared links immediately" in Settings to skip this step.`}
+        sharedUrl={target.raw}
+        source={target.source.source}
+      >
+        <Button
+          onClick={queue}
+          className="transition-all duration-200 hover:-translate-y-px hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600"
+        >
+          <HugeiconsIcon icon={PlayIcon} data-icon="inline-start" />
+          Run it
+        </Button>
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={<Link href="/runs" />}
+          className="transition-all duration-200 hover:-translate-y-px"
+        >
+          Not now
         </Button>
       </SharePanel>
     )

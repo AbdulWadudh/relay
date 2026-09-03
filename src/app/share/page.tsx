@@ -1,7 +1,11 @@
 import type { Metadata } from "next"
+import { headers } from "next/headers"
 import Link from "next/link"
 
 import config from "@/config"
+import { getSessionFromHeaders } from "@/lib/auth-session"
+import { findLatestRunForUrl } from "@/lib/runs-lookup"
+import { getShareAutoRun } from "@/lib/settings"
 
 import { resolveShare } from "./resolve-share"
 import { ShareTarget } from "./share-target"
@@ -28,6 +32,22 @@ export default async function SharePage({
     title: first(params.title),
   })
 
+  // Read here rather than through a client query: a fetch would flash the
+  // "Ready when you are" panel before auto-run could take over.
+  const session = await getSessionFromHeaders(await headers())
+  const autoRun = session ? await getShareAutoRun(session.user.id) : false
+
+  // Looked up on every render, which is what makes navigating BACK to this
+  // page safe: once a run exists for the URL, auto-run is suppressed and
+  // the user is offered it instead of silently queueing a duplicate.
+  const existing =
+    session && resolution.kind === "ok"
+      ? await findLatestRunForUrl(
+          session.user.id,
+          resolution.source.canonicalUrl,
+        )
+      : null
+
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-8 bg-background px-5 py-10">
       <Link
@@ -36,7 +56,11 @@ export default async function SharePage({
       >
         {config.app.name}
       </Link>
-      <ShareTarget incoming={resolution} />
+      <ShareTarget
+        incoming={resolution}
+        autoRun={autoRun}
+        existing={existing}
+      />
     </main>
   )
 }
