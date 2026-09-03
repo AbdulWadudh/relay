@@ -3512,3 +3512,45 @@ touch and keyboard either way; only the track is conditional.
 
 Verified 932x430 (landscape phone): dashboard track hidden, rail scrolls.
 1346px: dashboard track visible, logo href `/dashboard`.
+
+## Share sheet: right-aligned actions, and a spent share (2026-09-04)
+
+### Actions sat left on a tablet
+
+`SharePanel` wrapped its children in `flex flex-col gap-3 sm:flex-row`
+with no justification, so from `sm` up they lined up LEFT while every
+dialog in the app puts actions right (`Modal`'s footer is
+`justify-end`). Now `sm:justify-end`. Below `sm` it stays a full-width
+stack, where alignment means nothing.
+
+Measured at 820px: justify-content `flex-end`, button 16px off the card's
+right edge (386px off the left). At 390px: still `column`, 318px button in
+a 318px row.
+
+### Submitting, then going Back, showed a share prompt again
+
+`/share?url=…` stayed in the history stack after the run was queued. Back
+from the run detail re-rendered it, the SERVER re-resolved the same URL,
+`findLatestRunForUrl` found the run it had just created, and the user got
+the "You've shared this before" panel — a share prompt, immediately after
+having submitted that share.
+
+The existing-run lookup was doing its job (it is what stops a duplicate
+run being queued, and that still holds). The bug was that a SPENT share
+stayed reachable at all.
+
+Fixed with `<Link replace>` on the routes out of a resolved share: "View
+run" and "All runs" on the queued panel, and "View that run" on the
+existing-run panel. The spent entry is dropped from history, so Back skips
+past it to whatever preceded the share.
+
+"Not now" deliberately still PUSHES. That user deferred rather than
+submitted, and going back to the offer is the reasonable thing.
+
+### Not verified in a browser
+
+The history behaviour itself. `/share` needs a session and
+`authClient.useSession()` never resolves in the headless browser, so only
+the session-free panels render there. The alignment was measured; the
+`replace` semantics are Next.js Link behaviour and were reasoned, not
+observed.

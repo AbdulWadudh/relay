@@ -158,9 +158,16 @@ export function ShareTarget({
         sharedUrl={target.source.canonicalUrl}
         source={target.source.source}
       >
+        {/* `replace`, not a push. The run is queued, so this share is
+            SPENT — but /share?url=… was still sitting in the history
+            stack, and Back from the run detail re-rendered it: the server
+            re-resolved the same URL, found the run it had just created,
+            and showed the "You've shared this before" panel. The user had
+            submitted once and got a share prompt again. Replacing drops
+            the spent entry so Back skips past it. */}
         <Button
           nativeButton={false}
-          render={<Link href={`/runs/${createRun.data.id}`} />}
+          render={<Link replace href={`/runs/${createRun.data.id}`} />}
           className="transition-all duration-200 hover:-translate-y-px"
         >
           View run
@@ -168,7 +175,7 @@ export function ShareTarget({
         <Button
           variant="outline"
           nativeButton={false}
-          render={<Link href="/runs" />}
+          render={<Link replace href="/runs" />}
           className="transition-all duration-200 hover:-translate-y-px"
         >
           All runs

@@ -36,9 +36,13 @@ export function ShareExisting({
       sharedUrl={sharedUrl}
       source={source}
     >
+      {/* `replace` for the same reason as the queued panel: this share is
+          resolved, so Back should not return to a share prompt. "Run it
+          again" stays a normal action — it re-queues and lands on the
+          success panel, which replaces from there. */}
       <Button
         nativeButton={false}
-        render={<Link href={`/runs/${existing.id}`} />}
+        render={<Link replace href={`/runs/${existing.id}`} />}
         className="transition-all duration-200 hover:-translate-y-px"
       >
         <HugeiconsIcon icon={ViewIcon} data-icon="inline-start" />

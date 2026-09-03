@@ -69,8 +69,14 @@ export function SharePanel({
           </div>
         ) : null}
         {extra}
+        {/* Right-aligned from `sm` up, the same contract as Modal's
+            footer (`justify-end`) — on a tablet these sat left while every
+            dialog in the app put its actions right. Below `sm` they stay a
+            full-width stack, where alignment is meaningless. */}
         {children ? (
-          <div className="flex flex-col gap-3 sm:flex-row">{children}</div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            {children}
+          </div>
         ) : null}
       </CardContent>
     </Card>
