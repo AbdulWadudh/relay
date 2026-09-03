@@ -1,12 +1,12 @@
 import { Hono } from "hono"
 
-import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
 import { dropRunLogs, readRunLogs } from "@/lib/observability/run-logs"
 import { readRunLogsHistory } from "@/lib/observability/run-logs-history"
 import { enqueueRun } from "@/lib/queue/runs-queue"
 import { createRun, deleteRun, getRun, listRuns, updateRun } from "@/lib/runs"
 import { relayProcessSchema } from "@/lib/schemas"
+import { requireSession, type SessionEnv } from "@/server/require-session"
 
 /**
  * /api/v1/runs + /api/v1/relay/process (TRD §3, Task 4.2).
@@ -16,11 +16,11 @@ import { relayProcessSchema } from "@/lib/schemas"
  * how long the run takes.
  */
 
-export const runsModule = new Hono()
+export const runsModule = new Hono<SessionEnv>()
+runsModule.use("*", requireSession)
 
 runsModule.get("/", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   // The page object IS the response body — `{ runs, total, page, perPage }`
   // rather than nested under a `runs` key, so the client reads the counts
   // it needs to size the pager without a second call.
@@ -34,8 +34,7 @@ runsModule.get("/", async (c) => {
 })
 
 runsModule.get("/:id", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   // Returns the full detail shape (including additional_data) — the list
   // endpoint stays lean, this one is what the detail page reads.
   const run = await getRun(c.req.param("id"), session.user.id)
@@ -57,8 +56,7 @@ runsModule.get("/:id", async (c) => {
  * produced nothing.
  */
 runsModule.get("/:id/logs", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   const id = c.req.param("id")
   if (!(await getRun(id, session.user.id))) {
     return c.json({ error: "Run not found" }, 404)
@@ -72,8 +70,7 @@ runsModule.get("/:id/logs", async (c) => {
 })
 
 runsModule.delete("/:id", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   const id = c.req.param("id")
   if (!(await deleteRun(id, session.user.id))) {
     return c.json({ error: "Run not found" }, 404)
@@ -85,11 +82,11 @@ runsModule.delete("/:id", async (c) => {
   return c.json({ ok: true })
 })
 
-export const relayModule = new Hono()
+export const relayModule = new Hono<SessionEnv>()
+relayModule.use("*", requireSession)
 
 relayModule.post("/process", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
 
   const body = await c.req.json().catch(() => null)
   const parsed = relayProcessSchema.safeParse(body)

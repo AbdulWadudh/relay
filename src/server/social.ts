@@ -1,11 +1,11 @@
 import { Hono } from "hono"
 
-import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
 import { cookieImportSchema } from "@/lib/schemas"
 import { CookieImportError, importJar } from "@/lib/social/import"
 import { socialProvider } from "@/lib/social/providers"
 import { createCredential } from "@/lib/vault"
+import { requireSession, type SessionEnv } from "@/server/require-session"
 
 /**
  * /api/v1/social — importing a browser-exported session (SESSION_AUTH.md §2).
@@ -24,11 +24,11 @@ import { createCredential } from "@/lib/vault"
  * browser, and never written to a run record.
  */
 
-export const socialModule = new Hono()
+export const socialModule = new Hono<SessionEnv>()
+socialModule.use("*", requireSession)
 
 socialModule.post("/:provider/import", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
 
   const provider = socialProvider(c.req.param("provider"))
   if (!provider) return c.json({ error: "Unknown provider" }, 404)

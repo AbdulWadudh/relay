@@ -1,5 +1,4 @@
 import { Hono } from "hono"
-import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
 import { credentialInputSchema, credentialUpdateSchema } from "@/lib/schemas"
 import {
@@ -9,23 +8,23 @@ import {
   updateCredentialMeta,
   updateCredentialSecret,
 } from "@/lib/vault"
+import { requireSession, type SessionEnv } from "@/server/require-session"
 
 /**
  * /api/v1/credentials — BYOK vault routes (TRD §3).
  * Responses are always masked: no token material ever leaves the vault.
  */
 
-export const credentialsModule = new Hono()
+export const credentialsModule = new Hono<SessionEnv>()
+credentialsModule.use("*", requireSession)
 
 credentialsModule.get("/", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   return c.json({ credentials: await listCredentials(session.user.id) })
 })
 
 credentialsModule.post("/", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   const body = await c.req.json().catch(() => null)
   const parsed = credentialInputSchema.safeParse(body)
   if (!parsed.success) {
@@ -43,9 +42,8 @@ credentialsModule.post("/", async (c) => {
 })
 
 credentialsModule.delete("/:id", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
+  const session = c.get("session")
   const id = c.req.param("id")
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
   if (!(await deleteCredential(id, session.user.id))) {
     return c.json({ error: "Credential not found" }, 404)
   }
@@ -55,8 +53,7 @@ credentialsModule.delete("/:id", async (c) => {
 
 /** Rename and/or rotate the secret. Responses stay masked. */
 credentialsModule.patch("/:id", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   const id = c.req.param("id")
   const body = await c.req.json().catch(() => null)
   const parsed = credentialUpdateSchema.safeParse(body)

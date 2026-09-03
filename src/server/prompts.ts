@@ -1,6 +1,5 @@
 import { Hono } from "hono"
 
-import { getRequestSession } from "@/lib/auth-request"
 import {
   listPrompts,
   type PromptKey,
@@ -9,6 +8,7 @@ import {
 } from "@/lib/extraction/prompts"
 import { logger } from "@/lib/observability/logger"
 import { promptUpdateSchema } from "@/lib/schemas"
+import { requireSession, type SessionEnv } from "@/server/require-session"
 
 /**
  * /api/v1/prompts — the pipeline's own prompts (Task 4.4).
@@ -18,18 +18,17 @@ import { promptUpdateSchema } from "@/lib/schemas"
  * has never run the pipeline still sees them.
  */
 
-export const promptsModule = new Hono()
+export const promptsModule = new Hono<SessionEnv>()
+promptsModule.use("*", requireSession)
 
 promptsModule.get("/", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   await seedPrompts(session.user.id)
   return c.json({ prompts: await listPrompts(session.user.id) })
 })
 
 promptsModule.put("/:key", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
 
   const body = await c.req.json().catch(() => null)
   const parsed = promptUpdateSchema.safeParse(body)

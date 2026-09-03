@@ -2,7 +2,6 @@ import { Hono } from "hono"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 
 import config from "@/config"
-import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
 import { rayCallbackSchema } from "@/lib/schemas"
 import { createCredential } from "@/lib/vault"
@@ -13,6 +12,10 @@ import {
   stateCookieName,
   type TokenResponse,
 } from "@/server/ray-providers"
+import {
+  requireSessionOrRedirect,
+  type SessionEnv,
+} from "@/server/require-session"
 
 /**
  * Rays are Relay's integrations. These routes use OAuth 2.0 underneath:
@@ -23,48 +26,44 @@ import {
 
 const VAULT_PATH = "/vault"
 
-export const raysModule = new Hono()
+export const raysModule = new Hono<SessionEnv>()
+raysModule.use("*", requireSessionOrRedirect)
 
 raysModule.get("/:provider", (c) => {
-  const sessionPromise = getRequestSession(c.req.raw.headers)
-  return sessionPromise.then((session) => {
-    if (!session) return c.redirect("/login")
-    const provider = getProvider(c.req.param("provider"))
-    if (!provider) return c.json({ error: "Unknown Ray provider" }, 404)
-    if (!isConfigured(provider)) {
-      return c.json(
-        {
-          error: `${provider.name} Ray is not configured (client id/secret)`,
-        },
-        503,
-      )
-    }
-    const state = crypto.randomUUID()
-    setCookie(c, stateCookieName(provider), state, {
-      httpOnly: true,
-      sameSite: "Lax",
-      secure: config.app.baseUrl.startsWith("https://"),
-      path: "/",
-      maxAge: 600,
-    })
-    const url = new URL(provider.authorizeUrl)
-    url.searchParams.set("client_id", provider.clientId)
-    url.searchParams.set("response_type", "code")
-    url.searchParams.set("redirect_uri", redirectUri(provider))
-    url.searchParams.set("state", state)
-    if (provider.scopes?.length) {
-      url.searchParams.set("scope", provider.scopes.join(" "))
-    }
-    for (const [key, value] of Object.entries(provider.extraAuthParams ?? {})) {
-      url.searchParams.set(key, value)
-    }
-    return c.redirect(url.toString())
+  const provider = getProvider(c.req.param("provider"))
+  if (!provider) return c.json({ error: "Unknown Ray provider" }, 404)
+  if (!isConfigured(provider)) {
+    return c.json(
+      {
+        error: `${provider.name} Ray is not configured (client id/secret)`,
+      },
+      503,
+    )
+  }
+  const state = crypto.randomUUID()
+  setCookie(c, stateCookieName(provider), state, {
+    httpOnly: true,
+    sameSite: "Lax",
+    secure: config.app.baseUrl.startsWith("https://"),
+    path: "/",
+    maxAge: 600,
   })
+  const url = new URL(provider.authorizeUrl)
+  url.searchParams.set("client_id", provider.clientId)
+  url.searchParams.set("response_type", "code")
+  url.searchParams.set("redirect_uri", redirectUri(provider))
+  url.searchParams.set("state", state)
+  if (provider.scopes?.length) {
+    url.searchParams.set("scope", provider.scopes.join(" "))
+  }
+  for (const [key, value] of Object.entries(provider.extraAuthParams ?? {})) {
+    url.searchParams.set(key, value)
+  }
+  return c.redirect(url.toString())
 })
 
 raysModule.get("/:provider/callback", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.redirect("/login")
+  const session = c.get("session")
   const provider = getProvider(c.req.param("provider"))
   if (!provider) return c.json({ error: "Unknown Ray provider" }, 404)
 

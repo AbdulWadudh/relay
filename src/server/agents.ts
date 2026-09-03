@@ -7,9 +7,9 @@ import {
   setAgentActive,
   updateAgent,
 } from "@/lib/agents"
-import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
 import { agentInputSchema, agentUpdateSchema } from "@/lib/schemas"
+import { requireSession, type SessionEnv } from "@/server/require-session"
 
 /**
  * /api/v1/agents — Human agent CRUD (TRD §3, Task 3). System agents are
@@ -17,17 +17,16 @@ import { agentInputSchema, agentUpdateSchema } from "@/lib/schemas"
  * mutable here — see src/lib/agents.ts.
  */
 
-export const agentsModule = new Hono()
+export const agentsModule = new Hono<SessionEnv>()
+agentsModule.use("*", requireSession)
 
 agentsModule.get("/", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   return c.json({ agents: await listAgents(session.user.id) })
 })
 
 agentsModule.post("/", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   const body = await c.req.json().catch(() => null)
   const parsed = agentInputSchema.safeParse(body)
   if (!parsed.success) {
@@ -51,8 +50,7 @@ agentsModule.post("/", async (c) => {
 })
 
 agentsModule.put("/:id", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   const id = c.req.param("id")
   const body = await c.req.json().catch(() => null)
   const parsed = agentUpdateSchema.safeParse(body)
@@ -96,8 +94,7 @@ agentsModule.put("/:id", async (c) => {
 })
 
 agentsModule.delete("/:id", async (c) => {
-  const session = await getRequestSession(c.req.raw.headers)
-  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const session = c.get("session")
   const id = c.req.param("id")
   if (!(await deleteAgent(id, session.user.id))) {
     return c.json({ error: "Agent not found" }, 404)
