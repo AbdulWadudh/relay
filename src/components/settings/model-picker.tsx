@@ -11,6 +11,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import type { AccountModels } from "@/lib/extraction/model-choice"
 import type { ChatStage } from "@/lib/extraction/stages"
@@ -39,12 +41,23 @@ function contextLabel(tokens: number): string | null {
 export function ModelPicker({
   stage,
   account,
+  loading = false,
 }: {
   stage: ChatStage
-  account: AccountModels
+  /** Absent while the provider's catalog is still being read. */
+  account: AccountModels | undefined
+  loading?: boolean
 }) {
   const pin = usePinModel()
   const stopDrag = (event: React.PointerEvent) => event.stopPropagation()
+
+  if (!account) {
+    return loading ? (
+      <Skeleton className="h-7 w-24 shrink-0 rounded-md sm:w-32" />
+    ) : (
+      <span className="w-24 shrink-0 sm:w-32" />
+    )
+  }
 
   if (account.unavailable) {
     return (
@@ -66,7 +79,7 @@ export function ModelPicker({
             onPointerDown={stopDrag}
             disabled={pin.isPending || account.models.length === 0}
             className={cn(
-              "h-7 max-w-[9rem] shrink-0 gap-1 px-2 font-mono text-xs sm:max-w-[14rem]",
+              "h-7 max-w-36 shrink-0 gap-1 px-2 font-mono text-xs sm:max-w-[14rem]",
               "transition-colors duration-200 hover:bg-muted",
               account.pinned ? "text-foreground" : "text-muted-foreground",
             )}
@@ -74,8 +87,9 @@ export function ModelPicker({
           />
         }
       >
+        {pin.isPending ? <Spinner className="size-3 shrink-0" /> : null}
         <span className="truncate">{label}</span>
-        {account.models.length > 0 ? (
+        {account.models.length > 0 && !pin.isPending ? (
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             className="size-3 shrink-0"

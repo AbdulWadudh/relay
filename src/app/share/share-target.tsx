@@ -12,9 +12,11 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import Link from "next/link"
 import * as React from "react"
 
+import { ModePicker } from "@/components/queue/analysis-mode-picker"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { authClient } from "@/lib/auth-client"
+import type { AnalysisMode } from "@/lib/db/schema"
 import { useCreateRun } from "@/lib/query/runs"
 import type { ExistingRun } from "./existing-run"
 import {
@@ -40,7 +42,7 @@ export function ShareTarget({
 }) {
   const { data: session, isPending: sessionPending } = authClient.useSession()
   const createRun = useCreateRun()
-
+  const [mode, setMode] = React.useState<AnalysisMode>("auto")
   const [resolution, setResolution] = React.useState<ShareResolution>(incoming)
   const [adopted, setAdopted] = React.useState(incoming.kind !== "empty")
 
@@ -74,10 +76,10 @@ export function ShareTarget({
     if (!target) return
     submitted.current = true
     createRun.mutate(
-      { url: target.source.canonicalUrl },
+      { url: target.source.canonicalUrl, analysisMode: mode },
       { onSuccess: () => clearPendingShare() },
     )
-  }, [target, createRun])
+  }, [target, createRun, mode])
 
   // `existing` is what stops navigating BACK to this page from queueing a
   // second run: the row is there the moment the first POST returns, so a
@@ -208,6 +210,7 @@ export function ShareTarget({
         description={`Relay checked this ${target.source.label} and can process it. Turn on "Run shared links immediately" in Settings to skip this step.`}
         sharedUrl={target.raw}
         source={target.source.source}
+        extra={<ModePicker value={mode} onChange={setMode} />}
       >
         <Button
           onClick={queue}

@@ -92,6 +92,7 @@ export const config = {
     prefix: "relay:cache",
     promptTtlSeconds: Number(process.env.CACHE_PROMPT_TTL ?? 3600),
     catalogTtlSeconds: Number(process.env.CACHE_CATALOG_TTL ?? 86400),
+    timeoutMs: Number(process.env.CACHE_TIMEOUT_MS ?? 250),
   },
   media: {
     ytDlpPath: process.env.YT_DLP_PATH ?? "yt-dlp",

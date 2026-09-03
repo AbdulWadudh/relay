@@ -2912,3 +2912,85 @@ an operator actually asks.
 ### Still open
 
 Captions. And an image rejection is still not remembered the way a 402 is.
+
+## The 20-second Settings request (2026-09-04)
+
+The model chip took ~20s to appear on a dev machine while prod was fine.
+Measured, not guessed:
+
+```
+one turso round trip     138ms
+token decrypt            ~35ms per account
+catalog per account       780ms / 6472ms / 20593ms / 20349ms / 20614ms
+stageModels (warm)        20382ms
+```
+
+Three near-identical ~20.5s figures were the tell. It was not the provider
+HTTP fetch and it was not a missing cache — the catalog IS cached twice,
+in Dragonfly and in the `model_catalog` row for a day. It was the cache
+client itself, with Dragonfly unreachable:
+
+```
+first:  get   214ms   put   547ms
+second: get  1469ms   put  5067ms
+third:  get 10169ms   put 10213ms
+```
+
+`enableOfflineQueue: true` buffers commands — which a cache genuinely
+wants, and the module says so — and ioredis's reconnect backoff grows, so
+each successive op waited longer. `maxRetriesPerRequest: 1` does not bound
+that wait. So the module's promise that "an unreachable Dragonfly costs a
+query, never a failed run" was false: it cost ten seconds an operation,
+and the WORKER pays the same on every catalog read during an outage.
+
+Every cache op is now bounded by `config.cache.timeoutMs` (250ms), and an
+op against a client whose status is already `end`/`close` returns the
+fallback immediately. `connecting` deliberately does NOT short-circuit —
+that is the handshake every fresh process goes through, and skipping it
+would turn the first read of every process into a miss. Re-measured:
+10169ms -> 265ms.
+
+The loser of the race is abandoned rather than cancelled, since ioredis
+has no per-command abort. Harmless for both: a late `get` resolves into
+nothing, and a late `set` still writes the value we wanted.
+
+Prod was unaffected throughout — it has Dragonfly — but the fix also
+protects it during an outage, which was the whole point of the degradation
+path.
+
+### And the row no longer dances
+
+The chip used to appear when the catalog resolved, shifting the account
+name sideways — a RULES.md violation ("layout must not dance while
+loading") introduced with the picker. The slot is now reserved from the
+first paint: a skeleton while the catalog is being read, an empty spacer
+otherwise. Selecting a model shows a spinner in the chip rather than only
+disabling it.
+
+## The share sheet had no mode picker (2026-09-04)
+
+Most links arrive through the Android share target, and that flow was
+submitting `{ url }` with no `analysisMode` — so every shared Reel ran as
+`auto` and the choice was unreachable where it matters most. It is also
+the moment the user has the clip in front of them, so they know better
+than any detector whether it is speech, on-screen text, or both.
+
+The picker needed a new slot on `SharePanel`: its `children` wrapper is
+`flex-col sm:flex-row`, correct for a button pair and wrong for a stacked
+control, which would have sat BESIDE "Run it" on a wide screen. `extra`
+renders full-width between the link and the actions.
+
+Still unreachable on the `autoRun` path, by design: that queues the
+instant the share lands, with no interaction to attach a choice to.
+
+### The icon was taking a full-width row
+
+`CardHeader` is `grid auto-rows-min` — a SINGLE-COLUMN grid. The share
+panel passed `items-start gap-4` and a `shrink-0` icon tile, which is
+flex-row wording for a layout that was never a flex row, so the tile got
+its own full-width row and pushed the title underneath it. Fixed with an
+explicit `flex flex-row`; tailwind-merge drops the primitive's `grid`.
+
+Only that one site was affected. Every settings card happens to write
+`flex items-center gap-2`, and the `flex` is what saved them — worth
+knowing before adding the next icon-and-title header.

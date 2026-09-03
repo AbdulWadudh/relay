@@ -23,7 +23,7 @@ export function StageTabContent({
   credentials: MaskedCredential[] | undefined
   onReorder: (next: ChainEntry[]) => void
 }) {
-  const { data: accounts } = useStageModels(stage)
+  const { data: accounts, isFetching } = useStageModels(stage)
 
   return (
     <ChainList
@@ -31,6 +31,7 @@ export function StageTabContent({
       items={items}
       credentials={credentials}
       accounts={accounts}
+      loadingModels={isFetching}
       onReorder={onReorder}
     />
   )

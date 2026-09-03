@@ -22,6 +22,7 @@ export function SharePanel({
   description,
   sharedUrl,
   source,
+  extra,
   children,
 }: {
   tone: PanelTone
@@ -30,11 +31,16 @@ export function SharePanel({
   description: string
   sharedUrl?: string
   source?: string
+  extra?: React.ReactNode
   children?: React.ReactNode
 }) {
   return (
     <Card className="w-full max-w-lg">
-      <CardHeader className="items-start gap-4">
+      {/* `flex-row`, not the primitive's default: CardHeader is a
+          single-column `grid`, so the icon tile took a full-width row of
+          its own and pushed the title beneath it. The `shrink-0` below was
+          always written for a row. */}
+      <CardHeader className="flex flex-row items-start gap-4">
         <div
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-md",
@@ -43,7 +49,7 @@ export function SharePanel({
         >
           <HugeiconsIcon icon={icon} className="size-5" aria-hidden />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <CardTitle className="font-heading text-xl tracking-tight">
             {title}
           </CardTitle>
@@ -62,6 +68,7 @@ export function SharePanel({
             </span>
           </div>
         ) : null}
+        {extra}
         {children ? (
           <div className="flex flex-col gap-3 sm:flex-row">{children}</div>
         ) : null}

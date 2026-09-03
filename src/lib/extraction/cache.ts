@@ -43,6 +43,48 @@ function client(): IORedis {
   return globalForCache.__relayCacheRedis
 }
 
+/**
+ * Bounds ONE cache operation. Without this, an unreachable Dragonfly does
+ * not degrade to a miss — it degrades to a 10-second stall, because
+ * `enableOfflineQueue: true` buffers the command and ioredis's reconnect
+ * backoff grows (measured 2026-09-04: 214ms, 1469ms, 10169ms on
+ * successive ops). `maxRetriesPerRequest` does not bound the wait.
+ *
+ * The loser of the race is abandoned, not cancelled — ioredis has no
+ * per-command abort. That is fine for both operations here: a late `get`
+ * resolves into nothing, and a late `set` still writes the value we
+ * wanted, just after we stopped waiting to hear about it.
+ */
+async function withinBudget<T>(
+  operation: () => Promise<T>,
+  fallback: T,
+  what: string,
+): Promise<T> {
+  const status = client().status
+  if (status === "end" || status === "close") return fallback
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          logger.warn(
+            "Cache operation exceeded its budget — treating as a miss",
+            {
+              operation: what,
+              budget_ms: config.cache.timeoutMs,
+            },
+          )
+          resolve(fallback)
+        }, config.cache.timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function keyFor(parts: string[]): string {
   return [config.cache.prefix, ...parts].join(":")
 }
@@ -50,7 +92,7 @@ function keyFor(parts: string[]): string {
 /** Cache reads never throw — a miss and an outage are the same outcome. */
 async function readThrough(key: string): Promise<string | null> {
   try {
-    return await client().get(key)
+    return await withinBudget(() => client().get(key), null, "get")
   } catch (error) {
     logger.warn("Cache read failed — falling back to the database", {
       key,
@@ -62,7 +104,13 @@ async function readThrough(key: string): Promise<string | null> {
 
 async function write(key: string, value: string, ttl: number): Promise<void> {
   try {
-    await client().set(key, value, "EX", ttl)
+    await withinBudget(
+      async () => {
+        await client().set(key, value, "EX", ttl)
+      },
+      undefined,
+      "set",
+    )
   } catch (error) {
     logger.warn("Cache write failed", {
       key,
@@ -120,7 +168,13 @@ export async function cached<T>(options: {
 export async function invalidate(parts: string[]): Promise<void> {
   const key = keyFor(parts)
   try {
-    await client().del(key)
+    await withinBudget(
+      async () => {
+        await client().del(key)
+      },
+      undefined,
+      "del",
+    )
   } catch (error) {
     // The TTL still bounds how long the stale entry can survive.
     logger.warn("Cache invalidation failed — entry expires on its TTL", {

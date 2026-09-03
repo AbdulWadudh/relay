@@ -110,6 +110,7 @@ export function ChainList({
   items,
   credentials,
   accounts,
+  loadingModels = false,
   onReorder,
 }: {
   stage: ChatStage
@@ -117,6 +118,8 @@ export function ChainList({
   credentials: MaskedCredential[] | undefined
   /** Per-account model data; absent until this stage's catalogs load. */
   accounts: AccountModels[] | undefined
+  /** True while those catalogs are being read. */
+  loadingModels?: boolean
   onReorder: (next: ChainEntry[]) => void
 }) {
   /**
@@ -176,11 +179,11 @@ export function ChainList({
       account: accountFor(credentials, entry),
       triedFirst: entry.id === firstActiveId,
       // Only on a switched-ON row: a skipped account has no model in use,
-      // and offering to pick one would suggest otherwise.
-      model:
-        models && entry.active ? (
-          <ModelPicker stage={stage} account={models} />
-        ) : undefined,
+      // and offering to pick one would suggest otherwise. Rendered even
+      // before the catalog arrives so the slot reserves its width.
+      model: entry.active ? (
+        <ModelPicker stage={stage} account={models} loading={loadingModels} />
+      ) : undefined,
     }
   })
 
