@@ -69,22 +69,29 @@ on a client that actually requires a token.
 ## 2. How it is wired
 
 ```
-worker container  --socks5://warp:1080-->  warp-egress  --WireGuard-->  Cloudflare
-   (app network)                          (Coolify resource)                |
+worker container  --socks5://warp:1080-->  warp        --WireGuard-->  Cloudflare
+   (app network)                          (app network)                     |
                                                                             v
                                                                         YouTube
 ```
 
 | piece | where it lives |
 | --- | --- |
-| `MEDIA_PROXY_URL` | Coolify env var on `relay:main`, value `socks5://warp:1080` |
-| the proxy itself | Coolify resource **`warp-egress`**, image `caomingjun/warp:2026.7.1377.0-2.12.0` |
+| `MEDIA_PROXY_URL` | Coolify env var on the app, value `socks5://warp:1080`. `docker-compose.yml` defaults to the same value, so the two cannot disagree by accident |
+| the proxy itself | the **`warp` service** in `docker-compose.yml`, image `caomingjun/warp:2026.7.1377.0-2.12.0` |
 | which sources use it | `proxied` flag in `src/lib/media/sources.ts` |
 | the flag being applied | `src/lib/media/download.ts`, `--proxy` |
 
-`warp-egress` is a **separate Coolify resource**, not a service in
-`docker-compose.yml`. It runs Cloudflare's official `warp-svc` daemon with
-`gost` exposing SOCKS5 on 1080.
+`warp` is a **service in `docker-compose.yml`** and deploys with the app. It
+runs Cloudflare's official `warp-svc` daemon with `gost` exposing SOCKS5 on
+1080, and it publishes **no port**: `gost -L :1080` auto-detects HTTP as well
+as SOCKS5, so a published 1080 on a public VPS would be an open relay. Only
+the app network can reach it.
+
+It is deliberately **not** in the worker's `depends_on`. Only sources flagged
+`proxied` use it, and gating the worker on a free-tier consumer tunnel would
+stop Instagram ingestion every time WARP is throttled. A YouTube fetch with
+the tunnel down fails `DOWNLOAD_FAILED`, which the queue retries.
 
 ### No authentication is required
 
@@ -99,30 +106,41 @@ with a fresh address. Nothing of yours is tied to it.
 
 ---
 
-## 3. THE MANUAL STEP — read this before touching `warp-egress`
+## 3. THE MANUAL STEP, AND WHY THERE ISN'T ONE ANY MORE
 
-Coolify puts a standalone resource on the shared `coolify` network. The app's
-containers are on `<app-resource-uuid>`. **They cannot see each other by
-default**, and `--network` in *Custom Docker Run Options* is silently
-stripped by Coolify — it was tried and it does not work.
-
-So after **every deploy or restart of `warp-egress`**, re-attach it:
+Compose puts every service in `docker-compose.yml` on the app's own network
+and gives it the bare service name as a network alias. That alias is the
+entire mechanism behind `socks5://warp:1080`, the same one behind
+`redis://dragonfly:6379`. **Nothing has to be run after a deploy.**
 
 ```bash
-ssh <prod-host>
-C=$(sudo docker ps --format '{{.Names}}' | grep <warp-resource-uuid>)
-sudo docker network connect --alias warp <app-resource-uuid> "$C"
+sudo docker exec $(sudo docker ps -qf name=worker) getent hosts warp
+# expect an address
 ```
 
-Verify:
+### What it used to be, because the shape of the bug is worth keeping
+
+`warp` was a standalone Coolify resource, which Coolify puts on the shared
+`coolify` network while the app's containers sit on the app's own. **They
+cannot see each other by default**, and `--network` in *Custom Docker Run
+Options* is silently stripped by Coolify — that was tried, and it does not
+work.
+
+The only thing that made it work was a hand-run attach:
 
 ```bash
-sudo docker exec $(sudo docker ps -qf name=worker-djtrhq) getent hosts warp
-# expect: 10.0.8.x   warp
+sudo docker network connect --alias warp <app-network> <warp-container>
 ```
 
-Deploying **`relay:main`** does not require this. Only `warp-egress` being
-recreated does.
+...which **every redeploy or restart of the proxy silently undid**, because
+the container is recreated and the attach lives on the container, not on the
+resource. The failure mode was: deploy the proxy, everything looks healthy,
+and every YouTube run fails until someone remembers one command. It was
+lost at least once. That is the defect this section used to document as
+routine operation.
+
+A `warp-egress` resource may still exist in Coolify. Nothing references it;
+it can be stopped.
 
 ### Why not just put the app on the `coolify` network instead
 
@@ -132,13 +150,14 @@ expose an unauthenticated Redis holding the job queue to every other app on
 the box. Attaching warp to the app's network is the narrow direction: warp
 holds no secrets.
 
-### The durable alternative
+### The durable fix, applied 2026-09-03
 
-Move `warp` back to a service in `docker-compose.yml`. Compose puts it on the
-app network automatically with the `warp` alias, no manual attach, and the
-config lives in git. That is how this was originally built and it is
-strictly more robust; it was changed to a separate resource by preference.
-If the manual attach ever bites, this is the fix.
+`warp` is a service in `docker-compose.yml`: on the app network by
+construction, aliased `warp` by construction, and its configuration — image
+pin, capabilities, sysctl, volume, healthcheck — is in git and reviewable
+rather than living in a Coolify form. This is how it was originally built,
+it was moved to a separate resource by preference, and the manual attach
+bit. It is back.
 
 ---
 
@@ -146,19 +165,31 @@ If the manual attach ever bites, this is the fix.
 
 ### Is it healthy
 
+The `warp` service carries a healthcheck that runs exactly this, so the
+first answer is free:
+
+```bash
+sudo docker ps --filter name=warp --format "{{.Names}} | {{.Status}}"
+# expect (healthy)
+```
+
+It proves the TUNNEL, not the listener. `gost` accepting connections on 1080
+while WARP is disconnected is the state that fails every YouTube run, and a
+port check passes in it — so the probe makes a real request THROUGH the
+SOCKS port and requires Cloudflare to say the traffic arrived over WARP:
+
 ```bash
 # tunnel actually egressing, not merely listening
-sudo docker exec $(sudo docker ps -qf name=<warp-resource-uuid>) \
-  curl -s --socks5-hostname 127.0.0.1:1080 https://api.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp)='
+W=$(sudo docker ps -qf name=warp)
+sudo docker exec "$W" curl -s --socks5-hostname 127.0.0.1:1080 https://cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp)='
 # expect: warp=on
 ```
 
 ### End-to-end, from the worker that actually downloads
 
 ```bash
-sudo docker exec $(sudo docker ps -qf name=worker-djtrhq) \
-  yt-dlp --proxy socks5://warp:1080 -f bestaudio/best -g \
-  https://www.youtube.com/shorts/5mU6SRS2Bxo
+C=$(sudo docker ps -qf name=worker)
+sudo docker exec "$C" yt-dlp --proxy socks5://warp:1080 -f bestaudio/best -g https://www.youtube.com/shorts/5mU6SRS2Bxo
 ```
 
 A `googlevideo.com` URL means the whole path works. Use `5mU6SRS2Bxo`;
@@ -166,10 +197,11 @@ A `googlevideo.com` URL means the whole path works. Use `5mU6SRS2Bxo`;
 
 ### Rollback
 
-Set `MEDIA_PROXY_URL` to empty on `relay:main` and redeploy. No code revert —
+Set `MEDIA_PROXY_URL` to empty and redeploy. No code revert —
 `download.ts` omits `--proxy` when the value is empty and every fetch goes
-direct, exactly as it did before this feature. `warp-egress` can keep running
-harmlessly.
+direct, exactly as it did before this feature. The `warp` container keeps
+running harmlessly; it is not in anything's `depends_on`, so nothing waits
+on it either way.
 
 ### Verify the credential-leak guard
 
@@ -188,28 +220,41 @@ authenticated proxy.**
 
 | symptom | meaning | action |
 | --- | --- | --- |
-| `DOWNLOAD_FAILED` + "outbound proxy is unavailable" | proxy unreachable — almost always the missing network attach | §3 |
+| `DOWNLOAD_FAILED` + "outbound proxy is unavailable" | proxy unreachable. Was the missing network attach; now look at the `warp` healthcheck | §4 |
 | `SOURCE_UNAVAILABLE` + "challenging this server as automated traffic" | traffic went **direct**; the proxy was not used | check `MEDIA_PROXY_URL` is non-empty and `proxied` is set for the source |
-| `SOURCE_UNAVAILABLE` + "no client offered a downloadable audio format" | source-side | reproduce from residential before blaming the proxy |
+| `SOURCE_UNAVAILABLE` + "no client offered a downloadable audio format" | source-side, and **no client said anything more useful** | A/B the yt-dlp pin first (§1a), then reproduce from residential |
+| `SOURCE_UNAVAILABLE` + "refused this server with HTTP 403" | a CDN refusal was the most informative thing any client returned | A/B the yt-dlp pin (§1a) |
 | every YouTube run fails at once | the shared exit was flagged | delete WARP registration and restart, or switch `MEDIA_PROXY_URL` to another proxy |
 
 A proxy outage resolves to `DOWNLOAD_FAILED`, which the queue **retries**. It
 is deliberately not `SESSION_EXPIRED` — a dead tunnel says nothing about the
 user's credential, and classifying it that way would burn a reject against a
-working session. `PROXY_UNREACHABLE` is tested *first* in `download.ts`,
-ahead of the 403 branch, because the SOCKS layer reports a refused tunnel as
-a 403 in some yt-dlp versions; read as `CLIENT_REFUSED` it would classify
-permanent and the run would never retry.
+working session. `PROXY_UNREACHABLE` is the *first* rung of the ladder in
+`src/lib/media/classify.ts`, ahead of the 403 rung, because the SOCKS layer
+reports a refused tunnel as a 403 in some yt-dlp versions; read as
+`CLIENT_REFUSED` it would classify permanent and the run would never retry.
+It is additionally guarded on whether the attempt **actually used the
+proxy**, so an unproxied source cannot be diagnosed as our egress failing
+because the word "proxy" happened to appear in someone else's error text.
+
+Which rung fires is decided across **every** attempt, not just the last one.
+Before 2026-09-03 a proxied YouTube fetch whose default client returned 403
+and whose fallback clients then returned "no formats" was reported as the
+second thing — an extractor problem — and the 403 that pointed at a stale
+yt-dlp pin was discarded. RUNBOOK.md §4.3 has the full order.
 
 ---
 
 ## 6. Security notes
 
-* **Never give `warp-egress` a domain.** Coolify auto-assigned one from the
-  wildcard on creation and it was removed immediately. `gost -L :1080`
-  auto-detects HTTP as well as SOCKS5, so a public route would be a usable
-  **open proxy**. Confirm no `caddy_*` / `traefik.*` labels on the container
-  and that 1080 is not published to the host.
+* **Never give `warp` a domain, and never add `ports:` to it.** Coolify
+  auto-assigned the old standalone resource a domain from the wildcard on
+  creation and it was removed immediately. `gost -L :1080` auto-detects HTTP
+  as well as SOCKS5, so either a public route or a published port would be a
+  usable **open proxy** on a public VPS. The compose service publishes
+  nothing (`expose`, not `ports`) and carries no proxy labels; keep it that
+  way, and confirm with `sudo docker port $(sudo docker ps -qf name=warp)`
+  returning empty.
 * **`MEDIA_PROXY_URL` is treated as a credential.** It may legitimately be
   `socks5://user:pass@host`, yt-dlp echoes the proxy it was handed when it
   cannot reach it, and that stderr is stored on the run and shown to the
@@ -228,7 +273,8 @@ permanent and the run would never retry.
   outside its intended use and Cloudflare may rate-limit or block it. The
   sanctioned paths are WARP Connector or a Zero Trust plan. This is a
   business decision, and it is the largest risk in the whole feature. Neither
-  needs an application code change — only `warp-egress`'s own configuration.
+  needs an application code change — only the `warp` service block in
+  `docker-compose.yml`, or `MEDIA_PROXY_URL` pointed elsewhere.
 * **One shared exit.** If it is flagged, everything fails at once. A proxy
   pool would degrade gradually instead.
 * **The signed-in path is UNTESTED.** Anonymous is 11/12, so cookies are no

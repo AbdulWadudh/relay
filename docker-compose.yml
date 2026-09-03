@@ -57,10 +57,9 @@ x-app-env: &app-env
   # Egress proxy for sources marked `proxied` in src/lib/media/sources.ts,
   # which today is YouTube only.
   #
-  # `warp` is NOT a service in this file. It is a separate Coolify resource
-  # (`warp-egress`), attached to this app's network with the alias `warp`.
-  # See EGRESS_PROXY.md -- that attachment is a manual step, and the
-  # consequence of getting it wrong is documented there.
+  # `warp` is the SERVICE DEFINED BELOW. Compose attaches it to this app's
+  # own network and gives it the bare service name as an alias, which is
+  # the entire reason this hostname resolves with nothing run by hand.
   #
   # Overridable so this can be pointed at a commercial residential proxy
   # without a code change, and CLEARABLE: set it to "" and every fetch goes
@@ -136,6 +135,13 @@ services:
         condition: service_healthy
       dragonfly:
         condition: service_healthy
+      # `warp` is DELIBERATELY ABSENT, and this is not an omission. Only
+      # sources flagged `proxied` use it (YouTube); Instagram goes direct.
+      # Gating the worker on the tunnel would stop Instagram ingestion
+      # every time WARP is unhealthy -- and WARP is free-tier consumer
+      # infrastructure that Cloudflare may throttle at any time. A YouTube
+      # fetch with the proxy down instead fails as DOWNLOAD_FAILED, which
+      # the queue retries on its own (src/lib/media/classify.ts).
     volumes:
       - relay_data:/app/data
 
@@ -167,6 +173,101 @@ services:
     volumes:
       - dragonfly_data:/data
 
+  # Cloudflare's own `warp-svc` daemon with gost exposing SOCKS5 on 1080 --
+  # the non-datacenter egress that YouTube fetches are routed through.
+  # Consumed as `MEDIA_PROXY_URL` above; see EGRESS_PROXY.md for the
+  # measurements this exists for.
+  #
+  # WHY IT IS A SERVICE HERE. Compose puts every service in this file on the
+  # app's own network and aliases it by service name, so `socks5://warp:1080`
+  # resolves for free. As a standalone Coolify resource it landed on
+  # Coolify's SHARED network instead, where the app cannot see it, and
+  # `--network` in Custom Docker Run Options is silently dropped -- so it
+  # only ever worked because somebody ran `docker network connect --alias
+  # warp` by hand, and every redeploy of the proxy silently undid that and
+  # took YouTube ingestion with it.
+  #
+  # Putting the APP on the shared network is the other direction and is
+  # REJECTED: `dragonfly` below runs with an empty requirepass, so that
+  # would expose the job queue to every other container on the host.
+  # Attaching warp inward is the narrow direction -- warp holds no secrets.
+  #
+  # Pinned, like `dragonfly`: `latest` here would mean the thing every
+  # YouTube fetch traverses can change under a deploy that only touched app
+  # code. This tag is the one the measurements in EGRESS_PROXY.md §1 were
+  # taken on.
+  warp:
+    image: caomingjun/warp:2026.7.1377.0-2.12.0
+    restart: unless-stopped
+    # NO `ports:`, and that is load-bearing. gost auto-detects HTTP on the
+    # same listener it serves SOCKS5 on, so publishing 1080 on a public VPS
+    # is an OPEN RELAY for anyone who scans the host. `expose` documents the
+    # port without opening it: the worker reaches it over the app network by
+    # service alias, and nothing off that network can.
+    #
+    # For the same reason this service must never be given a domain --
+    # Coolify offers one from the server wildcard.
+    expose:
+      - "1080"
+    # Both required by the image to bring up its own WireGuard interface:
+    # MKNOD to create /dev/net/tun (with the device rule that permits it,
+    # 10:200 being the TUN major:minor) and NET_ADMIN to configure the
+    # interface and its routes. AUDIT_WRITE is what warp-svc's dbus layer
+    # needs to start. Documented as the required set by the image itself.
+    cap_add:
+      - MKNOD
+      - AUDIT_WRITE
+      - NET_ADMIN
+    device_cgroup_rules:
+      - "c 10:200 rwm"
+    sysctls:
+      # WireGuard marks its own packets and routes on that mark; without
+      # this the kernel discards the replies as martians, and the symptom is
+      # a tunnel that comes up and carries nothing. The image documents it
+      # as required and it is why NET_ADMIN alone is not enough.
+      #
+      # The image also documents `net.ipv6.conf.all.disable_ipv6=0`,
+      # deliberately NOT set: Docker refuses to start a container whose
+      # sysctl the kernel does not expose, so on a host booted with IPv6
+      # off that line is the difference between "no IPv6 egress" and "no
+      # egress at all". Nothing here needs IPv6 -- yt-dlp reaches YouTube
+      # over v4 through the tunnel either way.
+      net.ipv4.conf.all.src_valid_mark: "1"
+    environment:
+      # Seconds the entrypoint waits for warp-svc to settle before it
+      # connects. The image's own default; named here so it is a knob and
+      # not a mystery if registration ever races on a slow boot.
+      WARP_SLEEP: "2"
+    # Proves the TUNNEL, not the listener. A `nc -z 1080` passes while gost
+    # is up and WARP is disconnected, which is precisely the state that
+    # fails every YouTube run -- so this makes a real request THROUGH the
+    # SOCKS port and requires Cloudflare to answer that the traffic arrived
+    # over WARP. Anything less would report healthy during an outage.
+    #
+    # Timings are its own, not the shared anchor: first boot has to enrol a
+    # device before any of this can pass, and the probe is a full TLS round
+    # trip over a consumer tunnel rather than a loopback fetch.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "curl -fsS --max-time 10 --socks5-hostname 127.0.0.1:1080 https://cloudflare.com/cdn-cgi/trace | grep -qE '^warp=(on|plus)'"
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    logging: *logging
+    # The device registration. Free WARP enrols anonymously on first start
+    # and writes its identity here; on a fresh volume it enrols again and
+    # gets a DIFFERENT exit address. Named so that a restart keeps the
+    # address it was measured on instead of rolling the dice -- and so that
+    # the documented recovery from a blocked exit (drop the registration,
+    # restart, re-enrol) stays a deliberate act rather than the default.
+    #
+    # No secret of ours is in here: there is no account and no license key.
+    volumes:
+      - warp_data:/var/lib/cloudflare-warp
+
 volumes:
   relay_data:
   dragonfly_data:
+  warp_data:

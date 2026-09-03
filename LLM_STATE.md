@@ -1588,3 +1588,161 @@ Row properties moved to `src/lib/render/notion-properties.ts`. The file was
 over the 250-line cap after `ensureAgentColumn`, and the two concerns move
 at different rates — block rendering changes when the document shape
 changes, column mapping changes when the user reshapes their table.
+
+## Durable YouTube ingestion (2026-09-03) — CODE DONE, NOT DEPLOYED, AWAITING APPROVAL
+
+Two defects on the same failure path, fixed in that order. Both were already
+written down as known weaknesses (RUNBOOK.md §8.1 and §4.3), which is the
+only reason they were cheap to find.
+
+### 1. `warp` is a compose service again
+
+The proxy was a standalone Coolify resource. Coolify puts those on its
+shared `coolify` network while the app's containers sit on the app's own,
+**they cannot see each other**, and `--network` in Custom Docker Run Options
+is silently STRIPPED (tried previously; it does not work). The only thing
+that ever made `socks5://warp:1080` resolve was a hand-run
+`docker network connect --alias warp`, and because that attach lives on the
+CONTAINER it was destroyed by every redeploy or restart of the proxy. So
+YouTube ingestion depended on someone remembering one command, forever.
+
+Compose attaches every service in the file to the app network and aliases it
+by service name — the same mechanism `redis://dragonfly:6379` already relied
+on. Moving it back removes the step rather than documenting it better.
+
+Joining the APP to the shared network is the other direction and stays
+REJECTED: Dragonfly runs with an empty `requirepass`, so it would expose the
+job queue to every other container on the box. Attaching warp inward is the
+narrow direction; warp holds no secrets.
+
+Decisions inside the service block, each one deliberate:
+
+* **Pinned** `caomingjun/warp:2026.7.1377.0-2.12.0`, the tag §1 of
+  EGRESS_PROXY.md was measured on. `latest` would let the thing every
+  YouTube fetch traverses change under a deploy that touched only app code.
+* **No `ports:`.** `gost -L :1080` auto-detects HTTP as well as SOCKS5, so a
+  published 1080 on a public VPS is an open relay for anyone scanning the
+  host. `expose` documents the port without opening it.
+* **`cap_add: MKNOD, AUDIT_WRITE, NET_ADMIN` plus `device_cgroup_rules: c
+  10:200 rwm`.** The image's own documented required set: MKNOD with the TUN
+  device rule to create `/dev/net/tun`, NET_ADMIN to configure the interface
+  and its routes, AUDIT_WRITE for warp-svc's dbus layer. The task asked only
+  for NET_ADMIN; the other three are what the image needs to bring the
+  tunnel up at all.
+* **`sysctls: net.ipv4.conf.all.src_valid_mark=1`.** WireGuard routes on its
+  own fwmark and the kernel discards the replies as martians without it —
+  the symptom is a tunnel that comes up and carries nothing.
+* **`net.ipv6.conf.all.disable_ipv6=0` deliberately NOT set**, though the
+  image documents it. Docker refuses to start a container whose sysctl the
+  kernel does not expose, so on a host booted with IPv6 off that one line is
+  the difference between "no IPv6 egress" and "no egress at all". Nothing
+  here needs IPv6.
+* **A named volume for `/var/lib/cloudflare-warp`.** Free WARP enrols
+  anonymously on first start; on a fresh volume it enrols again and takes a
+  DIFFERENT exit address. Persisting it means a restart keeps the address it
+  was measured on, and makes the documented recovery from a blocked exit
+  (drop the registration, restart, re-enrol) a deliberate act instead of the
+  default behaviour.
+* **A healthcheck that proves the TUNNEL, not the port.** `curl` through the
+  local SOCKS listener to `cdn-cgi/trace`, requiring `warp=on` or
+  `warp=plus`. A port check passes while gost listens and WARP is
+  disconnected — which is precisely the state that fails every YouTube run,
+  so a port check would report healthy straight through an outage. Its
+  timings are its own rather than the shared anchor: first boot has to enrol
+  a device, and the probe is a full TLS round trip over a consumer tunnel.
+* **NOT in the worker's `depends_on`.** Only sources flagged `proxied` use
+  it. Gating the worker on a free-tier consumer tunnel would stop INSTAGRAM
+  ingestion every time Cloudflare throttles WARP. A YouTube fetch with the
+  tunnel down fails `DOWNLOAD_FAILED`, which the queue retries.
+
+`MEDIA_PROXY_URL` needs no change: the Coolify env var is already
+`socks5://warp:1080` and compose defaults to the same value, so the two
+cannot disagree by accident. The old `warp-egress` resource is now
+unreferenced and should be stopped.
+
+### 2. Classification reads the most informative attempt, not the last one
+
+`downloadWithYtDlp` walks the default client then each
+`YT_DLP_YOUTUBE_CLIENTS` entry, and kept only the LAST attempt's stderr for
+classification. The clients do not fail in order of usefulness. Measured
+production shape: the default client returns **403** — the diagnosis, and
+the thing that points at a stale yt-dlp pin — and a later client returns
+"Requested format is not available", which says nothing about anything. The
+403 was overwritten, the run was reported as an extractor problem, and
+RUNBOOK.md §5 (A/B the pin, which was the actual fix) was never reached.
+
+The ladder is now applied to EVERY attempt and the one landing on the
+highest rung decides. The rung ORDER is unchanged, and two of its guarantees
+came out stronger rather than merely preserved:
+
+* proxy-unreachable is still rung 1 and still `DOWNLOAD_FAILED`, the one
+  retryable code. It gained a guard: it fires only for an attempt that
+  ACTUALLY used the proxy, so an unproxied source can no longer be diagnosed
+  as our egress failing because the word "proxy" appeared in somebody
+  else's error text.
+* `SESSION_EXPIRED` requires that **the attempt being classified** supplied
+  a jar — `withCookies` is recorded per attempt rather than read off the
+  enclosing run, which is what the old code's `cookiesPath` test did.
+* The 403 message was reworded because ranking made the old wording
+  inaccurate: "refused every available client" was only true when the 403
+  came last. It now reads "the source refused this server with HTTP 403, and
+  no other client succeeded either" — true in both cases, and still naming
+  the real cause. RUNBOOK.md §4.2 and EGRESS_PROXY.md §5 match.
+* Equal-ranked attempts keep the EARLIEST, which is the default client: it
+  resolves the richest format set, so where two clients say the same kind of
+  thing, its wording is the one worth showing.
+
+The retry loop is untouched — an unreachable proxy still breaks out of the
+fallback walk immediately, so a proxy outage costs one attempt and not four
+timeouts.
+
+The `Download failed` log line now records `cause` and `deciding_client`, so
+a wrong verdict can be traced from logs instead of a local reproduction,
+which is exactly what diagnosing the `tv` client cost last time.
+
+### Shape of the change
+
+`download.ts` was 513 lines, well over the 250 cap, so the patterns and the
+ladder moved out rather than growing it further:
+
+* `src/lib/media/failure-patterns.ts` (116) — the six stderr patterns, each
+  with the measurement that justifies it. They own the EVIDENCE.
+* `src/lib/media/classify.ts` (218) — `YtDlpAttempt`, the ladder as ordered
+  data, `rank`, `classifyFailure`. It owns the DECISION.
+* `download.ts` (372) — invocation, the fallback walk, `scrubProxy`, info
+  mapping. **Still over the cap**, recorded rather than hidden: getting it
+  under 250 means moving `withSyntheticTitle` and `scrubProxy`, which
+  `scripts/verify-ytdlp.ts` and `scripts/verify-proxy.ts` import, and
+  `scripts/` was outside this task's scope.
+
+No provider string entered `download.ts`. The registry still decides via
+`ParsedSource.proxied`, and the ladder matches on what a tool SAID.
+
+### Verified locally, on the dev machine
+
+* `bun run typecheck` clean (exit 0). `bunx biome check` clean on all three
+  changed `src/` files. Whole-repo `bun run lint` still fails on `main` for
+  pre-existing reasons (RUNBOOK.md §8.5).
+* `docker compose config` exits 0 on the new file (local Compose v5.4.0; the
+  prod host runs v5.0.0, same schema family). Parsed back to confirm the
+  anchor merge: 4 services, `warp` present, `warp_data` volume present, no
+  `ports:` on `warp`, `warp` absent from `worker.depends_on`.
+* `bun run verify:proxy` PASS — 8 paths, 0 leaks.
+* Eleven forced failure sequences through the real `classifyFailure`,
+  including the exact regression: `403` from `default` followed by
+  "Requested format is not available" from two fallback clients now resolves
+  `SOURCE_UNAVAILABLE`, cause `client-refused`, from `default`, with the
+  message naming the 403 — and the same sequence WITH a jar still does not
+  resolve `SESSION_EXPIRED`. Bot-check with a jar, login-shaped without one,
+  and a proxy-shaped stderr on a source that goes direct all stay off
+  `SESSION_EXPIRED` and off rung 1 respectively.
+
+### NOT verified, because it needs a deploy
+
+Everything about the running system: `getent hosts warp` from inside the
+worker with no manual attach, the `warp` healthcheck reaching `warp=on` on
+the prod host, a real Short end to end with its byte size, a forced proxy
+failure in production, and the Instagram-with-a-dead-proxy control. All of
+those were previously measured against the STANDALONE resource; none has
+been re-measured against the compose service, and nothing above should be
+read as if it had.
