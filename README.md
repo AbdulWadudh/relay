@@ -71,6 +71,29 @@ drizzle/          Generated SQL migrations
 public/           Static assets (served from the site root)
 ```
 
+## Install it on Android
+
+Relay is an installable PWA, and `mobile/twa/` wraps it as a **Trusted Web
+Activity** so it appears in the Android **share sheet** — the point being that
+a Reel or a Short goes from the app you are watching it in straight into the
+pipeline.
+
+The wrapper is a ~1.8MB shell with no product logic: every screen and every
+update comes from the web deploy, so shipping a web change updates every
+installed copy with no store review. It is a TWA rather than a WebView, which
+is why authentication needed no changes — it is Chrome, so cookie sessions and
+Google OAuth work as-is.
+
+- **Install from the browser:** open the site in Chrome on Android and choose
+  *Install app*, or grab the APK from
+  [Releases](https://github.com/AbdulWadudh/relay/releases).
+- **Build it yourself:** `mobile/twa/README.md` has the full guide — signing
+  key handling and rotation, the build and verification commands, and the
+  ordering rules that break the share sheet if ignored.
+- **Sharing behaviour** is controlled by *Run shared links immediately* in
+  Settings. Off (the default), Relay shows you the shared link and waits;
+  on, it queues the run on arrival.
+
 ## Codebase knowledge graph
 
 The repo is mapped into a queryable knowledge graph (code via tree-sitter AST, docs and brand assets via an LLM pass) using [graphify](https://github.com/Graphify-Labs/graphify). Answering a structural question from the graph instead of reading source files measured **~12x fewer tokens per question** on this repo.
@@ -126,3 +149,6 @@ Treat the graph as a snapshot: on any disagreement with the source, the source w
 - `LLM_STATE.md` — task execution state
 - `CONNECTING_ACCOUNTS.md` — **user guide**: exporting a session from your browser and importing it, per provider, with every error message and its fix
 - `SESSION_AUTH.md` — the engineering rationale behind that flow
+- `RUNBOOK.md` — production triage; §9 covers the PWA/TWA (what is served from
+  where, key rotation, and what breaks when assetlinks drifts)
+- `mobile/twa/README.md` — building, signing and releasing the Android app

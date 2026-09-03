@@ -1999,3 +1999,193 @@ that is syntactically invalid corrupted an unrelated line in it
 (`href={appHref}` became `href=appHrefclassName=`). The file had to be
 restored from git and the edits redone. Do not run the formatter as a way of
 checking whether a mid-edit file parses.
+
+## PWA + TWA instead of React Native (2026-09-03) — DEPLOYED
+
+**Decision: make the existing Next.js frontend installable as a PWA and wrap
+it as a Trusted Web Activity, rather than build a React Native client.**
+
+### The measurement that settled it
+
+A React Native client shares no rendering code with this app — every screen
+would be rewritten — and can only reuse the renderer-free modules.
+Re-measured today with `wc -l`:
+
+```
+src/**/*.tsx                        13,942 lines   <- rewritten by an RN client
+  of which vendored components/ui/   3,621 lines
+renderer-free shared logic           1,877 lines   <- all an RN client could reuse
+  (src/lib/query/*, schemas.ts, media/sources.ts, runs.ts,
+   run-status.ts, providers.ts, provider-icons.ts, provider-styles.ts)
+```
+
+So ~88% of the UI investment would be thrown away to reach a share sheet. A
+PWA reuses 100% of it, and the TWA wrapper that provides the share sheet is
+~1.8MB of generated Java containing no product logic.
+
+The original brief quoted 13,338 / 1,462 for the same measurement; the
+numbers above are the same command re-run on a repo that has grown since.
+
+### Why a TWA and not a WebView
+
+A TWA **is** Chrome. Consequences that removed most of the expected work:
+
+- **Auth needed no changes at all.** better-auth cookie sessions work as-is,
+  and Google OAuth is permitted — Google blocks embedded WebViews, not TWAs.
+  No bearer plugin, no token store, no second auth path.
+- Chrome **no longer requires a service worker for installability**.
+  Verified before writing one: `Page.getInstallabilityErrors` returned an
+  empty array and `beforeinstallprompt` fired with platforms `["web"]` with
+  no service worker registered at all.
+
+### Verified on production (relay.k79.quest)
+
+```
+Page.getAppManifest           errors: []
+Page.getInstallabilityErrors  {"installabilityErrors":[]}
+beforeinstallprompt           {"platforms":["web"]}
+service worker                activated, scope https://relay.k79.quest/
+Cache Storage                 precache 2, runtime 26, apiEntries 0
+Digital Asset Links           {"linked": true}
+signed AAB                    1,987,614 B, jar verified, SHA256 matches keystore
+```
+
+### Dead ends and traps, so they are not re-hit
+
+- **`MetadataRoute.Manifest` DOES type `share_target`** in Next 16.2.6
+  (`next/dist/lib/metadata/types/manifest-types.d.ts:52`). No cast and no
+  type widening needed — check before reaching for a cast.
+- **A worker compiled from `src/lib` cannot control the origin root.**
+  Turbopack serves it from `/_next/static/service-worker/`, and a worker's
+  scope is its own directory unless the server sends
+  `Service-Worker-Allowed: /`. Hence `public/sw.js`.
+- **Cache-first keyed on the `immutable` response header, not a path
+  prefix.** That is what makes the worker inert under `next dev` without
+  reading `NODE_ENV`, which RULES.md forbids outside `src/config`.
+- **`cacheFirst` must read across BOTH caches.** Reading only the runtime
+  cache left the offline page's precached icon broken — found from a
+  screenshot, invisible in the code.
+- **An empty share showed Zod's internals.** `issues[0]` on an empty URL is
+  the `.min(1)` message "Too small: expected string to have >=1
+  characters". Select the refine by `code === "custom"` — it owns the
+  supported-sources sentence. `new-run-dialog.tsx:49` still has this bug
+  for an empty input.
+- **CDP offline emulation does not reach the worker's fetch context.** The
+  offline fallback silently "passed" until the server was actually stopped.
+- **A new `public/` file needs a rebuild.** Next computes its static-file
+  manifest at build time, so `/share` and later
+  `/.well-known/assetlinks.json` both returned 307 to `/login` via
+  `(dashboard)/[...catchAll]` until rebuilt. The catch-all is not at fault
+  and must not be "fixed".
+- **Bubblewrap: the version key is `appVersion`.** `appVersionName` is
+  silently ignored and yields an empty `versionName`, which Play rejects.
+  Omitting `splashScreenFadeOutDuration` emits a bare
+  `splashScreenFadeOutDuration: ,` into build.gradle — a Gradle syntax
+  error.
+- **`bubblewrap update` fetches `webManifestUrl` and parses it as JSON**, so
+  it cannot run against a domain that has not been deployed yet; the error
+  is an "Unexpected token" complaint about a DOCTYPE, which is the app's
+  HTML 404 page.
+- **`gradlew.bat` "is not recognized"** on Windows because
+  `NoDefaultCurrentDirectoryInExePath=1`. Put the project dir on `PATH`.
+- **Digital Asset Links direction:** the **web site is the source** and the
+  app is the target. Querying with an `android_app` source returns a bare
+  `maxAge` with no `linked` field, which reads as a failure and is really a
+  malformed question.
+- **`git stash` in this repo rewrites tracked files to CRLF** and Biome's
+  formatter then rejects them. Avoid it.
+
+### Share flow decisions
+
+- **`share_target` uses method GET**, so the share arrives as ordinary query
+  params a page reads from `searchParams` — no route handler and no redirect
+  hop. POST with multipart is only needed to receive files.
+- **`/share` is not session-gated.** `requireSession()` would bounce a
+  signed-out user to `/login` and the link would be gone. The page renders
+  for anyone; the client stashes the link in `localStorage` before asking
+  about auth, and resumes after sign-in. localStorage rather than
+  sessionStorage, because Google sign-in leaves the origin entirely and can
+  come back in a different tab context.
+- **Android share sheets put the URL in `text`, usually wrapped in prose.**
+  All three params are swept and the first *supported* link wins, so
+  "Look at this <tracker> <reel>" still works.
+- **Validation and rejection copy both come from the shared `parseSourceUrl`
+  and `relayProcessSchema`**, so the share sheet and the New run dialog can
+  never tell the user two different things about the same link.
+- **`share_auto_run`, default OFF** — human decision 2026-09-03. A share is
+  one mis-tap away in any app, and running on arrival costs a real download
+  and a real LLM call. Off, `/share` shows the link and waits for "Run it".
+- **An already-processed URL is never auto-run again.** The page looks up
+  the newest run for the canonical URL on every render and offers "View
+  that run" / "Run it again". This is what fixes the duplicate-run bug from
+  navigating BACK to `/share`: the `submitted` ref resets on remount, so a
+  client-side guard alone could not hold. Matching on the canonical URL
+  means `/shorts/<id>`, `youtu.be/<id>` and a link with tracking params all
+  collapse to the same row.
+
+### Not built, deliberately
+
+No web push, no analytics, no offline write queue, no background sync, no
+biometric lock. Relay's data is per-user and server-authoritative; queueing
+writes in a worker would invent a second source of truth.
+
+## Auth guard moved to Hono middleware (2026-09-03) — DONE
+
+All 22 module routes carried the identical two-line `getRequestSession` plus
+401 guard. Measured before touching anything: 7 modules, 22 routes, **zero**
+exceptions — even the OAuth callback guards.
+
+`src/server/require-session.ts` exports two variants, and that distinction
+is the reason a single middleware would have broken production:
+`requireSession` returns 401 JSON, and `requireSessionOrRedirect` returns a
+302 to `/login` for the Ray OAuth start and callback, which the browser
+NAVIGATES to — a 401 body would render as raw JSON in the address bar.
+
+Applied per module (`module.use("*", ...)`) rather than by path in
+`route.ts`, because a module carrying its own guard is fail-CLOSED: a route
+added to it later is protected by default. Matching paths centrally is
+fail-open — mount a module, forget the `use()`, and it ships
+unauthenticated.
+
+Side benefit: the `rays.ts` `/:provider` handler existed as a
+`getRequestSession(...).then(...)` chain purely to await the session. With
+the middleware it collapsed to a plain synchronous handler.
+
+Verified endpoint by endpoint rather than trusted to the types:
+
+```
+                                       NO-COOKIE   WITH-COOKIE
+GET  /credentials                      401         200
+GET  /agents                           401         200
+GET  /prompts                          401         200
+GET  /runs                             401         200
+GET  /settings/extraction-order        401         200
+GET  /settings/share-auto-run          401         200
+POST /relay/process                    401         202
+POST /social/notaprovider/import       401         404
+GET  /rays/oauth/notion                302 /login  302 api.notion.com/...
+GET  /health                           200         200   (public, unchanged)
+POST /telemetry                        200         200   (public, unchanged)
+```
+
+## YouTube media fetch broke mid-session (2026-09-03) — OPEN, NOT CAUSED BY THIS WORK
+
+While verifying the share target on production, every YouTube run started
+failing at the media fetch with "no client offered a downloadable audio
+format" — the exhausted-fallback-chain message. Instagram continued to
+reach `done`, so the pipeline itself is healthy.
+
+```
+10:28-11:46  done    youtube.com/shorts/...  x6 (incl. I4OkD3G11fw, 4yrAeQzavCM)
+14:16:37     done    instagram.com/reel/...      <- pipeline healthy
+14:18:09     failed  youtube.com/shorts/v6-3TBOTTak
+14:18:50     failed  youtube.com/shorts/1FP7PFamTxc  <- succeeded EARLIER TODAY
+```
+
+The control is the decisive part: `1FP7PFamTxc` reached `done` earlier the
+same day and now fails. The `/shorts/` canonical form was deliberately left
+byte-identical by the source-registry change, so this is not that change.
+YouTube is the only `proxied: true` source, which points at the WARP egress
+sidecar or another YouTube-side client shift — the failure class RUNBOOK §3
+and the Dockerfile's `yt-dlp` pin comments already document. Next step is
+RUNBOOK §4 triage, starting with whether the warp container is up.

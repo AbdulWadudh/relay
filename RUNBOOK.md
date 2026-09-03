@@ -396,3 +396,118 @@ sudo docker ps --format "{{.Image}}"   # the tag carries the commit sha
    utilities wins, so they were left rather than bulk-applied. `--write`
    will not touch them; `--write --unsafe` would, and should be done with
    screenshots.
+
+---
+
+## 9. PWA / TWA (Android)
+
+### What is served from where
+
+Everything the Android app is comes from the web deploy. The installed
+package contributes a launcher icon, a chrome-less window, and the share
+sheet entry — nothing else.
+
+| URL | Source in repo | Notes |
+|---|---|---|
+| `/manifest.webmanifest` | `src/app/manifest.ts` | Generated route, `application/manifest+json`. Next injects the `<link rel="manifest">`. Holds `share_target`. |
+| `/sw.js` | `public/sw.js` | Must be at the origin root: a worker's scope is its own directory, and it has to control `/`. |
+| `/offline.html` | `public/offline.html` | Static, self-contained. Precached at SW install. |
+| `/icons/icon-{192,512}.png` | `public/icons/` | `purpose: any`. |
+| `/icons/icon-maskable-512.png` | `public/icons/` | Separate art — content inside the 80% safe circle. |
+| `/.well-known/assetlinks.json` | `public/.well-known/` | Release key SHA-256. Serving this is what removes the browser chrome. |
+| `/share` | `src/app/share/` | Share-sheet landing. **Not** session-gated. |
+
+Adding anything to `public/` needs a **rebuild**, not just a restart — Next
+computes its static-file manifest at build time. A new `public/` file on a
+stale build falls through to `(dashboard)/[...catchAll]` and 307s to
+`/login`. That is what a "why is my new asset redirecting" report means.
+
+### Service worker cache policy
+
+- `/api/**` is **network-only**, never cached. Run data is per-user and
+  changes every 2s; the vault serves credential metadata. A stale cached run
+  is worse than an error. The guard is the whole `/api` prefix so bumping
+  `config.api.version` cannot open a hole.
+- RSC payloads (`?_rsc=`) are excluded for the same reason.
+- Cache-first applies **only** to responses whose `cache-control` contains
+  `immutable`. Production Next stamps that on content-hashed build output;
+  `next dev` does not, so the worker caches nothing in dev and cannot serve
+  a stale rebuilt chunk.
+- Bumping `PRECACHE`/`RUNTIME` in `public/sw.js` is what evicts the previous
+  generation in `activate`. Change the fetch strategy without bumping and
+  existing installs keep the old caches.
+
+Verify no authenticated response is cached:
+
+```js
+// DevTools console, after using the app
+(async () => {
+  let api = []
+  for (const n of await caches.keys())
+    api.push(...(await (await caches.open(n)).keys())
+      .map(r => new URL(r.url).pathname).filter(p => p.startsWith("/api")))
+  return api           // MUST be []
+})()
+```
+
+### Rotating the signing key
+
+Full procedure in `mobile/twa/README.md` §6. The order that matters:
+**deploy the new fingerprint in `assetlinks.json` BEFORE shipping the APK
+signed with the new key**, and list both fingerprints during the overlap so
+there is never a window where neither verifies.
+
+The keystore lives at `~/.relay-twa/android.keystore`, outside the repo.
+`*.keystore`, `*.jks` and `keystore-password.txt` are gitignored from both
+the repo root and `mobile/twa/`. Lose it and no installed copy can ever be
+updated; leak it and anyone can sign a package Android trusts as Relay.
+
+### What breaks if assetlinks drifts
+
+**Symptom: the app launches but shows a URL bar.** Nothing errors, nothing
+logs. Digital Asset Links failed, so Android fell back to a plain Custom
+Tab. Causes, in order of likelihood:
+
+1. The APK was signed with a different key than the fingerprint on the site
+   (including Play App Signing re-signing the upload key — if you publish
+   through Play, its signing fingerprint must be added too).
+2. `assetlinks.json` is not reachable: wrong content type, a redirect, or
+   behind auth. It must be `200 application/json` at
+   `https://<domain>/.well-known/assetlinks.json`.
+3. `packageId` in `twa-manifest.json` no longer matches `package_name`.
+
+Decisive check — `"linked": true` is the only acceptable answer, and an
+**absent** `linked` field means false:
+
+```bash
+curl -s -G https://digitalassetlinks.googleapis.com/v1/assetlinks:check \
+  --data-urlencode "source.web.site=https://relay.k79.quest" \
+  --data-urlencode "relation=delegate_permission/common.handle_all_urls" \
+  --data-urlencode "target.android_app.package_name=space.k79.relay" \
+  --data-urlencode "target.android_app.certificate.sha256_fingerprint=7C:51:9F:AE:2F:05:42:F2:92:1E:A2:1C:12:01:2B:BC:C6:BC:91:7A:AE:42:CD:BE:BA:6C:11:2F:7E:5E:08:F8"
+```
+
+Get the direction right: the **web site is the source** and the app is the
+target. Querying `source.android_app` returns a bare `{"maxAge": "3600s"}`
+that looks like a failure and is really a malformed question.
+
+### Share-sheet ordering dependency
+
+`share_target` in `src/app/manifest.ts` is what Bubblewrap turns into the
+`ACTION_SEND` intent-filter in `AndroidManifest.xml`, and **only at
+`init`/`update` time**. Change it and you must re-run `bubblewrap update`
+and ship a new APK, or the installed app and the site silently disagree.
+The web manifest alone never puts an app in the Android share sheet.
+
+### Expected behaviour that is NOT a bug
+
+- Instagram shows its **own** share UI first; Relay is not in that top row.
+  "Share to… / More" opens the Android system sheet, where Relay appears.
+- Android ranks that sheet by usage, so on a fresh install Relay sits low.
+- A PWA cannot publish Direct Share / Sharing Shortcuts, so Relay will never
+  occupy the top person-shortcut row.
+- `theme_color` follows `prefers-color-scheme` (the OS), while the app's own
+  theme comes from next-themes with `defaultTheme="dark"`. A light OS with a
+  dark app therefore gets a white status bar. Closing that needs the
+  provider switched to `"system"` or a client component rewriting the meta
+  tag — both change theming app-wide.
