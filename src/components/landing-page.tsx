@@ -47,6 +47,17 @@ const marquee = [
   { name: "Discord", icon: DiscordIcon },
 ]
 
+/**
+ * The marquee renders the list TWICE so the scroll loops seamlessly, which
+ * means `name` repeats and cannot key a row on its own. Pairing each copy
+ * with a stable prefix here keys it without reaching for the array index —
+ * the list is static, so there is no reason to key it positionally.
+ */
+const MARQUEE_LOOP = [
+  ...marquee.map((item) => ({ ...item, key: `first-${item.name}` })),
+  ...marquee.map((item) => ({ ...item, key: `second-${item.name}` })),
+]
+
 export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
   const pageRef = useRef<HTMLElement>(null)
   const storyRef = useRef<HTMLElement>(null)
@@ -294,11 +305,8 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
           data-marquee
           className="flex w-max animate-[relay-marquee_28s_linear_infinite] gap-10 text-2xl font-medium tracking-tight text-white/30"
         >
-          {[...marquee, ...marquee].map((item, index) => (
-            <span
-              key={`${item.name}-${index}`}
-              className="flex items-center gap-10"
-            >
+          {MARQUEE_LOOP.map((item) => (
+            <span key={item.key} className="flex items-center gap-10">
               <HugeiconsIcon icon={item.icon} size={28} strokeWidth={1.5} />
               <span>{item.name}</span>
               <i className="size-1 rounded-full bg-[#d8f27e]" />
@@ -320,60 +328,68 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
             One link, three intelligent passes.
           </h2>
         </div>
-        <div className="space-y-20" aria-label="Relay workflow">
+        {/* An ORDERED list, not a labelled div. "Three intelligent passes"
+            is a sequence, and a bare div is `role="generic"`, which does not
+            support `aria-label` — the label was being dropped entirely.
+            Tailwind's preflight strips list markers and padding, so this is
+            the same layout with semantics that carry the name. */}
+        <ol className="space-y-20" aria-label="Relay workflow">
           {stories.map((story, index) => (
-            <button
-              type="button"
-              key={story.title}
-              className="group block w-full text-left"
-              onClick={() => setActiveStory(index)}
-            >
-              <div
-                data-story-image
-                className={`relative aspect-[1.35] overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_18%_12%,rgba(101,133,75,0.3),transparent_45%),linear-gradient(160deg,#161c17,#101311_65%)] transition-colors duration-500 will-change-transform ${activeStory === index ? "border-[#d8f27e]/60" : "border-white/10"}`}
+            <li key={story.title}>
+              <button
+                type="button"
+                className="group block w-full text-left"
+                onClick={() => setActiveStory(index)}
               >
-                {/* Ambient dot-grid texture, fills the card without needing a photo. */}
                 <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-[0.12] [background-image:radial-gradient(rgba(255,255,255,0.6)_1px,transparent_1px)] [background-size:20px_20px]"
-                />
-                {/* Oversized ghost numeral for editorial depth. */}
-                <span
-                  aria-hidden
-                  className={`pointer-events-none absolute -top-8 -right-3 select-none font-heading text-[10rem] font-semibold leading-none transition-colors duration-500 ${activeStory === index ? "text-[#d8f27e]/[0.09]" : "text-white/[0.04]"}`}
+                  data-story-image
+                  className={`relative aspect-[1.35] overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_18%_12%,rgba(101,133,75,0.3),transparent_45%),linear-gradient(160deg,#161c17,#101311_65%)] transition-colors duration-500 will-change-transform ${activeStory === index ? "border-[#d8f27e]/60" : "border-white/10"}`}
                 >
-                  0{index + 1}
-                </span>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#101311] via-[#101311]/15 to-transparent" />
-                <div
-                  className={`absolute left-7 top-7 flex size-14 items-center justify-center rounded-2xl border transition-all duration-500 group-hover:-translate-y-1 ${activeStory === index ? "border-[#d8f27e]/50 bg-[#d8f27e]/10" : "border-white/10 bg-white/5"}`}
-                >
-                  <HugeiconsIcon
-                    icon={story.icon}
-                    size={26}
-                    strokeWidth={1.5}
-                    className={
-                      activeStory === index ? "text-[#d8f27e]" : "text-white/70"
-                    }
+                  {/* Ambient dot-grid texture, fills the card without needing a photo. */}
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 opacity-[0.12] [background-image:radial-gradient(rgba(255,255,255,0.6)_1px,transparent_1px)] [background-size:20px_20px]"
                   />
-                </div>
-                <div className="absolute bottom-7 left-7 right-7 flex items-end justify-between gap-6">
-                  <div>
-                    <h3 className="font-heading text-4xl font-semibold tracking-[-0.05em] md:text-5xl">
-                      {story.title}
-                    </h3>
-                    <p className="mt-3 max-w-sm text-base leading-7 text-white/60">
-                      {story.copy}
-                    </p>
-                  </div>
-                  <span className="font-mono text-xs text-[#d8f27e]">
+                  {/* Oversized ghost numeral for editorial depth. */}
+                  <span
+                    aria-hidden
+                    className={`pointer-events-none absolute -top-8 -right-3 select-none font-heading text-[10rem] font-semibold leading-none transition-colors duration-500 ${activeStory === index ? "text-[#d8f27e]/[0.09]" : "text-white/[0.04]"}`}
+                  >
                     0{index + 1}
                   </span>
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#101311] via-[#101311]/15 to-transparent" />
+                  <div
+                    className={`absolute left-7 top-7 flex size-14 items-center justify-center rounded-2xl border transition-all duration-500 group-hover:-translate-y-1 ${activeStory === index ? "border-[#d8f27e]/50 bg-[#d8f27e]/10" : "border-white/10 bg-white/5"}`}
+                  >
+                    <HugeiconsIcon
+                      icon={story.icon}
+                      size={26}
+                      strokeWidth={1.5}
+                      className={
+                        activeStory === index
+                          ? "text-[#d8f27e]"
+                          : "text-white/70"
+                      }
+                    />
+                  </div>
+                  <div className="absolute bottom-7 left-7 right-7 flex items-end justify-between gap-6">
+                    <div>
+                      <h3 className="font-heading text-4xl font-semibold tracking-[-0.05em] md:text-5xl">
+                        {story.title}
+                      </h3>
+                      <p className="mt-3 max-w-sm text-base leading-7 text-white/60">
+                        {story.copy}
+                      </p>
+                    </div>
+                    <span className="font-mono text-xs text-[#d8f27e]">
+                      0{index + 1}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+            </li>
           ))}
-        </div>
+        </ol>
       </section>
 
       <section

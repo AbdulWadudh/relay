@@ -1,12 +1,15 @@
+/* Every `@import` must precede all other rules — CSS ignores one that
+   follows a non-import rule, so `relay-marquee` sitting above these two
+   made them invalid. */
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 @keyframes relay-marquee {
   to {
     transform: translateX(-50%);
   }
 }
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 

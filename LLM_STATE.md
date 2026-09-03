@@ -1890,3 +1890,112 @@ Two things worth keeping from this:
   on that stream alone), so yt-dlp's own output — the thing worth reading
   when a download fails — is never in OpenObserve at all. Even with the 401
   fixed, a historical Downloading stage can only ever show `info` and above.
+
+## OpenObserve volume, and the 250-line cap closed out (2026-09-03) — DONE
+
+### What was actually shipping to OpenObserve
+
+Asked to stop logging the healthcheck, and to find whatever else could be
+excluded. Reading the two logging layers turned up more than the
+healthcheck:
+
+* **`src/proxy.ts` is the expensive layer, not the pino stream.** It posts
+  to OpenObserve **once per request with no batching**, where
+  `OpenObserveStream` buffers 50 lines or 2 seconds. Its matcher excludes
+  only `_next/static`, `_next/image` and `favicon.ico`, so every page render
+  also logged a request for the logo. Its own comment already noted that API
+  responses are "measured again by the Hono middleware" — so for API routes
+  it is a duplicate that adds `user_agent` and `request_id`.
+* **`/telemetry` was double-stored.** Its request body IS the browser's
+  log/RUM payload, which the OpenObserve browser SDK already ships to the
+  `relay_client` stream. Up to 8KB of it, per page load.
+* **`GET /runs/:id/logs` re-ingested the log store into itself.** The
+  response is the run's log lines, `MAX_TRACE_BODY_LENGTH` is 8192, and the
+  UI polls every 2s while a run is live. Watching one run for five minutes
+  was ~150 polls of up to 8KB of duplicated log content.
+* `/health` is Docker's probe: every 30s forever, 2,880 lines a day per
+  container, describing a state `docker ps` already reports and which is
+  only ever read once the container is known to be unhealthy.
+
+The list lives in `src/lib/observability/skip-paths.ts` with **no imports at
+all**, because the two layers that must agree cannot share a config import:
+`src/proxy.ts` runs in the EDGE runtime and deliberately reads `process.env`
+directly. Same reasoning as `src/lib/media/sources.ts` being dependency-free
+so client components can read it. Duplicating the list in two files is what
+that avoids.
+
+Dropped at the SINK, not the log site, so stdout and the log file still
+carry every line — only durable storage is spared. Matching is exact for
+paths and extension-based for assets; `/api/v1/healthcheck` is deliberately
+NOT skipped, which a naive `endsWith("/health")` would have got wrong, and
+which is in the 17-case check that was run against the predicates.
+
+Body tracing is a SEPARATE decision from dropping the line, because the
+problems differ: for the logs endpoint the status and latency are worth
+keeping and only the payload is redundant.
+
+**Not done, and worth considering if volume is still a problem:** dropping
+`/api/` from the proxy layer entirely. It would roughly halve request volume
+and lose only `user_agent`.
+
+### The 250-line cap, closed
+
+RUNBOOK §8.6 recorded `download.ts` at 372 lines and claimed the blocker was
+that `withSyntheticTitle` and `scrubProxy` are imported by `scripts/`. Half
+wrong: **`withSyntheticTitle` has no importers at all** — the docstring
+still says it is exported for `scripts/verify-ytdlp.ts`, which no longer
+imports it. Only `scrubProxy` was, by `verify-proxy.ts`.
+
+So the split was cheap. `download.ts` 372 -> **172**, keeping only the
+strategy (which clients, in what order, what to conclude):
+
+* `media/ytdlp.ts` (134) — one invocation, the argument list, the per-attempt
+  facts, and `scrubProxy`. `verify-proxy.ts` imports it from here now.
+* `media/info.ts` (91) — which of the ~500KB info JSON is kept, and the
+  synthetic title.
+
+And `logger.ts` 254 -> **189** (it was already over the cap before this
+session; adding the sink filter would have made it worse):
+
+* `observability/http-trace.ts` (95) — the Hono middleware that records one
+  line per request, and how much of a body it keeps.
+
+Every file under `src/lib/media` and `src/lib/observability` is now under
+250. `bun run verify:proxy` still passes 8 paths 0 leaks after the import
+move, and the real `download()` was re-run against a dead proxy to confirm
+the split did not change behaviour: `cause=proxy-unreachable`,
+`DOWNLOAD_FAILED`, no fallback walk.
+
+### `bun run lint` passes now, and it was never just formatting
+
+RUNBOOK §8.5 called these "pre-existing errors unrelated to the pipeline",
+and an early read of this session called them fixable formatting. Both were
+wrong. There were 7 errors and none were cosmetic:
+
+* **`globals.css`** had two `@import` rules AFTER a `@keyframes` block. CSS
+  ignores an `@import` that follows a non-import rule, so
+  `tw-animate-css` and `shadcn/tailwind.css` were invalid where they sat.
+* **`landing-page.tsx`** keyed a deliberately duplicated marquee list on the
+  array index, and put `aria-label` on a bare `div` — whose `generic` role
+  does not support it, so the label was being dropped entirely.
+* Three files were simply unformatted.
+
+The marquee now builds a pre-keyed loop at module scope (`first-`/`second-`
+prefixes), so no index is needed and no suppression comment either — a
+suppression was tried first and does not work there, because Biome anchors
+the diagnostic to the `key` attribute and a `//` comment cannot sit between
+JSX attributes. The workflow steps became an `<ol>` with `<li>` children,
+which is the correct element for "three intelligent passes" and supports the
+label; verified in the browser that it renders identically
+(`list-style: none`, `padding-left: 0`, `margin: 0` from preflight).
+
+57 `useSortedClasses` warnings are left deliberately: the autofix is
+classified UNSAFE because reordering can change which of two conflicting
+Tailwind utilities wins, and bulk-applying it across ~20 files without
+screenshots is not a trade worth making. Warnings do not fail the lint.
+
+**A process note worth keeping.** Running `biome check --write` on a file
+that is syntactically invalid corrupted an unrelated line in it
+(`href={appHref}` became `href=appHrefclassName=`). The file had to be
+restored from git and the edits redone. Do not run the formatter as a way of
+checking whether a mid-edit file parses.

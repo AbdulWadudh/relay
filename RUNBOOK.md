@@ -248,6 +248,31 @@ password is stale or that user lacks query permission on the org. Nothing in
 the application code needs to change; `run-logs-history.ts` is issuing the
 right request.
 
+### 4.5 What is deliberately NOT shipped to OpenObserve
+
+`src/lib/observability/skip-paths.ts` drops some request logs before the
+OpenObserve sink. stdout and the log file still carry every line, so local
+debugging is unchanged — the point is to stop paying durable storage for
+traffic that answers no question.
+
+| dropped | why |
+| --- | --- |
+| `/api/v1/health` | Docker's healthcheck, every 30s forever. 2,880 lines a day per container that say nothing `docker ps` does not, and are only read when the container is already known to be unhealthy |
+| `/api/v1/telemetry` | Its request body IS the browser's log/RUM payload, which the OpenObserve browser SDK already ships to `relay_client`. A second copy of something already stored, up to 8KB a time |
+| static assets (`.png`, `.css`, `.woff2`, …) | Next's proxy matcher only excludes `_next/static`, `_next/image` and `favicon.ico`, so the logo on every page render was being kept for 30 days |
+| the BODY of `GET /api/v1/runs/:id/logs` | Its response is the run's log lines, the UI polls it every 2s while a run is live, and bodies are traced up to 8KB — so watching one run re-ingested the log store into itself. Status and duration are still recorded |
+
+Two layers log requests and both apply the list: `src/proxy.ts` (Next's
+proxy) and `openObserveMiddleware` (Hono). **`src/proxy.ts` is the one that
+matters** — it posts once per request with no batching, where the pino
+stream buffers 50 lines or 2 seconds.
+
+Not currently excluded, and worth considering if volume is still a problem:
+the proxy layer records a line for EVERY API request that the Hono
+middleware then records again, adding only `user_agent` and `request_id`.
+Dropping `/api/` from the proxy layer would roughly halve the request
+volume.
+
 ---
 
 ## 5. yt-dlp
@@ -336,9 +361,14 @@ sudo docker ps --format "{{.Image}}"   # the tag carries the commit sha
 | `docker-compose.yml` | `relay`, `worker`, `dragonfly`, `warp`, the shared env block |
 | `src/config/index.ts` | every env var, with its reasoning |
 | `src/lib/media/sources.ts` | source registry — hosts, URL patterns, `proxied` |
-| `src/lib/media/download.ts` | yt-dlp invocation, the fallback walk, `scrubProxy` |
+| `src/lib/media/download.ts` | the fallback walk and what it concludes |
+| `src/lib/media/ytdlp.ts` | one yt-dlp invocation, and `scrubProxy` |
 | `src/lib/media/classify.ts` | the error ladder, and which attempt it is applied to |
 | `src/lib/media/failure-patterns.ts` | the stderr patterns, each with its measurement |
+| `src/lib/media/info.ts` | which of yt-dlp's info JSON is kept, and the synthetic title |
+| `src/lib/observability/logger.ts` | the logger and its four sinks |
+| `src/lib/observability/http-trace.ts` | the Hono middleware that records one line per request |
+| `src/lib/observability/skip-paths.ts` | which request logs never reach OpenObserve (§4.5) |
 | `src/lib/pipeline.ts` | stage order and status bookkeeping |
 | `src/lib/render/` | document tree -> Notion blocks and row properties |
 | `EGRESS_PROXY.md` | the proxy in depth |
@@ -360,10 +390,9 @@ sudo docker ps --format "{{.Image}}"   # the tag carries the commit sha
    are not required for public Shorts. Whether a jar is *accepted* from a
    proxied address — and whether routing a live Google session through a
    foreign consumer IP trips account-security heuristics — is unknown.
-5. **`lint` is not clean on `main`.** Pre-existing errors unrelated to the
-   pipeline. `typecheck` IS clean; check per-file rather than trusting the
-   whole-repo lint result.
-6. **`download.ts` is over the 250-line cap.** 372 lines. The classifier
-   split took it down from 513; the rest is the yt-dlp invocation and the
-   info-JSON mapping, and `withSyntheticTitle` / `scrubProxy` are imported
-   by `scripts/`, so finishing the job means moving those imports too.
+5. **`bun run lint` passes as of 2026-09-03, but 57 warnings remain.** All
+   are `useSortedClasses` (Tailwind class order). Their autofix is
+   classified UNSAFE because reordering can change which of two conflicting
+   utilities wins, so they were left rather than bulk-applied. `--write`
+   will not touch them; `--write --unsafe` would, and should be done with
+   screenshots.
