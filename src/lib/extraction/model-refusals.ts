@@ -6,8 +6,15 @@ import type { ChatProvider } from "@/lib/extraction/providers"
 import { logger } from "@/lib/observability/logger"
 
 /**
- * Models a `per-model` billing provider has answered 402 for, remembered
- * so the next run does not pay to learn it again.
+ * What a provider has REFUSED, remembered so the next run does not pay to
+ * learn it again. Two kinds, and they are filtered at different points:
+ *
+ *  - paid       402 from a per-model billing provider. Applied in
+ *               `catalogFor`, because the plan gates the model outright.
+ *  - no-image   400 "does not support image input". Applied at RANK time
+ *               and ONLY when the stage sends an image — the same model is
+ *               often a perfectly good text model, so excluding it from
+ *               extraction would be wrong.
  *
  * WHY THIS EXISTS. Ollama Cloud gates models by PLAN, publishes no pricing
  * in its catalog, and serves a handful free. Ranking is by advertised
@@ -32,10 +39,14 @@ import { logger } from "@/lib/observability/logger"
  * refreshed catalog re-learns from scratch.
  */
 
-const KEY = "paid_models"
+const PAID = "paid_models"
+const NO_IMAGE = "no_image_models"
 
-function stored(additionalData: Record<string, unknown> | null): string[] {
-  const value = additionalData?.[KEY]
+function stored(
+  additionalData: Record<string, unknown> | null,
+  key: string,
+): string[] {
+  const value = additionalData?.[key]
   if (!Array.isArray(value)) return []
   return value.filter(
     (id): id is string => typeof id === "string" && id.length > 0,
@@ -67,7 +78,35 @@ export async function paidModelsFor(
       and(eq(modelCatalog.userId, userId), eq(modelCatalog.provider, provider)),
     )
     .get()
-  return stored(row?.additionalData ?? null)
+  return stored(row?.additionalData ?? null, PAID)
+}
+
+/** Models that rejected an image, for a stage that needs one. */
+export async function noImageModelsFor(
+  userId: string,
+  provider: string,
+): Promise<string[]> {
+  const row = await getDb()
+    .select({ additionalData: modelCatalog.additionalData })
+    .from(modelCatalog)
+    .where(
+      and(eq(modelCatalog.userId, userId), eq(modelCatalog.provider, provider)),
+    )
+    .get()
+  return stored(row?.additionalData ?? null, NO_IMAGE)
+}
+
+/**
+ * Safe to key off a 400 because the caller only asks when an image was
+ * ACTUALLY sent and the provider's complaint mentions one. The other 400 a
+ * chat call gets is about the response format — "'messages' must contain
+ * the word 'json'" — which says nothing about images, so the two cannot be
+ * confused.
+ */
+const REFUSED_IMAGE = /\bimages?\b/i
+
+export function looksLikeImageRefusal(reason: string): boolean {
+  return REFUSED_IMAGE.test(reason)
 }
 
 /**
@@ -79,10 +118,29 @@ export async function recordPaidModel(options: {
   provider: ChatProvider
   model: string
 }): Promise<void> {
-  const { userId, provider, model } = options
+  const { provider } = options
   // Only meaningful where a 402 is about the MODEL. An account-wide 402
   // says nothing about which models the plan includes.
   if (provider.billing !== "per-model") return
+  await remember({ ...options, key: PAID, what: "needs a paid plan" })
+}
+
+export async function recordNoImageModel(options: {
+  userId: string
+  provider: ChatProvider
+  model: string
+}): Promise<void> {
+  await remember({ ...options, key: NO_IMAGE, what: "rejects images" })
+}
+
+async function remember(options: {
+  userId: string
+  provider: ChatProvider
+  model: string
+  key: string
+  what: string
+}): Promise<void> {
+  const { userId, provider, model, key, what } = options
 
   try {
     const db = getDb()
@@ -101,7 +159,7 @@ export async function recordPaidModel(options: {
       .get()
     if (!row) return
 
-    const known = stored(row.additionalData)
+    const known = stored(row.additionalData, key)
     if (known.includes(model)) return
 
     await db
@@ -109,19 +167,20 @@ export async function recordPaidModel(options: {
       .set({
         additionalData: {
           ...(row.additionalData ?? {}),
-          [KEY]: [...known, model],
+          [key]: [...known, model],
         },
       })
       .where(eq(modelCatalog.id, row.id))
       .run()
 
-    logger.info("Model needs a paid plan — remembered", {
+    logger.info("Model refusal remembered", {
       provider: provider.id,
       model,
+      refusal: what,
       known: known.length + 1,
     })
   } catch (error) {
-    logger.warn("Could not remember a paid-plan model", {
+    logger.warn("Could not remember a model refusal", {
       provider: provider.id,
       error: error instanceof Error ? error.message : String(error),
     })

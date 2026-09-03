@@ -5,6 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import * as React from "react"
 import {
   type ClaimFinding,
+  findingEvidence,
   REASON_TEXT,
 } from "@/components/queue/claim-finding"
 import { type ExtractedItem, readFields } from "@/lib/extraction/shape"
@@ -21,17 +22,29 @@ import { cn } from "@/lib/utils"
  * counts live in the Evidence panel above.
  */
 
-function FlagNotice({ reason }: { reason?: string }) {
+function FlagNotice({ finding }: { finding: ClaimFinding }) {
+  const evidence = findingEvidence(finding)
+
   return (
-    <p className="flex items-center gap-1.5 text-amber-700 text-xs dark:text-amber-400">
+    <div className="flex gap-1.5 text-xs">
       <HugeiconsIcon
         icon={Alert02Icon}
         strokeWidth={2}
-        className="size-3.5 shrink-0"
+        className="mt-0.5 size-3.5 shrink-0 text-amber-700 dark:text-amber-400"
         aria-hidden
       />
-      {REASON_TEXT[reason ?? ""] ?? "Could not be verified"}
-    </p>
+      <div className="min-w-0">
+        <p className="text-amber-700 dark:text-amber-400">
+          {REASON_TEXT[finding.reason ?? ""] ?? "Could not be verified"}
+        </p>
+        {/* The reason states a verdict; this is what it was based on, so a
+            reader can disagree with it. Muted, because it is the detail
+            behind the claim rather than the claim itself. */}
+        {evidence ? (
+          <p className="wrap-break-word text-muted-foreground">{evidence}</p>
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -63,7 +76,7 @@ function Item({
         <p className="text-sm leading-relaxed [overflow-wrap:anywhere]">
           {item.text}
         </p>
-        {flagged ? <FlagNotice reason={finding?.reason} /> : null}
+        {flagged && finding ? <FlagNotice finding={finding} /> : null}
         {item.extras.length > 0 ? (
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             {item.extras.map((extra) => (

@@ -2994,3 +2994,108 @@ explicit `flex flex-row`; tailwind-merge drops the primitive's `grid`.
 Only that one site was affected. Every settings card happens to write
 `flex items-center gap-2`, and the `flex` is what saved them — worth
 knowing before adding the next icon-and-title header.
+
+## Reading a real frames failure (2026-09-04)
+
+Production log from one `frames` run, and it exposed one bug of mine, one
+gap already flagged, and one thing working exactly as designed.
+
+```
+groq         qwen/qwen3.6-27b  400  'messages' must contain the word 'json'...
+groq         qwen/qwen3.8-27b  400  same
+ollama-cloud gpt-oss:20b       400  this model does not support image input
+ollama-cloud mistral-3:675b    402  requires a subscription   -> remembered (1)
+ollama-cloud qwen3.5:397b      402  requires a subscription   -> remembered (2)
+ollama-cloud gpt-oss:120b      400  this model does not support image input
+```
+
+**THE VISION PROMPT NEVER SAID "json".** `grep -ci json` on
+src/lib/vision/prompt.ts returned 0. `attemptKey` always sends
+`json: true`, and `jsonSchema` only when a candidate advertises
+`structured` — so any model that does not gets
+`response_format: { type: "json_object" }`, which Groq and OpenAI reject
+outright unless the messages contain the literal token. The frames stage
+therefore could not use Groq AT ALL, and neither of its two vision models
+was reachable. One sentence in the prompt fixes it, and the comment there
+says why it is not stylistic.
+
+**THE ORDER WAS PINS, NOT A RANKING BUG.** `stage_models.frames` held
+`gpt-oss:20b` for Ollama Cloud and `qwen/qwen3.6-27b` for Groq, so
+`pinnedFirst` hoisted both — working as designed. Both pins were
+unusable: one hit the json bug, the other cannot take images. The picker
+was offering image-incapable models on the frames tab, which is how such a
+pin could be set at all; `stageModels` now excludes known refusals when the
+stage needs vision.
+
+**THE PAID LEARNING WORKED.** `model_catalog.additional_data.paid_models`
+came back `["mistral-large-3:675b","qwen3.5:397b"]` — first run paid to
+learn it, no run pays again.
+
+**AND THE COST OF THE VISION WAIVER SHOWED UP.** Because a silent catalog
+now makes every Ollama Cloud model eligible for frames, that run spent all
+four candidates — two image refusals, two 402s — and never reached
+`gemma4:31b`, which is free AND multimodal. The provider was exhausted
+while holding a working model.
+
+So a 400 image refusal is remembered now, the same way a 402 is.
+Earlier caution about conflating 400s was resolvable after all: the refusal
+says "does not support image input" and the schema 400 says
+"'messages' must contain the word 'json'", so matching `images?` on
+the reason separates them — asserted against both real strings plus rate
+limit, 402 and context-length messages.
+
+The two lists are filtered at DIFFERENT points, deliberately. `paid` goes
+through `catalogFor`, because a plan gates the model outright. `no-image`
+goes through rank time and only when an image is being sent — `gpt-oss:120b`
+refuses images but is a perfectly good extraction model, so filtering it in
+the catalog would have broken the stage it is best at.
+
+`paid-models.ts` became `model-refusals.ts`; the old name would now lie.
+
+## A flag needs an exhibit (2026-09-04)
+
+"Not supported by the transcript or the caption" was an assertion with
+nothing behind it. `overlap` was already on `Finding` and already in the
+`ClaimFinding` interface, and the UI rendered neither — so a reader was
+told a verdict and given no way to disagree with it.
+
+`Finding` now carries `checked` (content words weighed) and `missing` (the
+ones absent from the source), and the flag renders "1 of 5 words in the
+source - missing: ten, habits, improving, verbal, articulation" under the
+reason. The reason states the verdict; that line is what it was based on.
+
+This matters most because matching is EXACT after normalisation, with no
+stemming: a caption saying "articulate" does not satisfy a claim saying
+"articulation", and a transcript saying "habit" does not satisfy "habits".
+Named, the artefact is obvious in a second. Unnamed, it reads as a
+fabrication.
+
+### What the flags actually are, measured
+
+Across 33 runs on the current contract: 436 findings, 86 flagged (19.7%),
+62 PARTIALLY_GROUNDED and 24 NOT_IN_SOURCE. By field:
+
+```
+summary 18   feature 9   action 8   point 8   title 6   component 4
+```
+
+`summary` is the most-flagged field and `title` is fifth, which is
+STRUCTURAL rather than a model failure: prompts.ts adds both
+automatically and forbids agents from declaring them, so those two fields
+exist to abstract while the check rewards lexical overlap. They will
+always score worst. `PARTIALLY_GROUNDED` on a summary is close to
+meaningless — it reports that a summary summarised. `NOT_IN_SOURCE` on a
+`feature`, `action` or `habit` is the signal worth reading, because those
+fields are meant to restate the source.
+
+Older runs carry a DIFFERENT verification shape — `{pointer, kind, quote,
+citedMs, actualMs}` from the abandoned quote-citation contract (human
+decision 2026-09-01). Anything aggregating this data has to check for
+`overlap` before trusting a `findings` array, or it silently mixes two
+incompatible schemes.
+
+### Still open
+
+Stemming, or prefix matching, would remove a whole class of false
+positive. Banding `title`/`summary` separately would stop them dominating
+the flag count. Neither is done. And captions.

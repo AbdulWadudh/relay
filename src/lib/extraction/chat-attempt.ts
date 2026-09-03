@@ -5,8 +5,13 @@ import {
   retryAfterMs,
   type SkippedModel,
 } from "@/lib/extraction/chat-failures"
+import {
+  looksLikeImageRefusal,
+  noImageModelsFor,
+  recordNoImageModel,
+  recordPaidModel,
+} from "@/lib/extraction/model-refusals"
 import { rankModels } from "@/lib/extraction/models"
-import { recordPaidModel } from "@/lib/extraction/paid-models"
 import type { ChatProvider, ChatTask } from "@/lib/extraction/providers"
 import { chatCompletion, LlmError } from "@/lib/llm/client"
 import { logger } from "@/lib/observability/logger"
@@ -130,6 +135,16 @@ export async function attemptKey(
     return { run: null, next: "next-provider", rateLimitedFor, lastError }
   }
 
+  // Models this provider has already refused an image for. Filtered HERE
+  // rather than in `catalogFor` because the same model is usually a fine
+  // text model — excluding it from extraction would be wrong.
+  if (imageDataUrl) {
+    const refused = new Set(await noImageModelsFor(userId, provider.id))
+    if (refused.size > 0) {
+      ranked = ranked.filter((model) => !refused.has(model.id))
+    }
+  }
+
   const pinnedFirst = pinnedModel
     ? [
         ...ranked.filter((model) => model.id === pinnedModel),
@@ -174,6 +189,11 @@ export async function attemptKey(
       // A no-op unless the provider bills per model (paid-models.ts).
       if (status === 402) {
         await recordPaidModel({ userId, provider, model })
+      }
+      // Only when an image was ACTUALLY sent and the complaint mentions
+      // one — the other 400 a chat call gets is about the response format.
+      if (status === 400 && imageDataUrl && looksLikeImageRefusal(reason)) {
+        await recordNoImageModel({ userId, provider, model })
       }
       skipped.push({ provider: provider.id, model, status, reason })
       // Logged as it happens, not only collected: the collected trail is

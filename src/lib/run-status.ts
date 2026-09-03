@@ -51,7 +51,16 @@ export const RUN_STATUS_META: Record<RunStatus, RunStatusMeta> = {
     // extraction records `audio_extract_ms` against `downloading` above —
     // the two must not share a key, or one stage's work would mark the
     // other complete.
-    timingKeys: ["route_ms", "extract_ms", "verify_ms"],
+    // `frames_*` are written by the frames path (src/lib/analysis.ts) and
+    // belong here, not to `transcribing`: reading frames is what the
+    // extracting stage does when the audio had nothing to say.
+    timingKeys: [
+      "route_ms",
+      "extract_ms",
+      "verify_ms",
+      "frames_download_ms",
+      "frames_render_ms",
+    ],
     label: "Extracting",
     badge: "bg-violet-600 text-white dark:bg-violet-600",
     active: true,

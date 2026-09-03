@@ -18,6 +18,15 @@ export const VISION_SYSTEM = [
   "IGNORE channel watermarks, handles and logos that repeat across frames — they are branding, not content.",
   "If a frame carries no text, leave on_screen_text EMPTY and describe what is shown in description, in one short clause.",
   "Never write 'no text' or 'none' into on_screen_text — an empty string is how you say that.",
+  /**
+   * The word "json" is REQUIRED here, not stylistic. A model that does not
+   * advertise `structured` gets `response_format: { type: "json_object" }`
+   * instead of a schema, and Groq and OpenAI both reject that mode outright
+   * unless the messages contain the literal token: "'messages' must contain
+   * the word 'json' in some form" (measured in production 2026-09-04, which
+   * is why the frames stage could not use Groq at all).
+   */
+  "Answer with a single JSON object holding a `frames` array, one entry per frame.",
 ].join(" ")
 
 /**

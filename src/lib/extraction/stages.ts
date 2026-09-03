@@ -42,6 +42,15 @@ export interface ChatStageInfo {
    * (src/lib/extraction/chat-attempt.ts), which cannot drift.
    */
   vision?: boolean
+  /**
+   * Where this stage records `{ provider, model }` on a run's
+   * `additional_data`. Null means it records nothing there: schema
+   * synthesis writes its model onto the AGENT row it creates
+   * (src/lib/extraction/synthesize.ts), so a run cannot be attributed to
+   * it and the analytics dashboard omits the stage rather than showing a
+   * silent zero.
+   */
+  additionalDataKey: string | null
 }
 
 export const CHAT_STAGES = [
@@ -51,6 +60,7 @@ export const CHAT_STAGES = [
     short: "Extract",
     description: "The agent reading the transcript and filling its schema.",
     task: "extraction",
+    additionalDataKey: "extraction",
   },
   {
     id: "agent_router",
@@ -58,6 +68,7 @@ export const CHAT_STAGES = [
     short: "Router",
     description: "Picks which agent handles a video, or asks for a new one.",
     task: "synthesis",
+    additionalDataKey: "routing",
   },
   {
     id: "schema_synthesizer",
@@ -65,6 +76,7 @@ export const CHAT_STAGES = [
     short: "Schema",
     description: "Invents an output schema when no existing agent fits.",
     task: "synthesis",
+    additionalDataKey: null,
   },
   {
     id: "frames",
@@ -74,6 +86,7 @@ export const CHAT_STAGES = [
       "Reads on-screen text from video frames. Needs an account whose models accept images.",
     task: "extraction",
     vision: true,
+    additionalDataKey: "screen_text",
   },
 ] as const satisfies readonly ChatStageInfo[]
 

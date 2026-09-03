@@ -191,6 +191,20 @@ export const config = {
     tokenUrl: "https://api.notion.com/v1/oauth/token",
     redirectPath: "/api/v1/rays/oauth/notion/callback",
   },
+  analytics: {
+    /**
+     * PRD §6.2: a standard sub-60s clip should go URL-to-published in
+     * under 30 seconds. The dashboard's latency meters are drawn against
+     * this, so the target has one definition rather than a number
+     * repeated in a component.
+     */
+    targetTotalMs: Number(process.env.ANALYTICS_TARGET_TOTAL_MS ?? 30_000),
+    /** Below this a per-stage percentile is labelled thin, not plotted as
+     *  if it were solid. */
+    minSamples: Number(process.env.ANALYTICS_MIN_SAMPLES ?? 5),
+    /** Rows before a bar chart folds its tail into "Other". */
+    topN: Number(process.env.ANALYTICS_TOP_N ?? 7),
+  },
   observability: {
     logFile: process.env.LOG_FILE ?? "./data/logs/relay.log",
     service: process.env.SERVICE_NAME ?? "relay-api",

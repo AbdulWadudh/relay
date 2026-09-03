@@ -77,6 +77,17 @@ export interface Finding {
   value: string
   /** Share of its content words found in the source, 0–1. */
   overlap: number
+  /** How many content words were weighed, so `missing` has a denominator. */
+  checked: number
+  /**
+   * The content words absent from the source, which is the EVIDENCE for
+   * the flag. Without them the reason is an assertion a reader cannot
+   * check — and it is often checkable: matching is exact after
+   * normalisation, with no stemming, so a caption saying "articulate"
+   * does not satisfy a claim saying "articulation". Seeing the word tells
+   * a reader that instantly; being told "not supported" does not.
+   */
+  missing: string[]
 }
 
 export interface VerificationSummary {
@@ -115,13 +126,23 @@ function check(
       reason: "TOO_SHORT_TO_SCORE",
       value,
       overlap: 1,
+      checked: words.length,
+      missing: [],
     }
   }
 
+  const missing = words.filter((word) => !sourceWords.has(word))
   const overlap = Number(score(value, sourceWords).toFixed(2))
   const required = words.length < SHORT_VALUE_WORDS ? 1 : GROUNDED
   if (overlap >= required) {
-    return { pointer, status: "verified", value, overlap }
+    return {
+      pointer,
+      status: "verified",
+      value,
+      overlap,
+      checked: words.length,
+      missing,
+    }
   }
   return {
     pointer,
@@ -132,6 +153,8 @@ function check(
     reason: overlap >= 0.25 ? "PARTIALLY_GROUNDED" : "NOT_IN_SOURCE",
     value,
     overlap,
+    checked: words.length,
+    missing,
   }
 }
 

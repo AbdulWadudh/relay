@@ -1,6 +1,7 @@
 import config from "@/config"
 import { catalogFor } from "@/lib/extraction/catalog"
 import { resolveChain } from "@/lib/extraction/chain"
+import { noImageModelsFor } from "@/lib/extraction/model-refusals"
 import { rankModels } from "@/lib/extraction/models"
 import { chatProvider } from "@/lib/extraction/providers"
 import {
@@ -102,7 +103,20 @@ export async function stageModels(
 
       try {
         const catalog = await catalogFor({ userId, provider, apiKey })
-        const ranked = rankModels(catalog.models, provider, task, wantsVision)
+        let ranked = rankModels(catalog.models, provider, task, wantsVision)
+
+        // Do not OFFER a model this provider has already refused an image
+        // for. Without this the frames tab listed them and a pin could be
+        // set on one, which is how `gpt-oss:20b` got pinned to a stage it
+        // cannot serve (production, 2026-09-04).
+        if (wantsVision) {
+          const refused = new Set(
+            await noImageModelsFor(userId, entry.provider),
+          )
+          if (refused.size > 0) {
+            ranked = ranked.filter((model) => !refused.has(model.id))
+          }
+        }
         return {
           ...base,
           models: ranked.map(toOption),
