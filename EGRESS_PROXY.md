@@ -146,6 +146,20 @@ addresses no other customer shares), is an add-on to Zero Trust
 **Enterprise** and provisioned by an account team. Out of reach for this
 deployment; noted so it is not rediscovered as an option every outage.
 
+**MASQUE / native Proxy mode: LOOKED AT AND REJECTED, 2026-09-04.** The
+client now defaults to MASQUE, which unlocks a native Local proxy mode --
+it looks like it would let the sidecar drop `gost`, the third-party SOCKS
+bridge layered on warp-svc. It does not. Cloudflare documents that mode as
+listening on `127.0.0.1` only, and the worker is a different container, so
+a 0.0.0.0 bridge is still required and that bridge is what gost already
+is. It also changes nothing about WHICH address egress uses, which is the
+only thing that has ever failed here. Revisit only if the client gains a
+bindable listen address.
+
+A first-party Debian repo now exists (`pkg.cloudflareclient.com`) and could
+replace the community image, but that image is what supplies gost -- so
+today the swap costs more than it buys.
+
 Record the `ip=` before and after — if it did not change, the delete did not
 take and there is no point testing a download.
 
