@@ -2189,3 +2189,133 @@ YouTube is the only `proxied: true` source, which points at the WARP egress
 sidecar or another YouTube-side client shift — the failure class RUNBOOK §3
 and the Dockerfile's `yt-dlp` pin comments already document. Next step is
 RUNBOOK §4 triage, starting with whether the warp container is up.
+
+## YouTube outage diagnosed: it is the server, not the links (2026-09-03) — FIXED, CAUSE NARROWED
+
+Supersedes the "OPEN, NOT CAUSED BY THIS WORK" entry above.
+
+### The A/B that settled "genuine or server"
+
+Local yt-dlp is **2026.08.19, identical to the Dockerfile pin**, so this was
+a single-variable test: same binary, same `-f bestaudio/best`, no proxy, no
+cookies, residential connection.
+
+```
+OK  eakngayy0V0   1,159,429 B   <- prod: failed
+OK  7yx9iQ1ODQo   2,958,793 B   <- prod: failed
+OK  9n52TUOcSC0   3,433,877 B   <- prod: failed
+OK  1FP7PFamTxc   1,088,066 B   <- prod: failed (succeeded in prod at 11:46)
+OK  I4OkD3G11fw   1,996,902 B   <- prod: succeeded 10:28
+OK  5RYVYa1v-O0   2,500,405 B   <- prod: succeeded 11:46
+```
+
+`I4OkD3G11fw` came back **byte-identical** to the 1996902B recorded in the
+Dockerfile's yt-dlp pin comment, which is what confirms the local run is
+equivalent to the known-good prod baseline rather than merely "working".
+
+METHOD NOTE, because it nearly produced a false report: `ls source.*` matches
+`source.info.json` before `source.webm`, so the first pass printed metadata
+sizes as if they were media. Always assert on the media file.
+
+### What prod actually said
+
+From the live run log stream via `GET /runs/:id/logs` (`additional_data` keeps
+only error_code/failed_stage/permanent — the per-attempt stderr is only in
+the log stream):
+
+```
+Download starting  {proxied=true}
+default        -> ERROR: The page needs to be reloaded.
+web_safari     -> ERROR: Requested format is not available
+web_embedded   -> ERROR: Requested format is not available
+mweb           -> ERROR: Requested format is not available
+Every player client failed
+```
+
+NOT bot-check, NOT 403, NOT proxy-unreachable — so the WARP tunnel is up and
+carrying traffic, and YouTube is answering with a degraded player response.
+"The sidecar is down" is ruled out.
+
+### Two candidate causes, not separated by evidence alone
+
+Same jar, same proxy, same binary produced **6 successes 10:28-11:46** and
+**7 failures from 14:18**. The `youtube/cookie` credential's `updated_at` is
+`11:46:43` — exactly the last success — and write-back is success-gated, so
+the stored jar is the last known-good one and was not corrupted by the
+failures. All 13 runs belong to one user, who holds that jar.
+
+- **A — the WARP exit address is now soft-refused.** A degraded player
+  response instead of a bot page.
+- **B — Google invalidated that session after 11:46**, plausibly because it
+  was being used from a foreign datacenter IP. RUNBOOK standing risk 4
+  predicted exactly this and called it unknown.
+
+Both produce "no formats" when signed in, which is what the BOT_CHECK
+docstring already documents as the signed-in symptom.
+
+### Three defects found, all fixed
+
+1. **`web_safari` was dead and led the fallback chain.** It fails from a
+   RESIDENTIAL connection too — 3 of 4 real Shorts:
+
+   ```
+   ID             default   web_safari   web_embedded   mweb
+   eakngayy0V0    OK        FAIL         OK             OK
+   7yx9iQ1ODQo    OK        FAIL         OK             OK
+   9n52TUOcSC0    OK        OK           OK             OK
+   1FP7PFamTxc    OK        FAIL         OK             OK
+   ```
+
+   It led the list because "its HLS formats need no PO token"; that property
+   is gone. Default is now `web_embedded,mweb`. `YT_DLP_YOUTUBE_CLIENTS` was
+   NOT set in Coolify, so the code default is what production runs — this
+   ships with the deploy and needs no Coolify change.
+
+2. **The chain never tried anonymous.** `cookiesPath` was passed to every
+   attempt, so a jar YouTube has stopped honouring failed all of them
+   identically — with no fallback, taking down all YouTube ingestion.
+   Anonymous is sufficient for a PUBLIC item and is exactly what works.
+   `download.ts` now retries once with no jar, on the DEFAULT client, after
+   every signed-in client has failed a client-shaped failure.
+
+3. **The verdict blamed the source, and never retried.** These runs stored
+   `SOURCE_UNAVAILABLE` + `permanent: true`, and told the user "This is a
+   source or extractor problem, not your session" — wrong under BOTH
+   candidate causes. New `egress-degraded` rung, ranked above
+   `format-missing`: the per-attempt flags ARE the diagnosis, because
+   `proxied && !withCookies && FORMAT_MISSING` means "through our proxy,
+   anonymously, still no formats", and anonymous+residential demonstrably
+   works. It emits `DOWNLOAD_FAILED`, which is already retryable, rather
+   than editing the permanent list — that would have made genuinely dead
+   videos retry too.
+
+### The fix is also the experiment
+
+Shipping the anonymous rung separates A from B without deleting the user's
+credential: the next failing YouTube run retries anonymously through WARP,
+and either succeeds (cause B, the jar) or fails with the new
+`egress-degraded` verdict (cause A, the exit IP).
+
+### How it was tested
+
+`src/lib/media/**` is the pipeline, so it was not shipped on a read. A
+`.bat` yt-dlp stub (failing when `--cookies` is present, succeeding
+otherwise) exercised `download()` end to end without touching real
+credentials or the network:
+
+```
+TEST 1  jar fails every client, anonymous works -> download recovered
+TEST 2  jar AND anonymous fail  -> egress-degraded, DOWNLOAD_FAILED, permanent=false
+TEST 3  no jar at all, anon fails -> same verdict
+```
+
+Plus a 10-case regression over the whole ladder, because a rung was inserted
+into a load-bearing order. The two that matter: a `403` followed by a
+format-miss still resolves to `client-refused` (the new rung cannot hijack a
+better diagnosis), and a format-miss that is anonymous but NOT proxied still
+resolves to `format-missing` (local dev and Instagram unchanged).
+
+STUB GOTCHAS, both of which produced fake passes first: batch cannot parse
+`for %%A in (%*)` when an argument contains `%(ext)s` — use a `shift` loop —
+and Bun's shell rejects `%(` written literally in a template, so arguments
+must be passed as an ARRAY exactly as `runYtDlp` does.

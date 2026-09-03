@@ -104,6 +104,32 @@ async function downloadWithYtDlp(
     attempts.push(attempt)
   }
 
+  // LAST RESORT: the same fetch with NO jar.
+  //
+  // Every attempt above sent the user's cookies, so a jar YouTube has
+  // stopped honouring fails all of them identically -- and anonymous is
+  // enough for a PUBLIC item (SESSION_AUTH.md 4.2). Measured 2026-09-03:
+  // four links production had just rejected signed-in all downloaded
+  // anonymously on the default client, same pinned yt-dlp.
+  //
+  // Back to the DEFAULT client deliberately: it resolves the richest
+  // format set, and the fallbacks only ever existed for a client-shaped
+  // refusal, which this is not.
+  if (
+    !attempt.ok &&
+    cookiesPath &&
+    !PROXY_UNREACHABLE.test(attempt.stderr) &&
+    CLIENT_RETRYABLE.test(attempt.stderr)
+  ) {
+    logger.warn("Every client failed with a jar, retrying anonymously", {
+      source: source.source,
+      item_id: source.itemId,
+      previous_error: attempt.stderr.slice(0, 200),
+    })
+    attempt = await runYtDlp(source, dir, pathFile, null, null, proxy)
+    attempts.push(attempt)
+  }
+
   if (!attempt.ok) {
     // Every client tried and what it said, before anything is thrown away.
     // A run that exhausts the chain used to surface only the LAST stderr,

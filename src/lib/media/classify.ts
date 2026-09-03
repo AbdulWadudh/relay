@@ -113,6 +113,28 @@ const LADDER: readonly Rung[] = [
       ),
   },
   {
+    // Ranked above `format-missing`, and the per-attempt flags ARE the
+    // diagnosis: this attempt went through OUR proxy, sent NO jar, and
+    // still got no formats. Measured 2026-09-03, anonymous on the same
+    // pinned yt-dlp takes those same links from a residential connection
+    // — so the variable left is this server's egress, not the item and
+    // not the credential.
+    //
+    // DOWNLOAD_FAILED, so the queue retries it: an exit address being
+    // refused is transient, where SOURCE_UNAVAILABLE is classified
+    // permanent (src/lib/pipeline-errors.ts) and would never retry.
+    id: "egress-degraded",
+    matches: (attempt) =>
+      attempt.proxied &&
+      !attempt.withCookies &&
+      FORMAT_MISSING.test(attempt.stderr),
+    resolve: (_attempt, source) =>
+      new MediaIngestError(
+        "DOWNLOAD_FAILED",
+        `Could not fetch the media for this ${source.label} — no client offered a downloadable audio format, including an anonymous retry. Nothing is wrong with the link or your connected account; this server's network is the likely cause, and it will retry.`,
+      ),
+  },
+  {
     // Above the login-shaped rung, and that order is the whole point:
     // "Requested format is not available" contains "not available", so
     // without this it falls into UNAVAILABLE and — where a jar was
