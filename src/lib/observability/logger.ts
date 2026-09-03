@@ -4,6 +4,9 @@ import type pinoDefault from "pino"
 import type { DestinationStream, Logger } from "pino"
 
 import config from "@/config"
+import { redactLogValue } from "@/lib/observability/redact"
+import { currentRunContext } from "@/lib/observability/run-context"
+import { RunLogStream } from "@/lib/observability/run-log-stream"
 
 // require (not a static import) with turbopackIgnore so Turbopack leaves this
 // call untouched instead of routing it through its dev-mode external-module
@@ -123,11 +126,34 @@ const streams = [
   { stream: process.stdout },
   ...(logFileStream ? [{ stream: logFileStream }] : []),
   ...(openObserveStream ? [{ stream: openObserveStream }] : []),
+  // `level: "debug"` ONLY on this stream, deliberately.
+  //
+  // pino.multistream filters each stream at `info` unless told otherwise,
+  // so before this every `logger.debug` in the codebase was discarded by
+  // all three sinks. The run log wants the debug detail — yt-dlp's own
+  // output is logged at that level — but raising it on stdout, the file
+  // and OpenObserve would multiply their volume for every run. So the
+  // LIVE view is complete and the historical view is info-and-above.
+  { stream: new RunLogStream(), level: "debug" as const },
 ]
 
 const pinoLogger: Logger = pino(
-  { level: "debug", base: { service: config.observability.service } },
-  streams.length > 1 ? pino.multistream(streams) : process.stdout,
+  {
+    level: "debug",
+    base: { service: config.observability.service },
+    /**
+     * Stamps the ambient run and stage onto EVERY line, which is what
+     * makes the per-stage grouping in the UI possible without threading a
+     * runId through every function in the pipeline. Outside a run this
+     * returns nothing and the record is unchanged, so web requests are
+     * unaffected.
+     */
+    mixin: () => {
+      const context = currentRunContext()
+      return context ? { run_id: context.runId, stage: context.stage } : {}
+    },
+  },
+  pino.multistream(streams),
 )
 
 export function ingest(stream: string, event: LogEventInput) {
@@ -151,57 +177,9 @@ export const logger = {
   error: log("error"),
 }
 
-/**
- * Field names whose values must never reach a log sink (RULES.md, PRD §6:
- * zero plaintext token exposure).
- *
- * Matched per WORD, not per raw substring, so "monkey" is not treated as a
- * key and "encoded" is not treated as a code. `isSensitiveKey` splits
- * camelCase before comparing — the previous regex only handled
- * `_`-delimited segments, which meant `accessToken` (the exact field name
- * `credentialInputSchema` uses) sailed through unredacted and every
- * POST /credentials wrote the user's raw API key to OpenObserve.
- */
-const SENSITIVE_WORDS = new Set([
-  "password",
-  "secret",
-  "token",
-  "authorization",
-  "cookie",
-  "code",
-  "key",
-  "apikey",
-  "credential",
-  "credentials",
-  // An egress proxy URL may carry `user:pass@` (config.media.proxyUrl), so
-  // any key that IS the proxy is redacted. Deliberately does not catch
-  // `proxied`, which is the boolean the download step logs instead — the
-  // useful half of the diagnostic without the half that can hold a secret.
-  "proxy",
-])
+export { isSensitiveKey, redactLogValue } from "@/lib/observability/redact"
 
-export function isSensitiveKey(key: string): boolean {
-  return (
-    key
-      // camelCase / PascalCase -> word boundaries
-      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .some((word) => SENSITIVE_WORDS.has(word))
-  )
-}
 const MAX_TRACE_BODY_LENGTH = 8_192
-
-export function redactLogValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redactLogValue)
-  if (!value || typeof value !== "object") return value
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      isSensitiveKey(key) ? "[REDACTED]" : redactLogValue(item),
-    ]),
-  )
-}
 
 async function traceBody(
   body: ReadableStream<Uint8Array> | null,

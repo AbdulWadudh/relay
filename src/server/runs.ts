@@ -2,6 +2,8 @@ import { Hono } from "hono"
 
 import { getRequestSession } from "@/lib/auth-request"
 import { logger } from "@/lib/observability/logger"
+import { dropRunLogs, readRunLogs } from "@/lib/observability/run-logs"
+import { readRunLogsHistory } from "@/lib/observability/run-logs-history"
 import { enqueueRun } from "@/lib/queue/runs-queue"
 import { createRun, deleteRun, getRun, listRuns, updateRun } from "@/lib/runs"
 import { relayProcessSchema } from "@/lib/schemas"
@@ -41,6 +43,34 @@ runsModule.get("/:id", async (c) => {
   return c.json({ run })
 })
 
+/**
+ * The run's log stream, for the stage rail on the detail page.
+ *
+ * OWNERSHIP IS CHECKED VIA `getRun` FIRST, and that is not incidental: the
+ * logs live in Dragonfly and OpenObserve, keyed only by run id, with no
+ * user column to filter on. Without this lookup any signed-in user could
+ * read any other user's run logs by guessing an id.
+ *
+ * Live logs come from Dragonfly; when its TTL has passed, the same lines
+ * are read back out of OpenObserve. `source` tells the UI which it got, so
+ * an empty result can say WHY it is empty rather than implying the run
+ * produced nothing.
+ */
+runsModule.get("/:id/logs", async (c) => {
+  const session = await getRequestSession(c.req.raw.headers)
+  if (!session) return c.json({ error: "Unauthorized" }, 401)
+  const id = c.req.param("id")
+  if (!(await getRun(id, session.user.id))) {
+    return c.json({ error: "Run not found" }, 404)
+  }
+
+  const live = await readRunLogs(id)
+  if (live.length > 0) return c.json({ lines: live, source: "live" })
+
+  const history = await readRunLogsHistory(id)
+  return c.json({ lines: history, source: "history" })
+})
+
 runsModule.delete("/:id", async (c) => {
   const session = await getRequestSession(c.req.raw.headers)
   if (!session) return c.json({ error: "Unauthorized" }, 401)
@@ -48,6 +78,9 @@ runsModule.delete("/:id", async (c) => {
   if (!(await deleteRun(id, session.user.id))) {
     return c.json({ error: "Run not found" }, 404)
   }
+  // A deleted run takes its logs with it rather than leaving them to sit
+  // out the TTL, addressable by anyone who kept the id.
+  dropRunLogs(id)
   logger.info("Run deleted", { run_id: id })
   return c.json({ ok: true })
 })

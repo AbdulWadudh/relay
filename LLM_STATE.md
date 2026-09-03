@@ -1472,3 +1472,48 @@ free-proxy pool. That was 8 attempts at ONE video, not 8 videos — it
 measured proxy reliability and never per-video coverage, and it read as
 stronger evidence than it was. The 12-Short table above is the measurement
 that actually answers the question.
+
+## Per-stage run logs (2026-09-03) — DONE
+
+The run detail stage rail now carries a collapsible log stream per stage.
+Live lines come from Dragonfly, older runs are read back out of
+OpenObserve; neither needed a schema migration, which is why the split
+exists.
+
+Capture is a pino `mixin` plus an `AsyncLocalStorage` run context, so every
+existing `logger.*` call is attributed to a run AND a stage without one
+call site changing — `src/lib/media/download.ts` logs `{ source, item_id }`
+and has no idea a run exists, yet its lines group correctly.
+
+### Three findings that only surfaced by running it
+
+**A CREDENTIAL LEAK, now closed.** `redactLogValue` was applied only to
+HTTP trace bodies; `logger.*` calls went straight to pino unredacted. That
+was survivable while logs went to stdout and OpenObserve and the rule was
+"never log a secret at the call site". These lines are RENDERED IN THE
+PRODUCT, so one careless field would put a token on a page. Redaction now
+runs inside `RunLogStream`. Proven with a canary: a log record carrying
+`api_key` came back `[REDACTED]`.
+
+**Every `logger.debug` in the codebase was being discarded.**
+`pino.multistream` filters each stream at `info` unless given a level, and
+none of the three streams had one. `level: "debug"` is set on the run-log
+stream ONLY — the live view is complete, while stdout/file/OpenObserve
+volume is unchanged. Consequence to remember: the historical (OpenObserve)
+view is info-and-above, so it is thinner than the live one.
+
+**Run logs need their OWN Redis client.** The shared `getRedis()` sets
+`enableOfflineQueue: false` so an enqueue fails loudly, which is correct
+for a job but wrong for a log line: the first append after a process start
+arrives before the socket is ready and threw "Stream isn't writeable",
+silently dropping every line of the first run after a deploy. `getRunLogRedis()`
+opts into buffering. `connection.ts` already documented this trap "for the
+next caller that is a read" — this was that caller.
+
+### Deliberate restraint
+
+No entrance or stagger animation on log lines. They are data being read,
+and motion there hinders; only the disclosure itself and its chevron
+animate. Timestamps use a module-scope `Intl.DateTimeFormat` (not a hand
+rolled pad, and not a new dependency) because a panel can hold 500 rows and
+re-renders every poll while a run is live.

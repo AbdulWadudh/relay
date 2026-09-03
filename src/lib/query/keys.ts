@@ -27,6 +27,9 @@ export const runKeys = {
   list: (page = 1) => [...runKeys.lists(), page] as const,
   details: () => [...runKeys.all, "detail"] as const,
   detail: (id: string) => [...runKeys.details(), id] as const,
+  /** Separate from `detail`: logs poll on their own cadence and are only
+   *  fetched once a stage is actually expanded. */
+  logs: (id: string) => [...runKeys.all, "logs", id] as const,
 }
 
 export const promptKeys = {

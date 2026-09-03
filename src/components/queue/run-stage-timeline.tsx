@@ -8,7 +8,12 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
+import { useState } from "react"
+
+import { RunStageLogs } from "@/components/queue/run-stage-logs"
+import { type RunLogLine, useRunLogs } from "@/lib/query/runs"
 import {
+  isTerminal,
   PIPELINE_STAGES,
   RUN_STATUS_META,
   type RunStatus,
@@ -84,14 +89,43 @@ const DOT: Record<StageState, string> = {
 }
 
 export function RunStageTimeline({
+  runId,
   status,
   timings,
   failedStage,
 }: {
+  runId: string
   status: RunStatus
   timings: Record<string, number>
   failedStage: string | null
 }) {
+  const [open, setOpen] = useState<Set<RunStatus>>(new Set())
+
+  /**
+   * ONE request for the whole rail, not one per stage. The endpoint returns
+   * every line for the run and the grouping happens here — five stages
+   * fetching the same payload would quadruple the traffic to show the same
+   * data, and would poll out of step with each other while a run is live.
+   */
+  const { data, isFetching } = useRunLogs(runId, {
+    enabled: open.size > 0,
+    live: !isTerminal(status),
+  })
+
+  const byStage = new Map<string, RunLogLine[]>()
+  for (const line of data?.lines ?? []) {
+    const bucket = byStage.get(line.stage)
+    if (bucket) bucket.push(line)
+    else byStage.set(line.stage, [line])
+  }
+
+  const toggle = (stage: RunStatus) =>
+    setOpen((current) => {
+      const next = new Set(current)
+      if (!next.delete(stage)) next.add(stage)
+      return next
+    })
+
   return (
     <ol className="flex flex-col">
       {PIPELINE_STAGES.map((stage, index) => {
@@ -169,6 +203,19 @@ export function RunStageTimeline({
               {state === "skipped" ? (
                 <p className="mt-0.5 text-muted-foreground text-xs">Not run</p>
               ) : null}
+              {/* A stage that never ran has nothing to show, so it gets no
+                  disclosure at all rather than one that opens onto an
+                  empty panel. */}
+              {state === "pending" || state === "skipped" ? null : (
+                <RunStageLogs
+                  panelId={`run-logs-${stage}`}
+                  lines={byStage.get(stage) ?? []}
+                  expanded={open.has(stage)}
+                  onToggle={() => toggle(stage)}
+                  loading={isFetching}
+                  source={data?.source}
+                />
+              )}
             </div>
           </li>
         )

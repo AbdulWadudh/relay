@@ -54,3 +54,27 @@ export function getRedis(): IORedis {
   globalForRedis.__relayRedis ??= createRedis()
   return globalForRedis.__relayRedis
 }
+
+const globalForRunLogs = globalThis as unknown as {
+  __relayRunLogRedis?: IORedis
+}
+
+/**
+ * The client for per-run log lines (src/lib/observability/run-logs.ts).
+ *
+ * SEPARATE FROM `getRedis` because the two want opposite failure
+ * behaviour, and sharing one would have to pick a side. An enqueue must
+ * FAIL LOUDLY when the queue is unreachable — a buffered write that never
+ * lands leaves a run stuck on "queued" forever. A log line is the
+ * opposite: it is fire-and-forget, it must never affect a run, and the
+ * first append after a process start reliably arrives before the socket is
+ * ready — exactly the "Stream isn't writeable" case this file's own
+ * `enableOfflineQueue` note describes. Measured: with the shared client,
+ * every line of the first run after a deploy was dropped.
+ */
+export function getRunLogRedis(): IORedis {
+  globalForRunLogs.__relayRunLogRedis ??= createRedis({
+    enableOfflineQueue: true,
+  })
+  return globalForRunLogs.__relayRunLogRedis
+}

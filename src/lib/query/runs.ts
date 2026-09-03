@@ -80,6 +80,48 @@ export function useRun(id: string) {
   return useQuery(runDetailQueryOptions(id))
 }
 
+export interface RunLogLine {
+  /** Stable per line; see `RunLogLine.id` in run-logs.ts. */
+  id: string
+  at: number
+  level: string
+  stage: string
+  message: string
+  fields?: Record<string, unknown>
+}
+
+export interface RunLogs {
+  lines: RunLogLine[]
+  /** "live" from Dragonfly, "history" once its TTL has passed. */
+  source: "live" | "history"
+}
+
+/**
+ * A run's log stream, fetched ONLY when a stage is expanded (`enabled`).
+ *
+ * Deliberately not folded into `useRun`. Logs are the largest thing on the
+ * page and nobody reads them most visits, so making them part of the
+ * detail payload would put hundreds of lines on the wire every two seconds
+ * for every open run page. Gating on the disclosure means the cost is paid
+ * by the person who asked for it.
+ *
+ * Polls faster than the detail query while the run is live, because that
+ * is the one moment a log stream is worth watching, and stops dead once
+ * the run is terminal — a finished run's logs cannot change.
+ */
+export function useRunLogs(
+  id: string,
+  options: { enabled: boolean; live: boolean },
+) {
+  return useQuery({
+    queryKey: runKeys.logs(id),
+    queryFn: () => apiFetch<RunLogs>(`/runs/${id}/logs`),
+    enabled: options.enabled,
+    staleTime: 0,
+    refetchInterval: options.live ? POLL_INTERVAL_MS : false,
+  })
+}
+
 /**
  * Submits a URL. The API returns 202 with the `queued` row, so the new run
  * lands in the list immediately and polling takes over from there.

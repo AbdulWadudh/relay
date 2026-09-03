@@ -277,6 +277,32 @@ export const config = {
     url: process.env.OPENOBSERVE_URL ?? "",
     org: process.env.OPENOBSERVE_ORG ?? "default",
     token: process.env.OPENOBSERVE_TOKEN ?? "",
+    /**
+     * The per-run log stream behind the run detail view's stage rail.
+     *
+     * Two sources, deliberately: Dragonfly holds the LIVE window (fast,
+     * complete, expires on its own) and OpenObserve answers for anything
+     * older (durable, costs no new storage because the logger already
+     * ships there). Neither needed a migration, which is why the split
+     * exists at all.
+     */
+    runLogs: {
+      /**
+       * Cap per run. Trimmed from the OLDEST end — a run that fails after
+       * thousands of lines is diagnosed from its tail. Also the `size` of
+       * the historical query, so one pathological run cannot return a
+       * million rows into a request handler.
+       */
+      maxLines: Number(process.env.RUN_LOG_MAX_LINES ?? 500),
+      /**
+       * How long the live window lasts. A day covers "something just
+       * broke, show me why", which is the whole use case; past that the
+       * OpenObserve path takes over and the user sees no difference.
+       */
+      ttlSeconds: Number(process.env.RUN_LOG_TTL_SECONDS ?? 86400),
+      /** How far back the historical query looks. */
+      historyDays: Number(process.env.RUN_LOG_HISTORY_DAYS ?? 30),
+    },
     streams: {
       server: "relay_server",
       client: "relay_client",

@@ -5,6 +5,7 @@ import { extract } from "@/lib/extraction"
 import { verifyExtraction } from "@/lib/extraction/verify"
 import { withIngestedAudio } from "@/lib/media/ingest"
 import { logger } from "@/lib/observability/logger"
+import { setRunStage, withRunContext } from "@/lib/observability/run-context"
 import {
   codeOf,
   descriptionOf,
@@ -26,7 +27,20 @@ import { NoSpeechError, transcribe } from "@/lib/transcription"
  * point inside the ingest scope, where the audio file still exists.
  */
 
+/**
+ * Establishes the run's logging context for the WHOLE job, then runs it.
+ *
+ * Everything below logs inside this scope, so every line — including from
+ * code that has no idea a run exists, like src/lib/media/download.ts —
+ * carries `run_id` and the current `stage`. That is what the run detail
+ * view's per-stage log stream reads, and it is why no logging call in the
+ * pipeline had to change to get it.
+ */
 export async function processRun(runId: string): Promise<void> {
+  return await withRunContext(runId, "queued", () => runPipeline(runId))
+}
+
+async function runPipeline(runId: string): Promise<void> {
   const run = await getRunForWorker(runId)
   if (!run) {
     // The row was deleted between enqueue and pickup — nothing to do, and
@@ -42,6 +56,9 @@ export async function processRun(runId: string): Promise<void> {
   let stage: RunStatus = "queued"
   const enter = async (next: RunStatus) => {
     stage = next
+    // Advances the AMBIENT stage too, so lines logged from here on group
+    // under the right heading in the UI without being passed a stage.
+    setRunStage(next)
     await updateRun(runId, { status: next, error: null })
   }
 

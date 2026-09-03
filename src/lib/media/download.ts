@@ -273,13 +273,44 @@ async function runYtDlp(
     source.canonicalUrl,
   ]
   const result = await $`${config.media.ytDlpPath} ${args}`.nothrow().quiet()
+  const raw = result.stderr.toString()
+
+  // yt-dlp's OWN output, into the run's log stream.
+  //
+  // WHY IT IS WORTH THE NOISE. `lastLine` keeps one line, which is the
+  // right thing to SHOW a user but throws away the diagnosis: a run that
+  // walks four player clients reports only the last client's complaint,
+  // and the first client's failure — usually the interesting one — is
+  // gone. The run detail view's stage log shows all of it.
+  //
+  // Scrubbed like everything else derived from this stderr, and capped:
+  // yt-dlp can emit hundreds of lines and this is not a tool for reading
+  // hundreds of lines.
+  if (!result.exitCode) {
+    logger.debug("yt-dlp finished", {
+      client: extractorArgs ?? "default",
+      proxied: Boolean(proxy) && source.proxied,
+    })
+  } else {
+    for (const line of raw
+      .split("\n")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .slice(-12)) {
+      logger.debug("yt-dlp", {
+        client: extractorArgs ?? "default",
+        line: scrubProxy(line).slice(0, 400),
+      })
+    }
+  }
+
   return {
     ok: result.exitCode === 0,
     // Scrubbed HERE, at the single point stderr enters the program, rather
     // than at each of the places it leaves — `lastLine` output reaches the
     // user-visible `run.error`, the logs, and the attempts list, and one
     // missed call site would be a credential leak.
-    stderr: scrubProxy(lastLine(result.stderr.toString())),
+    stderr: scrubProxy(lastLine(raw)),
     exitCode: result.exitCode,
   }
 }

@@ -115,6 +115,7 @@ export function RunDetail({ runId }: { runId: string }) {
       <Section title="Stages">
         <div className="rounded-lg border p-5">
           <RunStageTimeline
+            runId={runId}
             status={run.status}
             timings={run.timings}
             failedStage={
