@@ -1842,3 +1842,51 @@ NOT show both themes. The variant is `&:is(.dark *)` and next-themes puts
 `.dark` on `<html>`, so everything nested inside it is dark regardless — the
 first screenshot came back dark on both halves. The class on `<html>` has to
 be toggled instead.
+
+## OpenObserve reads are 401; ingest is fine (2026-09-03) — DIAGNOSED, NOT FIXED
+
+Found while answering "where do older runs' logs come from". The run detail
+page showed "No logs retained for this stage" on every stage of a run that
+had just completed successfully.
+
+The immediate cause was the live window: two deploys had restarted Dragonfly
+since that run, which wipes it, so the page fell through to the OpenObserve
+history path. But history returned nothing either, including for stages that
+definitely emitted `info` lines.
+
+Measured directly against `OPENOBSERVE_URL`, with the credential the app is
+configured with — verified byte-identical to the Coolify env var, so this is
+production behaviour and not a local misconfiguration:
+
+| endpoint | result |
+| --- | --- |
+| `GET /healthz` | `200 {"status":"ok"}` |
+| `POST /api/<org>/relay_server/_json` (ingest) | `200`, `successful: 1` |
+| `POST /api/<org>/_search` (the history read) | `401 Unauthorized Access` |
+| `GET /api/<org>/streams` | `401` |
+| `GET /api/_meta/organizations` | `401` |
+
+**Writes land; reads are refused.** Ruled out a wrong endpoint before
+concluding that: `_search?type=logs` and `/api/v2/<org>/_search` are 401
+too, as is every other authenticated read. So `OPENOBSERVE_TOKEN` is
+accepted for ingest and rejected for query — either the root password it
+encodes is stale, or that user has no query permission on the org.
+
+**No application code is wrong.** `run-logs-history.ts` issues the right
+request; it degrades to `[]` on any non-OK response, by design, which is
+exactly why this was invisible — a 401 and a run that genuinely produced no
+logs render identically. The fix is a credential with query rights in
+`OPENOBSERVE_TOKEN`, which is a Coolify env-var change and was left to the
+human.
+
+Two things worth keeping from this:
+
+* **The failure is silent by construction.** Degrading to empty is right for
+  a log panel — absent logs must never fail a run — but it means a broken
+  history backend looks like an empty one forever. A one-off probe is the
+  only way to tell, hence the table in RUNBOOK.md §4.4.
+* **The durable half of the log stream is the less useful half.** `debug`
+  lines go only to the live Dragonfly stream (logger.ts sets `level: "debug"`
+  on that stream alone), so yt-dlp's own output — the thing worth reading
+  when a download fails — is never in OpenObserve at all. Even with the 401
+  fixed, a historical Downloading stage can only ever show `info` and above.

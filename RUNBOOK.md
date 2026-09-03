@@ -38,7 +38,7 @@ network by hand; as of 2026-09-03 it is not — see §3.
 | Whisper-class API (user key) | transcription | fails at `transcribing` |
 | LLM API (user key) | routing, extraction, verification | fails at `extracting` |
 | Cloudflare WARP | YouTube egress | see §3 |
-| OpenObserve | logs, and run logs older than the live window | logs missing; runs unaffected |
+| OpenObserve | logs, and run logs older than the live window | logs missing; runs unaffected. **Its read path is currently 401 — see §4.4** |
 
 Every third-party key is the **user's own**, decrypted per run from the
 vault with `VAULT_KEY` and held only for the duration of the call.
@@ -164,12 +164,15 @@ The run detail page has a collapsible log stream under each stage. Expand
 **Downloading** — it carries yt-dlp's own output. Usually faster than
 anything else here.
 
-Two limits, before you trust an empty panel:
+Three limits, before you trust an empty panel:
 
 - The live window is in Dragonfly with a TTL, and **a deploy restarts
   Dragonfly**, so logs from before the last deploy are gone.
 - Older runs fall back to OpenObserve, which holds `info` and above — the
   yt-dlp `debug` lines are missing from history.
+- **The OpenObserve fallback is currently BROKEN (measured 2026-09-03).**
+  See §4.4. Until it is fixed, a run older than the live window shows "No
+  logs retained for this stage" for every stage, whatever it actually did.
 
 ### 4.2 Match the message
 
@@ -216,6 +219,34 @@ pin, the actual fix — was never reached.
 Equal-ranked attempts keep the earliest, which is the default client. The
 `Download failed` log line records `cause` and `deciding_client`, so which
 attempt produced the verdict can be read back without reproducing the run.
+
+### 4.4 The OpenObserve read path returns 401
+
+Measured 2026-09-03 against `OPENOBSERVE_URL` with the exact credential the
+app is configured with (verified identical to the Coolify env var):
+
+| endpoint | result |
+| --- | --- |
+| `GET /healthz` | `200 {"status":"ok"}` — the service is up |
+| `POST /api/<org>/relay_server/_json` (ingest) | `200`, `successful: 1` — **writes land** |
+| `POST /api/<org>/_search` (the history read) | **`401 Unauthorized Access`** |
+| `GET /api/<org>/streams` | `401` |
+| `GET /api/_meta/organizations` | `401` |
+
+Not a wrong endpoint — `_search?type=logs` and `/api/v2/<org>/_search` are
+401 too, and so is every other authenticated read. The credential in
+`OPENOBSERVE_TOKEN` is accepted for INGEST and rejected for QUERY, so the
+logs are being stored and cannot be read back.
+
+`readRunLogsHistory` degrades to `[]` on any non-OK response, by design, so
+this failure is invisible in the product: it looks exactly like a run that
+produced no logs.
+
+To fix: give `OPENOBSERVE_TOKEN` a credential with query rights — it is
+currently `Basic base64(<user>:<password>)` for the root user, so either the
+password is stale or that user lacks query permission on the org. Nothing in
+the application code needs to change; `run-logs-history.ts` is issuing the
+right request.
 
 ---
 
