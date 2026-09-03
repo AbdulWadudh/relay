@@ -55,6 +55,15 @@ export interface MediaSource {
    * third party in the path of a live session and buy nothing.
    */
   proxied?: boolean
+  /**
+   * A PUBLIC item from this source can be fetched with no session, so
+   * anonymous is tried BEFORE the user's jar and the jar is only spent on
+   * an item that actually needs it.
+   *
+   * YouTube only. Instagram cannot reach Reels anonymously at all
+   * (SESSION_AUTH.md 1.2), so for it an anonymous attempt is pure waste.
+   */
+  publicAnonymously?: boolean
 }
 
 export const MEDIA_SOURCES = [
@@ -96,6 +105,7 @@ export const MEDIA_SOURCES = [
     ],
     canonical: (itemId) => `https://www.youtube.com/shorts/${itemId}`,
     proxied: true,
+    publicAnonymously: true,
   },
 ] as const satisfies readonly MediaSource[]
 
@@ -124,6 +134,8 @@ export interface ParsedSource {
    * boolean instead of comparing a source id against a literal.
    */
   proxied: boolean
+  /** Resolved from the registry, like `proxied`. */
+  publicAnonymously: boolean
 }
 
 /** "Instagram Reel or YouTube video" — validation and empty-state copy. */
@@ -188,6 +200,7 @@ export function parseSourceUrl(raw: string): ParsedSource | null {
         itemId,
         canonicalUrl: (shape.canonical ?? source.canonical)(itemId),
         proxied: source.proxied === true,
+        publicAnonymously: source.publicAnonymously === true,
       }
     }
   }

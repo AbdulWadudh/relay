@@ -4,6 +4,7 @@ import { MediaIngestError } from "@/lib/media/errors"
 import {
   CLIENT_RETRYABLE,
   PROXY_UNREACHABLE,
+  UNAVAILABLE,
 } from "@/lib/media/failure-patterns"
 import { pruneInfo, withSyntheticTitle } from "@/lib/media/info"
 import type { ParsedSource } from "@/lib/media/sources"
@@ -64,70 +65,56 @@ async function downloadWithYtDlp(
     proxied: Boolean(proxy) && source.proxied,
   })
 
-  // The default client chain first — it resolves the richest format set,
-  // and for every source but YouTube it is the only thing tried. Fallbacks
-  // engage only on a client-shaped failure, so a private or deleted item
-  // still fails once rather than being re-fetched under three more clients.
-  let attempt = await runYtDlp(source, dir, pathFile, null, cookiesPath, proxy)
-  // Every client tried and what it said, kept as RECORDS rather than
-  // pre-formatted strings, because the classification is taken from the
-  // most informative of them (src/lib/media/classify.ts) and not from
-  // whichever happened to run last. The tuple type carries "at least one"
-  // into the classifier so it has no empty case to return null for.
-  const attempts: [YtDlpAttempt, ...YtDlpAttempt[]] = [attempt]
-  for (const extractorArgs of config.media.ytDlpFallbacks[source.source] ??
-    []) {
-    // An unreachable proxy is not a client problem, so re-running the same
-    // fetch under three more player clients cannot fix it and only delays
-    // the real error by however long each attempt takes to time out.
-    if (
-      attempt.ok ||
-      PROXY_UNREACHABLE.test(attempt.stderr) ||
-      !CLIENT_RETRYABLE.test(attempt.stderr)
-    )
-      break
-    logger.warn("Download failed on this client, trying the next", {
-      source: source.source,
-      item_id: source.itemId,
-      extractor_args: extractorArgs,
-      // Never the URL or the jar — a client name and yt-dlp's own reason.
-      previous_error: attempt.stderr.slice(0, 200),
-    })
-    attempt = await runYtDlp(
+  // WHICH SESSION, AND IN WHAT ORDER.
+  //
+  // For a source whose public items need no session, anonymous goes FIRST
+  // and the jar is only spent on an item that actually needs it. That is
+  // not a preference: measured 2026-09-03, a YouTube jar that had gone bad
+  // failed EVERY player client for four hours, and because the jar was
+  // tried first and alone, one dead session took down all YouTube
+  // ingestion. Anonymous took the same four links immediately.
+  //
+  // Instagram is the other way round and gets NO anonymous attempt: it
+  // cannot reach Reels without a jar at all (SESSION_AUTH.md 1.2), so an
+  // anonymous try is pure waste -- and keeping the jar attempt FIRST is
+  // what preserves SESSION_EXPIRED detection, since equal-ranked attempts
+  // keep the earliest and only a jar attempt can resolve to it.
+  const sessions: readonly (string | null)[] =
+    cookiesPath && source.publicAnonymously
+      ? [null, cookiesPath]
+      : [cookiesPath]
+
+  const attempts: YtDlpAttempt[] = []
+  let attempt!: YtDlpAttempt
+  for (const [index, jar] of sessions.entries()) {
+    if (index > 0) {
+      logger.warn("Retrying with a different session", {
+        source: source.source,
+        item_id: source.itemId,
+        with_jar: jar !== null,
+        previous_error: attempt.stderr.slice(0, 200),
+      })
+    }
+    attempt = await attemptClientChain(
       source,
       dir,
       pathFile,
-      extractorArgs,
-      cookiesPath,
+      jar,
       proxy,
+      attempts,
     )
-    attempts.push(attempt)
-  }
-
-  // LAST RESORT: the same fetch with NO jar.
-  //
-  // Every attempt above sent the user's cookies, so a jar YouTube has
-  // stopped honouring fails all of them identically -- and anonymous is
-  // enough for a PUBLIC item (SESSION_AUTH.md 4.2). Measured 2026-09-03:
-  // four links production had just rejected signed-in all downloaded
-  // anonymously on the default client, same pinned yt-dlp.
-  //
-  // Back to the DEFAULT client deliberately: it resolves the richest
-  // format set, and the fallbacks only ever existed for a client-shaped
-  // refusal, which this is not.
-  if (
-    !attempt.ok &&
-    cookiesPath &&
-    !PROXY_UNREACHABLE.test(attempt.stderr) &&
-    CLIENT_RETRYABLE.test(attempt.stderr)
-  ) {
-    logger.warn("Every client failed with a jar, retrying anonymously", {
-      source: source.source,
-      item_id: source.itemId,
-      previous_error: attempt.stderr.slice(0, 200),
-    })
-    attempt = await runYtDlp(source, dir, pathFile, null, null, proxy)
-    attempts.push(attempt)
+    if (attempt.ok) break
+    // Our own egress being down says nothing a different session can fix.
+    if (PROXY_UNREACHABLE.test(attempt.stderr)) break
+    // Only a failure a different session could plausibly change is worth
+    // another pass: a client-shaped refusal, or the unavailable family --
+    // which is exactly what a signed-in fetch answers for a private or
+    // age-restricted item, and what a bad jar reports for a public one.
+    if (
+      !CLIENT_RETRYABLE.test(attempt.stderr) &&
+      !UNAVAILABLE.test(attempt.stderr)
+    )
+      break
   }
 
   if (!attempt.ok) {
@@ -148,11 +135,16 @@ async function downloadWithYtDlp(
     // The verdict comes from the most informative attempt, not the last
     // one. The ladder, its order, and every guarantee that order buys live
     // in src/lib/media/classify.ts; this file only reports the outcome.
+    // `sessions` is non-empty by construction and every pass pushes at
+    // least one attempt, so this is never the empty array the tuple
+    // forbids — asserted rather than guarded, to keep the dead branch the
+    // tuple exists to prevent from reappearing here.
+    const collected = attempts as [YtDlpAttempt, ...YtDlpAttempt[]]
     const {
       error,
       attempt: deciding,
       cause,
-    } = classifyFailure(attempts, source)
+    } = classifyFailure(collected, source)
     logger.error("Download failed", {
       source: source.source,
       item_id: source.itemId,
@@ -195,4 +187,51 @@ async function downloadWithYtDlp(
     ),
   )
   return { mediaPath, info }
+}
+
+/**
+ * The default client, then each configured fallback, for ONE session.
+ * Appends every attempt to `attempts` so the classifier sees all of them.
+ */
+async function attemptClientChain(
+  source: ParsedSource,
+  dir: string,
+  pathFile: string,
+  cookiesPath: string | null,
+  proxy: string,
+  attempts: YtDlpAttempt[],
+): Promise<YtDlpAttempt> {
+  // The default client first — it resolves the richest format set, and for
+  // every source but YouTube it is the only thing tried.
+  let attempt = await runYtDlp(source, dir, pathFile, null, cookiesPath, proxy)
+  attempts.push(attempt)
+
+  for (const extractorArgs of config.media.ytDlpFallbacks[source.source] ??
+    []) {
+    // An unreachable proxy is not a client problem, so re-running the same
+    // fetch under more player clients cannot fix it.
+    if (
+      attempt.ok ||
+      PROXY_UNREACHABLE.test(attempt.stderr) ||
+      !CLIENT_RETRYABLE.test(attempt.stderr)
+    )
+      break
+    logger.warn("Download failed on this client, trying the next", {
+      source: source.source,
+      item_id: source.itemId,
+      extractor_args: extractorArgs,
+      // Never the URL or the jar — a client name and yt-dlp's own reason.
+      previous_error: attempt.stderr.slice(0, 200),
+    })
+    attempt = await runYtDlp(
+      source,
+      dir,
+      pathFile,
+      extractorArgs,
+      cookiesPath,
+      proxy,
+    )
+    attempts.push(attempt)
+  }
+  return attempt
 }

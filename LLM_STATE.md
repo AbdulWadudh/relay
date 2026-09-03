@@ -2319,3 +2319,88 @@ STUB GOTCHAS, both of which produced fake passes first: batch cannot parse
 `for %%A in (%*)` when an argument contains `%(ext)s` — use a `shift` loop —
 and Bun's shell rejects `%(` written literally in a template, so arguments
 must be passed as an ARRAY exactly as `runYtDlp` does.
+
+### CORRECTION (same day): it was cause B, the jar — and anonymous now goes FIRST
+
+The entry above narrowed the outage to two causes and then, on seeing a
+retry succeed, called cause A (a transient egress condition). **That was
+wrong.** The variable that changed was not time — the YouTube cookie
+credential had been DELETED between the failures and the retry.
+
+```
+credentials now:  gemini, groq, instagram/cookie, notion x3,
+                  ollama-cloud, openrouter        <- no youtube row
+```
+
+Which makes the timeline a clean experiment:
+
+| when | jar | result |
+|---|---|---|
+| 10:28-11:46 | signed-in | 6 x done |
+| 14:18-15:17 | signed-in | 7 x failed ("no formats" / "page needs to be reloaded") |
+| after removal | anonymous | 4 x done |
+
+And the post-removal byte counts equal the residential downloads exactly —
+eakngayy0V0 1159429, 7yx9iQ1ODQo 2958793, 9n52TUOcSC0 3433877,
+1FP7PFamTxc 1088066. Both post-removal runs show a single
+`client=default proxied=true` attempt succeeding, and the failed one
+carried the `!withCookies` message variant, confirming no jar was sent.
+
+**The jar had gone bad; the proxy was innocent all along** — the four
+successes went through it. RUNBOOK standing risk 4 (a live Google session
+used from a foreign datacenter IP getting flagged) is no longer
+hypothetical.
+
+LESSON: a "the retry worked, so it was transient" conclusion is only valid
+if nothing else changed. Check the inputs before crediting time.
+
+### Anonymous FIRST for YouTube — human decision 2026-09-03
+
+`publicAnonymously` on the source registry (YouTube only). When set and a
+jar exists, the session order is **anonymous, then the jar**; the jar is
+only spent on an item that actually needs one. Two reasons:
+
+1. It removes the root cause. The jar no longer traverses the WARP exit on
+   every run, which is what appears to have got it flagged.
+2. It cannot be taken down by one dead session, which is exactly what
+   happened.
+
+Instagram deliberately gets NO anonymous attempt: it cannot reach Reels
+without a jar at all (SESSION_AUTH.md 1.2), so anonymous is pure waste —
+and keeping the jar attempt FIRST is what preserves `SESSION_EXPIRED`
+detection, because equal-ranked attempts keep the earliest and only a jar
+attempt can resolve to that code.
+
+The second session is attempted when the first failed something a
+different session could plausibly change: `CLIENT_RETRYABLE` **or** the
+`UNAVAILABLE` family. The latter was added deliberately — "not available"
+is exactly what a signed-in fetch answers for a private or age-restricted
+item, and what a bad jar reports for a public one.
+
+Measured with a yt-dlp stub that logs whether each invocation carried
+`--cookies`, so the ORDER and COUNT are asserted, not the outcome alone:
+
+```
+YOUTUBE (publicAnonymously, jar present)
+  anon works                       DOWNLOADED         calls=[anon]
+  anon unavailable, jar works      DOWNLOADED         calls=[anon,cookies]
+  both fail (format)               DOWNLOAD_FAILED    calls=[anon x3, cookies x3]
+  both fail (unavailable)          SOURCE_UNAVAILABLE calls=[anon,cookies]
+YOUTUBE, no jar
+  anon only                        DOWNLOAD_FAILED    calls=[anon x3]
+INSTAGRAM (jar present)
+  jar first, no anon attempt       SESSION_EXPIRED    calls=[cookies]
+  jar works                        DOWNLOADED         calls=[cookies]
+```
+
+`anon x3` is the default client plus the two remaining fallbacks, so the
+client chain still runs in full per session; "unavailable" is not
+`CLIENT_RETRYABLE`, which is why those cases stop at one call per session.
+
+### Still open
+
+`R070nqMY-ZE` fails through the proxy with "This video is not available"
+while downloading fine (759651 B) from residential. With no jar stored
+there is no second session to try, so it still resolves to
+`SOURCE_UNAVAILABLE` — permanent, and phrased as though the video were
+gone. Most likely geo: WARP exits in another country. One data point.
