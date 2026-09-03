@@ -1,5 +1,4 @@
 import { Writable } from "node:stream"
-import type { MiddlewareHandler } from "hono"
 import type pinoDefault from "pino"
 import type { DestinationStream, Logger } from "pino"
 
@@ -7,6 +6,7 @@ import config from "@/config"
 import { redactLogValue } from "@/lib/observability/redact"
 import { currentRunContext } from "@/lib/observability/run-context"
 import { RunLogStream } from "@/lib/observability/run-log-stream"
+import { skipRequestLog } from "@/lib/observability/skip-paths"
 
 // require (not a static import) with turbopackIgnore so Turbopack leaves this
 // call untouched instead of routing it through its dev-mode external-module
@@ -54,7 +54,16 @@ class OpenObserveStream extends Writable {
     callback: (error?: Error) => void,
   ) {
     try {
-      this.pending.push(JSON.parse(chunk.toString()) as Record<string, unknown>)
+      const record = JSON.parse(chunk.toString()) as Record<string, unknown>
+      // Dropped HERE rather than at the log site, so stdout and the log
+      // file still carry the line and only the durable sink is spared.
+      // `path` is set by `openObserveMiddleware`; a record without one is
+      // not a request log and is never skipped.
+      if (typeof record.path === "string" && skipRequestLog(record.path)) {
+        callback()
+        return
+      }
+      this.pending.push(record)
       if (this.pending.length >= 50) void this.flush()
       else this.schedule()
       callback()
@@ -178,77 +187,3 @@ export const logger = {
 }
 
 export { isSensitiveKey, redactLogValue } from "@/lib/observability/redact"
-
-const MAX_TRACE_BODY_LENGTH = 8_192
-
-async function traceBody(
-  body: ReadableStream<Uint8Array> | null,
-  contentType: string | undefined,
-): Promise<unknown> {
-  if (!body || !contentType?.match(/json|text|form-urlencoded/i))
-    return undefined
-  try {
-    const text = await new Response(body).text()
-    // REDACT FIRST, TRUNCATE SECOND — never the other way round.
-    //
-    // This used to slice the RAW text whenever it exceeded the cap and
-    // return it unredacted, so the size guard doubled as a redaction
-    // bypass: any request big enough to trip it was logged verbatim. That
-    // is precisely the shape of a cookie-jar import (POST /social/:p/import
-    // is tens of KB), which would have written the user's whole social
-    // session to OpenObserve. Truncation is a log-volume control and must
-    // never be able to widen what is exposed.
-    const redacted = contentType.includes("json")
-      ? redactLogValue(JSON.parse(text))
-      : redactLogValue(Object.fromEntries(new URLSearchParams(text)))
-    const rendered = JSON.stringify(redacted) ?? ""
-    if (rendered.length > MAX_TRACE_BODY_LENGTH) {
-      return `${rendered.slice(0, MAX_TRACE_BODY_LENGTH)}…[truncated]`
-    }
-    return redacted
-  } catch {
-    return "[unavailable]"
-  }
-}
-
-export function openObserveMiddleware(): MiddlewareHandler {
-  return async (c, next) => {
-    const start = performance.now()
-    const requestBody = await traceBody(
-      c.req.raw.clone().body,
-      c.req.header("content-type"),
-    )
-    try {
-      await next()
-    } catch (error) {
-      logger.error("Unhandled API error", {
-        method: c.req.method,
-        path: c.req.path,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      })
-      throw error
-    }
-    const duration_ms = Math.round(performance.now() - start)
-    const status = c.res.status
-    const responseBody = await traceBody(
-      c.res.clone().body,
-      c.res.headers.get("content-type") ?? undefined,
-    )
-    logger[status >= 500 ? "error" : status >= 400 ? "warn" : "info"](
-      "HTTP request",
-      {
-        method: c.req.method,
-        path: c.req.path,
-        query: redactLogValue(
-          Object.fromEntries(new URL(c.req.url).searchParams),
-        ),
-        status,
-        duration_ms,
-        request_body: requestBody,
-        response_body: responseBody,
-        response_content_type: c.res.headers.get("content-type"),
-      },
-    )
-  }
-}

@@ -1,6 +1,8 @@
 import type { NextFetchEvent, NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
+import { skipRequestLog } from "@/lib/observability/skip-paths"
+
 const SENSITIVE_FIELD =
   /(^|_)(password|secret|token|authorization|cookie|code|key)(_|$)/i
 
@@ -48,23 +50,31 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
   const requestId = crypto.randomUUID()
   const startedAt = performance.now()
 
-  event.waitUntil(
-    Promise.resolve(
-      sendTrace({
-        level: "info",
-        message: "HTTP request received",
-        service: "relay-api",
-        request_id: requestId,
-        method: request.method,
-        path: request.nextUrl.pathname,
-        query: redact(Object.fromEntries(request.nextUrl.searchParams)),
-        user_agent: request.headers.get("user-agent") ?? undefined,
-        content_type: request.headers.get("content-type") ?? undefined,
-        started_at: Date.now(),
-        proxy_duration_ms: Math.round(performance.now() - startedAt),
-      }),
-    ),
-  )
+  // Skipped BEFORE `sendTrace`, because this layer is the expensive one:
+  // it posts to OpenObserve once per request with no batching, where the
+  // pino stream buffers 50 lines or 2 seconds. The healthcheck alone was
+  // one HTTP round trip every 30s, and every page render added one for the
+  // logo. The response header below is still set, so a skipped request
+  // keeps its request id.
+  if (!skipRequestLog(request.nextUrl.pathname)) {
+    event.waitUntil(
+      Promise.resolve(
+        sendTrace({
+          level: "info",
+          message: "HTTP request received",
+          service: "relay-api",
+          request_id: requestId,
+          method: request.method,
+          path: request.nextUrl.pathname,
+          query: redact(Object.fromEntries(request.nextUrl.searchParams)),
+          user_agent: request.headers.get("user-agent") ?? undefined,
+          content_type: request.headers.get("content-type") ?? undefined,
+          started_at: Date.now(),
+          proxy_duration_ms: Math.round(performance.now() - startedAt),
+        }),
+      ),
+    )
+  }
 
   const response = NextResponse.next()
   response.headers.set("x-relay-request-id", requestId)

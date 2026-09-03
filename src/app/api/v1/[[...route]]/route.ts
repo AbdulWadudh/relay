@@ -4,11 +4,8 @@ import { handle } from "hono/vercel"
 
 import config from "@/config"
 import { getDb } from "@/lib/db"
-import {
-  ingest,
-  logger,
-  openObserveMiddleware,
-} from "@/lib/observability/logger"
+import { openObserveMiddleware } from "@/lib/observability/http-trace"
+import { ingest, logger } from "@/lib/observability/logger"
 import { telemetryEventSchema } from "@/lib/schemas"
 import { agentsModule } from "@/server/agents"
 import { credentialsModule } from "@/server/credentials"
