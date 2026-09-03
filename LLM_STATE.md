@@ -1737,12 +1737,94 @@ No provider string entered `download.ts`. The registry still decides via
   and a proxy-shaped stderr on a source that goes direct all stay off
   `SESSION_EXPIRED` and off rung 1 respectively.
 
-### NOT verified, because it needs a deploy
+### Verified in production after the deploy (commit `5eaadd3`)
 
-Everything about the running system: `getent hosts warp` from inside the
-worker with no manual attach, the `warp` healthcheck reaching `warp=on` on
-the prod host, a real Short end to end with its byte size, a forced proxy
-failure in production, and the Instagram-with-a-dead-proxy control. All of
-those were previously measured against the STANDALONE resource; none has
-been re-measured against the compose service, and nothing above should be
-read as if it had.
+The worker container that came up at 11:18:17Z on this commit ran a real
+Short end to end at 11:19:35Z:
+
+* `Media ingested` — source `youtube`, item `K-tO4eK8WoQ`, **`audio_bytes`
+  354861**, `duration_seconds` 44, `downloadMs` 6702, on the DEFAULT client,
+  with no `trying the next` and no `Every player client failed` anywhere in
+  the log. Transcribed, extracted, published to Notion, `Run completed`.
+* That is also the evidence that `warp` resolved with **no manual
+  `docker network connect`**: the compose service was about three minutes
+  old, nothing had been attached by hand, and direct-from-the-VPS is 0/12
+  per §1 of EGRESS_PROXY.md — so the tunnel was in the path. A cookie jar
+  was supplied on the run (`Session cookies rotated`) and it still
+  succeeded.
+* Coolify's GENERATED compose — the file it actually deploys, not the one in
+  the repo — keeps the service intact: `device_cgroup_rules`, `cap_add`,
+  `sysctls`, `WARP_SLEEP` and the healthcheck all verbatim; `networks` set
+  to the APP's network rather than Coolify's shared one; no `ports:`; no
+  caddy/traefik labels; the warp volume created; and `worker.depends_on`
+  still only relay and dragonfly. **The open question of whether Coolify
+  would strip `device_cgroup_rules` is settled: it does not.**
+
+### Verified on the dev machine against the REAL download path
+
+Not production, and not interchangeable with it. These exercise the actual
+`download()` — real yt-dlp 2026.08.19, the same build as the image pin —
+rather than the classifier alone:
+
+* YouTube Short with `MEDIA_PROXY_URL=socks5://127.0.0.1:9` →
+  `code=DOWNLOAD_FAILED`, `cause=proxy-unreachable`,
+  `deciding_client=default`, and **no `trying the next` line at all**. The
+  client chain is not walked for a dead proxy, which is the behaviour the
+  break condition exists for.
+* Instagram Reel with the same dead proxy → `proxied=false`, went DIRECT,
+  and failed on Instagram's own "sent an empty media response … use
+  --cookies" rather than on anything proxy-shaped. Were it proxied it would
+  have produced the YouTube result above, so this is the control working.
+
+### Still not measured, and not to be written up as if it were
+
+`getent hosts warp` from inside the worker, and the `warp` container's own
+healthcheck state, have not been read directly. Coolify's API has no exec,
+and the prod host was not reachable from the dev machine — of three
+candidates in `known_hosts`, one authenticates but runs only the Coolify
+control plane, one rejects both keys, and one presents a changed host key
+that was deliberately not auto-accepted. The end-to-end run above is strong
+indirect evidence for the first, but it is not that command.
+
+A forced proxy failure and a forced 403-then-no-formats have not been run IN
+PRODUCTION, because forcing them means pointing `MEDIA_PROXY_URL` at a dead
+value on a system that is working. The 403-then-no-formats sequence is
+synthetic in any case — real yt-dlp will not produce it on demand — so the
+classifier is the right place to check it, and it is checked there.
+
+## Stage log panel: theme tokens instead of a fixed dark slab (2026-09-03) — DONE
+
+Reported as a dark-mode bug from a screenshot: in LIGHT mode the per-stage
+log panels on the run detail page were black slabs with an unreadable
+"No logs retained for this stage." on them.
+
+The cause was a mix of fixed and themed colours in one component.
+`run-stage-logs.tsx` hardcoded `bg-zinc-950` — the app's ONLY fixed-dark
+surface outside the modal scrims, and the only file using `text-zinc-*` —
+with every tone inside chosen against that black. The empty and loading
+states, correctly, used `text-muted-foreground`. In dark mode both halves
+agreed; in light mode the token flipped to a dark grey and the slab did not,
+so the text vanished into it.
+
+Fixed by making the panel follow the theme (`bg-card`) and putting the text
+on semantic tokens (`text-foreground`, `text-muted-foreground`), which
+leaves only the three level accents carrying explicit colour — and those now
+have the paired `dark:` variants RULES.md § UI requires
+(`text-red-700 dark:text-red-400`, and the same for amber and sky) rather
+than bare `-400` shades that only work on near-black.
+
+`bg-card` and not `bg-muted`, decided by measurement rather than taste:
+computing WCAG ratios from the real token values put `--muted-foreground` on
+light `--muted` at **4.39:1**, under the 4.5 bar that applies because this
+renders at 11px. On light `--card` the same pair is **4.83:1**, the weakest
+accent (amber-700) is **5.05:1**, and every other pair is 5.1–19.9:1. Dark
+`--card` (L 0.21) is also darker than `--muted` (L 0.274), so it keeps more
+of the terminal feel the file was after in the first place.
+
+Verified with `agent-browser` in both themes at 1440×900 and 390×844, per
+the light-mode/mobile mandate. One trap worth recording: a harness that
+renders a light panel and a `<div className="dark">` panel side by side does
+NOT show both themes. The variant is `&:is(.dark *)` and next-themes puts
+`.dark` on `<html>`, so everything nested inside it is dark regardless — the
+first screenshot came back dark on both halves. The class on `<html>` has to
+be toggled instead.

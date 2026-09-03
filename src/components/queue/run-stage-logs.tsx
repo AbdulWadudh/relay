@@ -22,16 +22,31 @@ import { cn } from "@/lib/utils"
 /**
  * Level drives colour, but the level NAME is always rendered too: meaning
  * is never carried by colour alone. Solid foreground colours only, per
- * RULES.md, and each is checked against the panel background rather than
- * the page background it is nested inside.
+ * RULES.md.
+ *
+ * PAIRED `dark:` VARIANTS, not bare `-400` shades. This panel used to be a
+ * hardcoded `bg-zinc-950` slab — the app's only fixed-dark surface outside
+ * the modal scrims — with every tone inside picked to read against that
+ * black. In LIGHT mode the slab stayed black while the empty-state text,
+ * which correctly used `text-muted-foreground`, flipped to a dark grey and
+ * became unreadable on it. The panel is now `bg-card`, so it follows the
+ * theme, and every `-400` here needs a `-700` companion for the light
+ * surface (RULES.md § UI, "Light mode contrast").
+ *
+ * Measured against the real token values in both themes: the weakest pair
+ * in this panel is 4.83:1 (`--muted-foreground` on light `--card`) and the
+ * weakest accent is 5.05:1 (amber-700, same surface), so all of them clear
+ * WCAG AA 4.5 for the 11px monospace this renders at. `bg-muted` was tried
+ * first and rejected: it put that metadata pair at 4.39:1.
  */
 const LEVEL_TONE: Record<string, string> = {
-  error: "text-red-400",
-  fatal: "text-red-400",
-  warn: "text-amber-400",
-  info: "text-sky-400",
-  debug: "text-zinc-500",
-  trace: "text-zinc-500",
+  error: "text-red-700 dark:text-red-400",
+  fatal: "text-red-700 dark:text-red-400",
+  warn: "text-amber-700 dark:text-amber-400",
+  info: "text-sky-700 dark:text-sky-400",
+  // No accent to carry, so these take the same token as the metadata.
+  debug: "text-muted-foreground",
+  trace: "text-muted-foreground",
 }
 
 /**
@@ -148,7 +163,10 @@ export function RunStageLogs({
           <div
             id={panelId}
             hidden={!expanded}
-            className="mt-1.5 rounded-md border bg-zinc-950 p-2"
+            /* `bg-card`, not a fixed dark slab: the border already separates
+               this from the page, and a theme token cannot drift out of step
+               with the text inside it the way the hardcoded one did. */
+            className="mt-1.5 rounded-md border bg-card p-2"
           >
             {loading && count === 0 ? (
               <p className="px-1 py-2 text-muted-foreground text-xs">
@@ -168,13 +186,13 @@ export function RunStageLogs({
               <ol className="max-h-64 overflow-y-auto font-mono text-[11px] leading-relaxed">
                 {lines.map((line) => (
                   <li key={line.id} className="flex gap-2 px-1 py-px">
-                    <span className="shrink-0 text-zinc-600 tabular-nums">
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
                       {timeFormat.format(line.at)}
                     </span>
                     <span
                       className={cn(
                         "w-10 shrink-0 uppercase",
-                        LEVEL_TONE[line.level] ?? "text-zinc-500",
+                        LEVEL_TONE[line.level] ?? "text-muted-foreground",
                       )}
                     >
                       {line.level}
@@ -182,10 +200,10 @@ export function RunStageLogs({
                     {/* `break-words` + `min-w-0`: log lines carry video
                         ids, file paths and URLs, which must reflow rather
                         than force the panel to scroll sideways. */}
-                    <span className="wrap-break-word min-w-0 text-zinc-300">
+                    <span className="wrap-break-word min-w-0 text-foreground">
                       {line.message}
                       {line.fields ? (
-                        <span className="ml-2 text-zinc-500">
+                        <span className="ml-2 text-muted-foreground">
                           {formatFields(line.fields)}
                         </span>
                       ) : null}
