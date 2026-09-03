@@ -1,8 +1,9 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { JetBrains_Mono, Oxanium, Space_Grotesk } from "next/font/google"
 
 import "./globals.css"
 import { QueryProvider } from "@/components/query-provider"
+import { ServiceWorker } from "@/components/service-worker"
 import { TelemetryProvider } from "@/components/telemetry-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toast"
@@ -38,6 +39,18 @@ export const metadata: Metadata = {
   },
 }
 
+// No viewportFit: "cover" — under a TWA that extends the page under the
+// notch, and nothing here applies env(safe-area-inset-*).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  colorScheme: "dark light",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -56,6 +69,7 @@ export default function RootLayout({
       )}
     >
       <body>
+        <ServiceWorker />
         <ThemeProvider storageKey={config.theme.storageKey}>
           <TelemetryProvider>
             <QueryProvider>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline · Relay</title>
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+    <!-- Static, not a Next route: a rendered page's hashed CSS/JS chunks
+         can't be precached by name, so it would render unstyled offline.
+         Colours are globals.css tokens converted from oklch; theme follows
+         prefers-color-scheme, matching the theme_color meta tags. -->
+    <style>
+      :root {
+        --background: #ffffff;
+        --card: #ffffff;
+        --foreground: #09090b;
+        --muted: #f4f4f5;
+        --muted-foreground: #71717b;
+        --primary: #007a55;
+        --primary-foreground: #ecfdf5;
+        --border: #e4e4e7;
+        --radius: 0.45rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: #09090b;
+          --card: #18181b;
+          --foreground: #fafafa;
+          --muted: #27272a;
+          --muted-foreground: #9f9fa9;
+          --primary: #006045;
+          --border: #2f2f32;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100svh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2rem;
+        padding: 2.5rem 1.25rem;
+        background: var(--background);
+        color: var(--foreground);
+        font-family:
+          "Space Grotesk", ui-sans-serif, system-ui, -apple-system,
+          "Segoe UI", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        font-weight: 600;
+        font-size: 1.125rem;
+        letter-spacing: 0.02em;
+      }
+      .brand img {
+        width: 28px;
+        height: 28px;
+      }
+      .card {
+        width: 100%;
+        max-width: 32rem;
+        padding: 1.5rem;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) * 2);
+        background: var(--card);
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 0;
+        color: var(--muted-foreground);
+        font-size: 0.875rem;
+        line-height: 1.6;
+      }
+      .note {
+        margin-top: 1.25rem;
+        padding: 0.75rem 0.875rem;
+        border-radius: var(--radius);
+        background: var(--muted);
+        color: var(--muted-foreground);
+        font-size: 0.8125rem;
+        line-height: 1.5;
+      }
+      button {
+        margin-top: 1.5rem;
+        width: 100%;
+        min-height: 2.5rem;
+        padding: 0 1rem;
+        border: 0;
+        border-radius: var(--radius);
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          transform 0.2s ease,
+          filter 0.2s ease;
+      }
+      button:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.1);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        button {
+          transition: none;
+        }
+        button:hover {
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="brand">
+      <img src="/icons/icon-192.png" alt="" />
+      <span>Relay</span>
+    </div>
+    <main class="card">
+      <h1>You're offline</h1>
+      <p>
+        Relay needs a connection to reach your runs, your vault and the
+        pipeline. Nothing has been lost — reconnect and pick up where you left
+        off.
+      </p>
+      <p class="note">
+        A link you shared while offline is still saved on this device. Open
+        Relay once you're back online and it will be queued.
+      </p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
