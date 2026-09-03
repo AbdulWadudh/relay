@@ -52,13 +52,14 @@ export function Dashboard() {
           so is every other page. */}
       <ShellContent fill className="px-2 sm:px-8">
         <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4">
-          {/* The scrollbar is hidden on a phone, where touch scrolling
-              needs no track and a persistent 10px bar is just a stripe
-              down the edge. It returns from `sm` up, where a pointer user
-              wants the position cue. */}
+          {/* Hidden on phone AND tablet, where scrolling is a touch
+              gesture and a persistent 10px bar is just a stripe down the
+              edge. `lg` is the cut, not `sm`: a tablet in portrait is
+              ~820px and is still a touch device. It returns from `lg` up,
+              where a pointer user wants the position cue. */}
           <ScrollPanel
             bordered={false}
-            className="[&_[data-slot=scroll-area-scrollbar]]:hidden sm:[&_[data-slot=scroll-area-scrollbar]]:flex"
+            className="[&_[data-slot=scroll-area-scrollbar]]:hidden lg:[&_[data-slot=scroll-area-scrollbar]]:flex"
           >
             <div
               className={cn(
