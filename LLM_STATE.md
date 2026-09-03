@@ -131,8 +131,8 @@ uses `expose:` only, so there is NO public route and the browser cannot
 reach `/stream`. Capture therefore still cannot complete a sign-in in
 production even though the service now runs.
 
-What it needs: a public host (the server has a `*.k79.quest` wildcard;
-`relay.k79.quest` and `relay-db.k79.quest` are the existing pattern)
+What it needs: a public host (the server has a `*.<wildcard-domain>` wildcard;
+`<app-domain>` and `relay-db.<wildcard-domain>` are the existing pattern)
 pointed at `capture:3002`, with `CAPTURE_PUBLIC_URL` set to that ORIGIN —
 no path, no trailing `/stream`.
 
@@ -863,7 +863,7 @@ extract 303.5s · verify 1ms · publish 2.4s · total 328.7s
 - **Status badge**: the spinner slot is only rendered while active; an always-present slot made terminal labels sit right-of-centre inside their own pill. Column width is reserved on the table cell instead.
 - **Links** resolve their icon in three tiers (`src/components/queue/link-icon.tsx`): media-source brand mark → bundled brand mark (12 platforms) → `config.links.faviconUrl` → generic glyph. Only the third tier touches the network, and it is the *browser* calling out, so `FAVICON_SERVICE_URL=""` disables it.
 - **Dragonfly runs with `--cluster_mode=emulated --lock_on_hashtags`** and BullMQ uses the hash-tagged prefix `{relay}`. CORRECTION to an earlier note: this pairing is a **throughput** choice, not correctness — measured locally, an un-tagged prefix still works fine under emulated cluster mode on a single node. The tag pins a queue's keys to one Dragonfly thread.
-- **Coolify (app `djtrhq2qxxyt1doyonjctwcb`, env `relay`)**: added `REDIS_URL=redis://dragonfly:6379`, `QUEUE_CONCURRENCY/ATTEMPTS/BACKOFF_MS`, `FAVICON_SERVICE_URL`. `STUDIO_PASSWORD` was already set, so dropping the `DRIZZLE_MASTERPASS` fallback from compose is safe (that var held the literal error string — a Coolify artifact).
+- **Coolify (app `<app-resource-uuid>`, env `relay`)**: added `REDIS_URL=redis://dragonfly:6379`, `QUEUE_CONCURRENCY/ATTEMPTS/BACKOFF_MS`, `FAVICON_SERVICE_URL`. `STUDIO_PASSWORD` was already set, so dropping the `DRIZZLE_MASTERPASS` fallback from compose is safe (that var held the literal error string — a Coolify artifact).
 - **The worker service builds from the Dockerfile rather than reusing a shared image tag.** Coolify rewrites every compose service's image to `<resource-uuid>_<service>:<sha>`, so a hand-pinned `relay-app:latest` shared between `relay` and `worker` would not exist at deploy time. CORRECTION (2026-09-01): the claim that "Docker's layer cache makes the second build nearly free" was **wrong**. Only `relay` was passing the `NEXT_PUBLIC_*` build args; those are baked into `ENV`, so the worker's build produced a different cache key from the ENV layer down and recompiled the entire Next.js app a second time. The worker service now passes the identical args — see the deployment notes below.
 - **YouTube now rate-limits this dev machine** ("Sign in to confirm you're not a bot") after repeated pulls of the same clips. Not a code fault — it maps correctly to `SOURCE_UNAVAILABLE` — but it means the deferred cookie work applies to YouTube as well as Instagram.
 
@@ -1177,7 +1177,7 @@ Instagram is unaffected and working. Only YouTube fails, and only from prod.
 
 Same pinned yt-dlp (`2026.03.17`), same video (`K6Oy8QRgTdU`), same vault:
 
-| | production (Oracle VPS, 144.24.126.27) | a residential connection |
+| | production (Oracle VPS, <prod-host>) | a residential connection |
 | --- | --- | --- |
 | with a cookie jar | every client: "Requested format is not available" | works (`251`/`96`) |
 | signed out | every client: "Sign in to confirm you're not a bot" | works (`251`) |

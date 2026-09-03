@@ -102,16 +102,16 @@ with a fresh address. Nothing of yours is tied to it.
 ## 3. THE MANUAL STEP — read this before touching `warp-egress`
 
 Coolify puts a standalone resource on the shared `coolify` network. The app's
-containers are on `djtrhq2qxxyt1doyonjctwcb`. **They cannot see each other by
+containers are on `<app-resource-uuid>`. **They cannot see each other by
 default**, and `--network` in *Custom Docker Run Options* is silently
 stripped by Coolify — it was tried and it does not work.
 
 So after **every deploy or restart of `warp-egress`**, re-attach it:
 
 ```bash
-ssh ubuntu@144.24.126.27
-C=$(sudo docker ps --format '{{.Names}}' | grep vbub6kovmw5g2symo9hswzba)
-sudo docker network connect --alias warp djtrhq2qxxyt1doyonjctwcb "$C"
+ssh <prod-host>
+C=$(sudo docker ps --format '{{.Names}}' | grep <warp-resource-uuid>)
+sudo docker network connect --alias warp <app-resource-uuid> "$C"
 ```
 
 Verify:
@@ -148,7 +148,7 @@ If the manual attach ever bites, this is the fix.
 
 ```bash
 # tunnel actually egressing, not merely listening
-sudo docker exec $(sudo docker ps -qf name=vbub6kov) \
+sudo docker exec $(sudo docker ps -qf name=<warp-resource-uuid>) \
   curl -s --socks5-hostname 127.0.0.1:1080 https://api.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp)='
 # expect: warp=on
 ```
