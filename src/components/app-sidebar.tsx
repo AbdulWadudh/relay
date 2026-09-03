@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  Analytics01Icon,
   Queue01Icon,
   Robot01Icon,
   Settings01Icon,
@@ -34,6 +35,15 @@ import { cn } from "@/lib/utils"
  */
 
 const NAV = [
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: Analytics01Icon,
+    idle: "hover:bg-rose-600 hover:text-white dark:hover:bg-rose-600",
+    active:
+      "data-active:bg-rose-600 data-active:text-white dark:data-active:bg-rose-600",
+    soon: false,
+  },
   {
     href: "/runs",
     label: "Runs",

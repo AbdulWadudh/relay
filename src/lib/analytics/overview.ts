@@ -88,8 +88,7 @@ export function runsPerDay(
   window: Window,
 ): { day: string; runs: number }[] {
   if (facts.length === 0) return []
-  const from =
-    window.from ?? Math.min(...facts.map((fact) => fact.createdAt))
+  const from = window.from ?? Math.min(...facts.map((fact) => fact.createdAt))
   const counts = new Map<string, number>()
   for (const fact of facts) {
     const key = dayKey(fact.createdAt)

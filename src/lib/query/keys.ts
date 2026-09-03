@@ -19,6 +19,14 @@ export const agentKeys = {
   detail: (id: string) => [...agentKeys.details(), id] as const,
 }
 
+export const analyticsKeys = {
+  all: ["analytics"] as const,
+  summaries: () => [...analyticsKeys.all, "summary"] as const,
+  /** The range is part of the key so switching windows keeps both cached
+   *  and `keepPreviousData` has a previous render to hold. */
+  summary: (range: string) => [...analyticsKeys.summaries(), range] as const,
+}
+
 export const runKeys = {
   all: ["runs"] as const,
   lists: () => [...runKeys.all, "list"] as const,

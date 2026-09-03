@@ -22,7 +22,7 @@ export const ANALYTICS_RANGE_IDS = ANALYTICS_RANGES.map((r) => r.id) as [
   ...AnalyticsRange[],
 ]
 
-export const DEFAULT_RANGE: AnalyticsRange = "all"
+export const DEFAULT_RANGE: AnalyticsRange = "7d"
 
 const DAY_MS = 86_400_000
 

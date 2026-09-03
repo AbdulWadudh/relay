@@ -8,6 +8,7 @@ import { openObserveMiddleware } from "@/lib/observability/http-trace"
 import { ingest, logger } from "@/lib/observability/logger"
 import { telemetryEventSchema } from "@/lib/schemas"
 import { agentsModule } from "@/server/agents"
+import { analyticsModule } from "@/server/analytics"
 import { credentialsModule } from "@/server/credentials"
 import { promptsModule } from "@/server/prompts"
 import { raysModule } from "@/server/rays"
@@ -25,6 +26,7 @@ const app = new Hono().basePath(`/api/${config.api.version}`)
 
 app.use("*", openObserveMiddleware())
 
+app.route("/analytics", analyticsModule)
 app.route("/credentials", credentialsModule)
 app.route("/social", socialModule)
 // Rays are Relay's public integration routes; OAuth is the underlying protocol.

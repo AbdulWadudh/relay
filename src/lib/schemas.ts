@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { ANALYTICS_RANGE_IDS, DEFAULT_RANGE } from "@/lib/analytics/window"
 import { CHAT_STAGE_IDS } from "@/lib/extraction/stages"
 import { parseSourceUrl, SUPPORTED_SOURCE_LABELS } from "@/lib/media/sources"
 import { PROVIDER_IDS } from "@/lib/providers"
@@ -7,6 +8,16 @@ import { PROVIDER_IDS } from "@/lib/providers"
  * Zod validation schemas (RULES.md: all external input is Zod-validated
  * at the API boundary before touching the database or vault).
  */
+
+/** The dashboard's only query param. Anything else — an unparseable or
+ *  hand-typed range — falls back to the default rather than 400ing, since
+ *  a dashboard with no data is a worse answer than a dashboard with the
+ *  default window. */
+export const analyticsQuerySchema = z.object({
+  range: z.enum(ANALYTICS_RANGE_IDS).catch(DEFAULT_RANGE),
+})
+
+export type AnalyticsQuery = z.infer<typeof analyticsQuerySchema>
 
 export const telemetryEventSchema = z.looseObject({
   event_type: z.enum(["page_load", "client_error", "interaction"]),

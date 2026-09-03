@@ -68,6 +68,11 @@ export interface RunFact {
   models: StageModel[]
   /** "speech" | "frames" — which text the run actually read. */
   analysisSources: string[]
+  /** The Ray this run published through, when it got that far. */
+  publishProvider: string | null
+  /** The agent's name as the router recorded it. Survives the agent being
+   *  deleted, which the `agents` join does not. */
+  agentName: string | null
   evidence: { extracted: number; verified: number; flagged: number } | null
 }
 
@@ -139,8 +144,12 @@ export async function fetchRunFacts(
       timings: relayRuns.timings,
       errorCode: json("$.error_code"),
       failedStage: json("$.failed_stage"),
-      permanent: sql<number | null>`json_extract(${relayRuns.additionalData}, '$.permanent')`,
+      permanent: sql<
+        number | null
+      >`json_extract(${relayRuns.additionalData}, '$.permanent')`,
       analysisSources: json("$.analysis.sources"),
+      publishProvider: json("$.publish.provider"),
+      agentName: json("$.routing.agent_name"),
       models: MODEL_COLUMN,
       extracted: num(relayRuns.result, "$.verification.extracted"),
       verified: num(relayRuns.result, "$.verification.verified"),
@@ -170,6 +179,8 @@ export async function fetchRunFacts(
     permanent: row.permanent === 1,
     models: modelsFrom(row.models),
     analysisSources: sourcesFrom(row.analysisSources),
+    publishProvider: str(row.publishProvider),
+    agentName: str(row.agentName),
     evidence:
       typeof row.extracted === "number"
         ? {

@@ -46,6 +46,54 @@
   --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
   --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: oklch(0.705 0.015 286.067);
+  /* --- Data-visualisation palette (dashboard) ---------------------------
+     Validated, not chosen. `dataviz/scripts/validate_palette.js` was run
+     against THIS app's chart surfaces (#ffffff light, #18181b dark), and
+     both modes pass every hard gate: lightness band, chroma floor, CVD
+     separation (worst adjacent dE 9.1 light / 8.4 dark, target 8), and
+     the normal-vision floor (19.6 / 19.3, floor 15).
+
+     The slot ORDER is the colour-vision-deficiency safety mechanism, not
+     a mood. Series are assigned slot 1..N in order and never cycled; a
+     ninth series folds into "Other" instead of getting a generated hue,
+     which would be indistinguishable from an existing slot.
+
+     Three light-mode slots (aqua, yellow, magenta) sit below 3:1 on
+     white. That is a documented relief case, not a pass: every chart
+     ships direct labels and a table view, which is what discharges it.
+
+     Deliberately NOT reusing --chart-1..5 above: those are five steps of
+     one blue, a sequential ramp. Using them for series identity would
+     encode "which series" with a magnitude scale. */
+  --viz-series-1: #2a78d6;
+  --viz-series-2: #eb6834;
+  --viz-series-3: #1baf7a;
+  --viz-series-4: #eda100;
+  --viz-series-5: #e87ba4;
+  --viz-series-6: #008300;
+  --viz-series-7: #4a3aa7;
+  --viz-series-8: #e34948;
+  /* Status is a FIXED scale with reserved meaning, on steps deliberately
+     distinct from the categorical slots so a status colour never
+     impersonates a series. Warning and serious are sub-3:1 on white by
+     design — they always ship with an icon AND a label, which is the
+     mitigation, so colour never carries the meaning alone. */
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-serious: #ec835a;
+  --viz-critical: #d03b3b;
+  /* De-emphasis: "Other", in-flight, the grey half of an emphasis chart.
+     3.59:1 on white, 4.93:1 on the dark card — a real mark, just a quiet
+     one. */
+  --viz-muted: #898781;
+  /* Meter track: a lighter step of the fill's own ramp, held at the 2:1
+     ordinal floor (2.11:1 light, 2.19:1 dark) so the empty part of a
+     meter still reads as a bar rather than dissolving into the card. */
+  --viz-track: #86b6ef;
+  /* Chart furniture. Recessive on purpose and exempt from the mark
+     contrast rule — a gridline that competes with the data is noise. */
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
 }
 
 .dark {
@@ -80,6 +128,25 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+  /* Dark is SELECTED, not an automatic flip: the same eight hues stepped
+     for the dark card and validated as a set against it. */
+  --viz-series-1: #3987e5;
+  --viz-series-2: #d95926;
+  --viz-series-3: #199e70;
+  --viz-series-4: #c98500;
+  --viz-series-5: #d55181;
+  --viz-series-6: #008300;
+  --viz-series-7: #9085e9;
+  --viz-series-8: #e66767;
+  /* Status steps are mode-invariant and all clear 3:1 on the dark card. */
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-serious: #ec835a;
+  --viz-critical: #d03b3b;
+  --viz-muted: #898781;
+  --viz-track: #184f95;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
 }
 
 @theme inline {

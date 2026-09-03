@@ -3099,3 +3099,368 @@ incompatible schemes.
 Stemming, or prefix matching, would remove a whole class of false
 positive. Banding `title`/`summary` separately would stop them dominating
 the flag count. Neither is done. And captions.
+
+## Analytics dashboard: the aggregation layer (2026-09-04) — TASK 1 OF 5, DONE
+
+`/dashboard` reads one payload, `GET /api/v1/analytics/summary?range=…`.
+Every panel is scoped to the same window on purpose: a call per panel
+would let two cards on the same screen disagree while their requests
+landed out of order.
+
+### The projection, and why it is not `select *`
+
+`additional_data` and `result` carry the whole yt-dlp payload, both
+transcripts, the frame segments and every verification finding —
+hundreds of KB per run. Production is Turso, over the network, so
+selecting the blobs to compute a dozen counters would move megabytes to
+produce a few hundred bytes. `src/lib/analytics/facts.ts` projects
+`json_extract` paths instead: ONE round trip, ~14 small columns per run,
+and every sibling module is a pure fold over that array.
+
+The provider/model pairs ride in a single `json_array(...)` column built
+from `MODEL_PATHS` and parsed back pairwise by position. The alternative
+was one column pair per stage, which cannot be built from a registry
+without fighting Drizzle's select typing.
+
+Flag reasons are the one exception and get their own query, because the
+findings array is the big thing — `json_each` counts them INSIDE SQLite
+and only the tallies cross the wire. `coalesce(json_extract(...), '[]')`
+is load-bearing there: a run that never reached extraction has no
+`$.verification`, and `json_each` over a missing path errors on some
+SQLite builds rather than returning nothing.
+
+### Two registry gaps this exposed, both fixed
+
+- `CHAT_STAGES` had no mapping from a stage to where it records its
+  `{ provider, model }`, so `run-models.ts` reached into `$.routing` /
+  `$.extraction` / `$.screen_text` by hand. Added `additionalDataKey` to
+  the registry. `schema_synthesizer` is `null` — it writes its model onto
+  the AGENT row it creates, not onto the run, so no run can be attributed
+  to it. The dashboard NAMES that stage as unrecorded rather than
+  omitting it, because a stage silently absent reads as "never used".
+- `RUN_STATUS_META.extracting.timingKeys` was missing `frames_download_ms`
+  and `frames_render_ms`, which `analysis.ts` has been writing since the
+  frames path landed. A registry-driven latency panel was therefore
+  dropping frames time on the floor.
+
+### Measured against production, not assumed
+
+`bun run verify:analytics` against the real Turso database, 72 runs:
+
+    46 done · 24 failed · 2 in flight        success 65.7%
+    total_ms  p50 19,294  p95 414,550  max 712,428   (n=70, target 30,000)
+    failures  downloading 17 · transcribing 6 · extracting 1
+              SOURCE_UNAVAILABLE 15 · NO_SPEECH 5 · DOWNLOAD_FAILED 2 · UNKNOWN 2
+              20 of 24 classified permanent
+    evidence  722 extracted · 627 verified · 95 flagged  (86.8%)
+              PARTIALLY_GROUNDED 62 · NOT_IN_SOURCE 24 · TIMESTAMP_MISMATCH 9
+
+**THE TAIL IS IN EXTRACTION, NOT DOWNLOADING.** Per stage, p50 → p95:
+
+    downloading   5,269 →  12,952   (n=54)
+    transcribing  1,298 →  12,986   (n=46)
+    extracting    6,013 → 418,831   (n=50)   max 700,653
+    publishing    3,571 →   5,128   (n=43)
+
+Downloading is where runs FAIL; extracting is where they HANG. The two
+stories are about different stages and the panel must not blur them.
+`TIMESTAMP_MISMATCH` also turned up in the flag reasons and is not in
+`VerificationReason` — nothing in the analytics layer matches on a
+specific reason or error code, which is why it appeared rather than
+being dropped.
+
+### Coverage is uneven, and the numbers say so
+
+Stage timings are recorded on 43–54 of 72 runs, `total_ms` on 70. Every
+percentile is computed over the runs that RECORDED the key, never over
+the run count, or every latency figure would be silently deflated.
+`samples` travels with each statistic and anything under
+`config.analytics.minSamples` is marked thin rather than plotted as
+solid.
+
+### Deleted agents keep their names
+
+Six runs point at an agent that no longer exists. The `agents` join
+yields nothing, but the router wrote `routing.agent_name` onto the run,
+so the row reads "Science Explainer (deleted)" instead of the useless
+"Deleted agent".
+
+### Last used is PER PROVIDER, and the UI must not imply otherwise
+
+A run records which provider and model each stage used. It does NOT
+record which credential the fallback chain picked, so with two accounts
+on one provider a run cannot be attributed to either. Social credentials
+are matched on the run's `source` instead, which is exact — a cookie
+credential's provider IS the media source id. `lastUsedBasis` carries
+which of the three derivations produced the timestamp.
+
+## Not recorded today — four proposed changes, none faked in the UI
+
+1. **Token counts and cost.** Nothing anywhere records tokens or spend,
+   so every $/token panel is omitted rather than estimated. Proposal:
+   `additional_data.usage[]` of `{ stage, provider, model, prompt_tokens,
+   completion_tokens, price_snapshot }`. Providers already return usage on
+   the chat response; the price comes from a snapshot taken alongside
+   `model_catalog.additional_data.paid_models[]`, because a price looked
+   up later is not the price that was paid. Unlocks cost per run, per
+   agent, and per provider.
+2. **`credential_id` per stage attempt.** Fixes the per-provider
+   imprecision above and makes reject-driven staleness attributable to
+   the account that earned it.
+3. **Per-attempt latency and outcome** (`attempts[]`: model, ms,
+   ok/failed, reason). Timings are per STAGE, so per-model latency and
+   per-model success rate are impossible today. This also supersedes
+   `tried_models[]`, which only exists on failures since 2026-09-04 and
+   is sparse.
+4. **`started_at`** (dequeue time). There is no queue wait time without
+   it — `created_at` → `updated_at` conflates waiting with working.
+
+## Analytics dashboard: the UI (2026-09-04) — TASKS 2–5 OF 5, DONE
+
+`/dashboard` in the `(dashboard)` group, nine panels, one payload, one
+scroller. Recharts was cleared as a dependency by the human and installed
+through `shadcn add chart`, so the wrapper is a vendored ShadCN component
+rather than raw Recharts and the palette reaches it as CSS variables.
+
+### The palette is validated, not chosen
+
+`dataviz/scripts/validate_palette.js` was run against THIS app's real
+chart surfaces (`#ffffff` light card, `#18181b` dark card) before a line
+of chart code existed. Both modes clear every hard gate:
+
+    light  band PASS · chroma PASS · CVD ΔE 9.1 PASS · normal-vision 19.6 PASS · contrast WARN
+    dark   band PASS · chroma PASS · CVD ΔE 8.4 PASS · normal-vision 19.3 PASS · contrast PASS
+
+The light WARN is aqua, yellow and magenta sitting below 3:1 on white.
+That is a documented relief case, NOT a pass — the mitigation is that
+every chart ships a table view and direct labels, which is why the table
+toggle is on the card frame rather than being optional per panel.
+
+Status colours were measured on the same surfaces: warning (1.83:1) and
+serious (2.64:1) are sub-3:1 on white BY DESIGN, and always ship with an
+icon and a word, so hue never carries the meaning alone. The meter track
+had to move off sequential step 100 (1.32:1) to step 250 (`#86b6ef`,
+2.11:1) to clear the 2:1 ordinal floor; dark uses step 600 (2.19:1).
+
+All of it lives in `--viz-*` custom properties in globals.css. The
+existing `--chart-1..5` were deliberately NOT reused: they are five steps
+of one blue, a sequential ramp, and using them for series identity would
+encode "which series" on a magnitude scale.
+
+### Recharts fights three of the mark rules; all three are overridden
+
+- **Stacked segments have no gap and square ends.** `bar-shape.tsx`
+  replaces the shape. The 2px gap is SUBTRACTED WIDTH, not a stroke — a
+  surface-coloured stroke would draw a border all the way around the
+  mark, which is the exact thing the gap exists to avoid. Only the
+  outermost non-zero segment of a row is rounded, which depends on the
+  row's values and so cannot be a `radius` prop on the last `<Bar>`.
+- **`LabelList` can only hang off one `<Bar>`.** Which segment is
+  outermost varies per row, so a tip label appeared on some rows and
+  vanished on others. Failure anatomy puts the row total in a custom
+  Y-axis tick instead: always present, never collides, survives 390px.
+- **Category axes auto-skip ticks when short.** At 390px the two latency
+  facets stack, and Recharts silently dropped two of four stage labels —
+  leaving bars nobody could identify. Every category axis now sets
+  `interval={0}`, and the latency card takes `mobileHeight` (520 vs 300).
+
+### Two charts, not one, for latency
+
+p95 runs ~21× the median, so one shared linear axis flattens every median
+bar to a sliver and a second y-scale would invent a correlation. Small
+multiples with two independently labelled axes is the documented remedy,
+and the caption states the ratio. The composition strip above them is a
+share of per-stage MEDIANS and says so: medians do not sum, and
+presenting their total as a run's duration would be a tidy-looking lie.
+
+### Found by looking at the rendered page, not by reasoning
+
+- The apps table overflowed horizontally (858px of content in a 699px
+  viewport, and 442 in 390). Columns now drop out as the viewport narrows
+  instead of the table growing a scrollbar; provider, health and last-used
+  survive to the smallest screen because those three are what the panel is
+  for.
+- Long model ids were CLIPPED at the left edge of their axis — Recharts
+  does not truncate, so an over-long tick just runs off the SVG and the
+  reader sees the tail of an id with its start missing. `ellipsize` puts
+  the ellipsis at the end; the full id stays in the tooltip and table.
+- The hero KPI tile was shorter than its neighbours (`h-full` missing on
+  the card inside the span-2 grid cell).
+- The failure axis read "1 runs".
+
+### Verified
+
+`bun run typecheck` clean, `bun run lint` 0 errors. Measured in the
+browser at 1440×900 and 390×844, in BOTH themes:
+
+    page scrolls        false      (ShellContent fill)
+    scroller count      1          (the ScrollPanel's ScrollArea)
+    horizontal overflow 0 elements
+    clipped SVG labels  0
+    latency facet ticks all four stages present at 390px
+
+Every file is under the 250-line cap; `stage-latency.tsx` hit 253 and was
+split into `stage-facet.tsx`.
+
+### Still open
+
+- `noUnusedImports` warns on `src/lib/observability/logger.ts:6`. It is a
+  FALSE POSITIVE and predates this work — `pinoDefault` is used on line 16
+  in `require(...) as typeof pinoDefault`, which Biome does not see.
+  Removing the import would break the type. Left alone.
+- The dashboard is not linked from anywhere except the sidebar, and the
+  sidebar's logo still points at `/runs`. Home was not moved.
+
+## Analytics dashboard: layout fixes after looking at it (2026-09-04)
+
+Four things wrong once it was on screen. All four were found by measuring
+the rendered page, not by reading the code.
+
+### `aspect-video` was driving every chart's height
+
+`ChartContainer` (vendored ShadCN) ships `aspect-video` in its base class
+string. While the card body was a FIXED-height box that never mattered —
+the box clamped it. The moment the body became `min-height` + `flex-1` (to
+make row neighbours equal height), the aspect ratio became the intrinsic
+size: at 1216px wide that is 684px of plot for a three-bar chart, and the
+Failure anatomy card measured **856px**.
+
+Every `ChartContainer` now passes `aspect-auto`. Failure anatomy 856 ->
+428, Throughput 616 -> 408, whole page 4046 -> 3201.
+
+**A WRONG DIAGNOSIS WAS COMMITTED FIRST AND THEN REVERTED.** The initial
+guess was that the ScrollArea forces its viewport child to `height:100%`
+and the auto-row grid was stretching to fill, so `content-start` went on
+the grid with a comment saying so. Measuring showed the grid's rows summed
+to 3791 inside a 1293px scroller — nothing was being stretched, the rows
+were genuinely that tall. `content-start` was a no-op and is gone.
+(The same comment also credited Radix. **This app has no Radix at all** —
+`src/components/ui/scroll-area.tsx` is `@base-ui/react/scroll-area`, and
+`package.json` has zero `@radix-ui/*` packages. ShadCN's docs assume Radix
+and that assumption should not be carried into this codebase's comments.)
+
+### Cards in a grid row had different heights
+
+Each card was its own natural height; the grid stretched the WRAPPER but
+not the card inside it, so neighbours ended at visibly different points.
+`h-full` on the card plus a `flex-1` body fixes it. The reserved height is
+now a floor, never a cap, so a long table or an extra provider group grows
+the card instead of scrolling inside it.
+
+Row pairing was also rebalanced: Model usage grows with the provider count
+and had been sharing a row with a fixed-height panel, which stretched that
+neighbour and left a void. It now takes a full row, and Agent routing +
+Evidence quality (similar heights) share one.
+
+`Sources & modes` used `justify-between`, which spread two short blocks
+across the stretched height and opened a gap the size of the data. Now
+top-aligned.
+
+### Every table view overflowed sideways on a phone
+
+The `Table` primitive ships `whitespace-nowrap` and `px-4` on every cell —
+correct for the runs list, wrong for a table inside a 390px card. Text
+columns now wrap on tighter gutters at a smaller face.
+
+`wrapAnywhere` IS OPT-IN PER COLUMN and that is the point. The first
+attempt put `overflow-wrap: anywhere` on every cell, which also collapses
+each column's min-content width — so the browser squeezed all of them and
+broke ordinary words mid-syllable ("Provid/er", "Transc/ription"). Only
+the columns holding genuinely unbreakable tokens (model id, email, agent
+name) opt in; they absorb the squeeze and everything else keeps its words
+whole.
+
+Connected apps additionally drops columns as the viewport narrows —
+provider, health and last-used survive to the smallest screen because
+those three are what the panel is for.
+
+### Card borders vanished under the scrollbar in light mode
+
+The scroll content had `pe-1` (4px) against a 10px overlay scrollbar, so
+each card's right edge sat 6px UNDER the bar and its border disappeared.
+Obvious in light mode, where the card ring is subtle. Now `pe-4`.
+
+### Verified at 1440x900 and 390x844, both themes
+
+    page scrolls          false
+    scroller count        1
+    horizontal overflow   0 elements
+    tables overflowing X  0 of 8 (all table views open)
+    paired row heights    equal in every row
+    cards under scrollbar 0
+
+## Analytics dashboard: mobile pass (2026-09-04)
+
+Default window is now **7 days**, not all-time.
+
+### Table views: fold, don't drop
+
+Five columns of times and counts do not fit 390px. `ChartTable` gained
+`collapseBelow` + per-column `secondary`: below the breakpoint the
+secondary columns move into a per-row disclosure instead of being hidden.
+Hiding them outright would quietly delete the data the table view exists
+to expose. Stage latency folds Worst/Runs, Connected apps folds
+Account/Type/State, Model usage folds Stage.
+
+**THE ROW IS THE CONTROL, not a chevron column.** A toggle column cost
+~40px of a 390px table and took it straight out of the narrowest text
+column, wrapping "39 min. ago" onto three lines. ARIA `row` accepts
+`aria-expanded`, so the row carries the state, a tabindex and an
+Enter/Space handler, and every pixel goes to data.
+
+### Three presentation attempts on the disclosure, in order
+
+1. Labels with `justify-between` — put a card's width between a label and
+   its value.
+2. Values only, no labels — the fields collided into one run and "Active"
+   wrapped alone onto the next line. Worse.
+3. **Two-column grid, label then value, tight.** This is the one that
+   reads. `ChartTable` is generic: it cannot know which folded field is
+   the record's identity and which is metadata, so it cannot rank them
+   for you, and a label column is the honest fallback.
+
+### `overflow-wrap: anywhere` is opt-in per column
+
+Setting it on every cell collapses each column's min-content width, so
+the browser squeezes all of them and breaks ordinary words mid-syllable —
+"Provid/er", "Transc/ription". Only columns holding genuinely unbreakable
+tokens (model id, email, agent name) opt in via `wrapAnywhere`; they
+absorb the squeeze and every other column keeps its words whole.
+
+### Card borders were clipped on BOTH edges
+
+The card ring is an OUTWARD box-shadow. The scroll content had `pe-1`
+against a 10px overlay scrollbar (right edge ran under the bar) and zero
+start padding (left edge landed outside the scrollport and was clipped).
+Now `ps-1 pe-4`. Measured: 4px left clearance, 6px right.
+
+Ring itself went from `ring-foreground/10` — **1.25:1 on white, not a
+visible boundary** — to `ring-zinc-300` (1.48:1) plus `shadow-sm`, with
+the shadow doing most of the separating. An ELEVATION shadow, not a glow
+(RULES.md), and dropped in dark mode where it is invisible smudge.
+
+The hero tile's accent bar was a full-height square-cornered bar at
+`start-0`: the overflow clip sheared its ends against the card's radius
+and it sat exactly where the border should be, so that one tile looked
+like it had lost its left edge. Now inset and rounded (`inset-y-3
+rounded-e-full`).
+
+### Reusing the Vault's TypeBadge
+
+Credential type renders through `TypeBadge` from
+src/components/vault/credentials-row.tsx — the same solid per-type fills
+and the same exhaustive `Record<CredentialType, …>`. A second local
+vocabulary would have drifted the moment a credential type is added.
+
+Card padding is `px-3 py-4` below `sm` (was `px-5 py-5`): 20px of card
+padding inside 16px of shell padding put content 36px from each edge on a
+390px screen. ShellContent's own `p-4` is shared with every other page and
+was left alone.
+
+### Verified at 390x844 and 430x932 (iPhone 14 Pro Max), both themes
+
+    page scrolls          false
+    scroller count        1
+    horizontal overflow   0 elements
+    tables overflowing X  0 of 8, with every table view open
+    row disclosure        opens, and carries the folded values

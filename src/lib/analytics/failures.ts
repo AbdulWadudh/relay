@@ -114,7 +114,10 @@ export function buildFailures(facts: RunFact[]): FailureAnatomy {
         ),
       ).map((entry) =>
         entry.code === "__other"
-          ? { ...entry, label: legend.find((l) => l.code === "__other")?.label ?? "Other" }
+          ? {
+              ...entry,
+              label: legend.find((l) => l.code === "__other")?.label ?? "Other",
+            }
           : entry,
       )
       return { stage, label: stageLabel(stage), count, codes }
