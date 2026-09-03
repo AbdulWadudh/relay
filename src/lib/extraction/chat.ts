@@ -5,8 +5,14 @@ import {
   attemptKey,
   type ChatRun,
 } from "@/lib/extraction/chat-attempt"
-import type { SkippedModel } from "@/lib/extraction/chat-failures"
-import { type ChatTask, chatProvider } from "@/lib/extraction/providers"
+import {
+  ChatExhaustedError,
+  describeSkipped,
+  type SkippedModel,
+} from "@/lib/extraction/chat-failures"
+import { pinnedModelsFor } from "@/lib/extraction/model-choice"
+import { chatProvider } from "@/lib/extraction/providers"
+import { type ChatStage, taskForStage } from "@/lib/extraction/stages"
 import { logger } from "@/lib/observability/logger"
 import { accessTokenById } from "@/lib/vault-select"
 
@@ -47,7 +53,9 @@ interface PassResult {
 }
 
 /** One sweep over the whole chain: every account, and each one's models. */
-async function attemptPass(options: AttemptOptions): Promise<PassResult> {
+async function attemptPass(
+  options: AttemptOptions & { stage: ChatStage },
+): Promise<PassResult> {
   const { userId } = options
   let sawKey = false
   let rateLimitedFor = 0
@@ -55,7 +63,9 @@ async function attemptPass(options: AttemptOptions): Promise<PassResult> {
 
   // A flat list of ACCOUNTS the user ordered themselves, so two keys for
   // one provider can sit either side of another provider's (chain.ts).
-  const chain = await resolveChain(userId)
+  const chain = await resolveChain(userId, options.stage)
+  // One settings read for the whole pass, not one per account.
+  const pins = await pinnedModelsFor(userId, options.stage)
   // A provider-level refusal (413) rules out its other accounts too, and
   // the chain can revisit that provider later on.
   const abandoned = new Set<string>()
@@ -80,7 +90,12 @@ async function attemptPass(options: AttemptOptions): Promise<PassResult> {
     // would be wrong.
     sawKey = true
 
-    const attempt = await attemptKey({ ...options, provider, apiKey })
+    const attempt = await attemptKey({
+      ...options,
+      provider,
+      apiKey,
+      pinnedModel: pins[entry.id],
+    })
     rateLimitedFor = Math.max(rateLimitedFor, attempt.rateLimitedFor)
     lastError = attempt.lastError ?? lastError
     if (attempt.run) {
@@ -94,7 +109,12 @@ async function attemptPass(options: AttemptOptions): Promise<PassResult> {
 
 export async function runChat(options: {
   userId: string
-  task: ChatTask
+  /**
+   * Which pipeline step is asking. It selects the account chain (each
+   * stage has its own — src/lib/extraction/stages.ts) and, through
+   * `taskForStage`, how the ranker weighs context.
+   */
+  stage: ChatStage
   system: string
   user: string
   /** Passed to models advertising structured outputs. */
@@ -104,7 +124,8 @@ export async function runChat(options: {
   signal?: AbortSignal
 }): Promise<ChatRun> {
   const skipped: SkippedModel[] = []
-  const first = await attemptPass({ ...options, skipped })
+  const pass = { ...options, task: taskForStage(options.stage), skipped }
+  const first = await attemptPass(pass)
   if (first.run) return first.run
   if (!first.sawKey) throw new NoExtractionKeyError()
 
@@ -113,15 +134,36 @@ export async function runChat(options: {
   // Failing here would mean two runs submitted together kill each other.
   if (first.rateLimitedFor > 0) {
     logger.warn("Extraction rate limited — waiting for the window to reopen", {
-      task: options.task,
+      chat_stage: options.stage,
       wait_ms: first.rateLimitedFor,
       candidates_tried: skipped.length,
     })
     await Bun.sleep(first.rateLimitedFor)
-    const second = await attemptPass({ ...options, skipped })
+    const second = await attemptPass(pass)
     if (second.run) return second.run
-    throw second.lastError ?? first.lastError ?? new NoExtractionKeyError()
+    throw exhausted(options.stage, skipped, second.lastError ?? first.lastError)
   }
 
-  throw first.lastError ?? new NoExtractionKeyError()
+  throw exhausted(options.stage, skipped, first.lastError)
+}
+
+/**
+ * Every candidate is named once, here, before the throw. The per-model
+ * warnings above are the running commentary; this is the summary that says
+ * how many accounts and models a stage got through before giving up.
+ */
+function exhausted(
+  stage: string,
+  skipped: SkippedModel[],
+  lastError: unknown,
+): Error {
+  if (skipped.length === 0) {
+    return lastError instanceof Error ? lastError : new NoExtractionKeyError()
+  }
+  logger.error("Stage exhausted every account and model", {
+    chat_stage: stage,
+    candidates: skipped.length,
+    tried: describeSkipped(skipped),
+  })
+  return new ChatExhaustedError(stage, skipped, lastError)
 }

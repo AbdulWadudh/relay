@@ -108,7 +108,7 @@ export async function readScreenText(options: {
 
   const run = await runChat({
     userId,
-    task: "extraction",
+    stage: "frames",
     system: VISION_SYSTEM,
     user: visionUserPrompt({ sheet, title, description }),
     jsonSchema: VISION_SCHEMA,

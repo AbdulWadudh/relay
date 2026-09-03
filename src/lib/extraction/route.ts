@@ -148,7 +148,7 @@ async function classify(options: {
 
   const run = await runChat({
     userId,
-    task: "synthesis",
+    stage: "agent_router",
     system: await promptFor(userId, "agent_router"),
     user: `Agents:\n${listing}\n\nVideo title: ${title ?? "(none)"}\n\nTranscript:\n${forRouting(transcript)}`,
     signal,

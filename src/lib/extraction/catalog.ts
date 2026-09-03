@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db"
 import { modelCatalog } from "@/lib/db/schema"
 import { cacheKeys, get, invalidate, put } from "@/lib/extraction/cache"
 import { type CatalogModel, normaliseCatalog } from "@/lib/extraction/models"
+import { paidModelsFor, withoutPaid } from "@/lib/extraction/paid-models"
 import type { ChatProvider } from "@/lib/extraction/providers"
 import { logger } from "@/lib/observability/logger"
 import { providerCredentialStamp } from "@/lib/vault-select"
@@ -88,7 +89,22 @@ async function writeCache(options: {
  * the credential moved underneath it. Ranking happens in models.ts — this
  * function is only responsible for freshness.
  */
+/**
+ * ONE place the plan filter is applied. `resolve` has four return points
+ * — Redis, the row, a fresh fetch, a stale fallback — and filtering at
+ * each of them is a hole waiting to be opened by the next edit.
+ */
 export async function catalogFor(options: {
+  userId: string
+  provider: ChatProvider
+  apiKey: string
+}): Promise<CachedCatalog> {
+  const catalog = await resolve(options)
+  const paid = await paidModelsFor(options.userId, options.provider.id)
+  return { ...catalog, models: withoutPaid(catalog.models, paid) }
+}
+
+async function resolve(options: {
   userId: string
   provider: ChatProvider
   apiKey: string

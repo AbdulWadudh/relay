@@ -199,7 +199,7 @@ export async function synthesizeAgent(options: {
 
   const run = await runChat({
     userId,
-    task: "synthesis",
+    stage: "schema_synthesizer",
     system: await promptFor(userId, "schema_synthesizer"),
     user: `Existing agents:\n${listing || "(none)"}\n\nVideo title: ${title ?? "(none)"}\n\nTranscript:\n${transcript}`,
     signal,

@@ -3,6 +3,7 @@ import { and, asc, eq } from "drizzle-orm"
 import { getDb } from "@/lib/db"
 import { credentials } from "@/lib/db/schema"
 import { chatProvider } from "@/lib/extraction/providers"
+import type { ChatStage } from "@/lib/extraction/stages"
 import type { AiKeyProviderId } from "@/lib/providers"
 import { getCredentialChain, resolveExtractionOrder } from "@/lib/settings"
 
@@ -81,13 +82,22 @@ async function candidates(userId: string): Promise<ChainEntry[]> {
   return entries
 }
 
-export async function resolveChain(userId: string): Promise<ChainEntry[]> {
+/**
+ * Per STAGE, because the account that should answer a routing question is
+ * not necessarily the one that should read a contact sheet (human decision
+ * 2026-09-04). Every stage reconciles against the same candidate set, so a
+ * key added today appears in all four without visiting Settings.
+ */
+export async function resolveChain(
+  userId: string,
+  stage: ChatStage,
+): Promise<ChainEntry[]> {
   const available = await candidates(userId)
   if (available.length < 2) return available
 
   const remaining = new Map(available.map((entry) => [entry.id, entry]))
   const chosen: ChainEntry[] = []
-  for (const id of await getCredentialChain(userId)) {
+  for (const id of await getCredentialChain(userId, stage)) {
     const entry = remaining.get(id)
     if (!entry) continue
     remaining.delete(id)

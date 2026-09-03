@@ -149,7 +149,7 @@ export async function extract(options: {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const run = await runChat({
       userId,
-      task: "extraction",
+      stage: "extraction",
       system,
       user,
       jsonSchema: promptSchema,

@@ -1,5 +1,5 @@
 import { z } from "zod"
-
+import { CHAT_STAGE_IDS } from "@/lib/extraction/stages"
 import { parseSourceUrl, SUPPORTED_SOURCE_LABELS } from "@/lib/media/sources"
 import { PROVIDER_IDS } from "@/lib/providers"
 
@@ -86,10 +86,27 @@ export const shareAutoRunSchema = z.object({ enabled: z.boolean() })
 export type ShareAutoRunInput = z.infer<typeof shareAutoRunSchema>
 
 export const extractionChainSchema = z.object({
+  stage: z.enum(CHAT_STAGE_IDS),
   chain: z.array(z.string().min(1).max(64)).max(100),
 })
 
 export type ExtractionChainInput = z.infer<typeof extractionChainSchema>
+
+/**
+ * Pinning a model for one account in one stage. `model: null` unpins.
+ *
+ * A free string, not an enum: the valid set is the provider's live catalog
+ * and no model id is written down in this codebase. `stageModels` drops a
+ * pin the catalog no longer lists, so a stale value is inert rather than
+ * an error.
+ */
+export const stageModelSchema = z.object({
+  stage: z.enum(CHAT_STAGE_IDS),
+  entryId: z.string().min(1).max(64),
+  model: z.string().min(1).max(200).nullable(),
+})
+
+export type StageModelInput = z.infer<typeof stageModelSchema>
 
 export const cookieImportSchema = z.object({
   cookieJar: z.string().min(1).max(1_000_000),

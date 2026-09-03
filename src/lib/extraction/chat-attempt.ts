@@ -6,8 +6,10 @@ import {
   type SkippedModel,
 } from "@/lib/extraction/chat-failures"
 import { rankModels } from "@/lib/extraction/models"
+import { recordPaidModel } from "@/lib/extraction/paid-models"
 import type { ChatProvider, ChatTask } from "@/lib/extraction/providers"
 import { chatCompletion, LlmError } from "@/lib/llm/client"
+import { logger } from "@/lib/observability/logger"
 
 /**
  * ONE account's turn: that provider's ranked catalog, walked model by
@@ -36,6 +38,13 @@ export interface KeyAttempt {
 
 export interface AttemptOptions {
   userId: string
+  /**
+   * Named in every log line as `chat_stage`. NOT `stage`: pino's mixin
+   * already puts the PIPELINE stage there from the run context
+   * (src/lib/observability/run-context.ts), and overwriting it would cost
+   * the run detail view its per-stage grouping.
+   */
+  stage: string
   task: ChatTask
   system: string
   user: string
@@ -48,6 +57,14 @@ export interface AttemptOptions {
    * something it never received.
    */
   imageDataUrl?: string
+  /**
+   * A model the user pinned for THIS account (Settings -> AI priority). It
+   * is moved to the front of the ranked list rather than replacing it: a
+   * pin says which model to prefer, not that the run should fail when that
+   * one is withdrawn or rate-limited. A pin the catalog no longer lists is
+   * ignored outright.
+   */
+  pinnedModel?: string
   skipped: SkippedModel[]
 }
 
@@ -65,6 +82,7 @@ export async function attemptKey(
     signal,
     jsonSchema,
     imageDataUrl,
+    pinnedModel,
   } = options
   const { skipped } = options
   let rateLimitedFor = 0
@@ -79,11 +97,17 @@ export async function attemptKey(
   } catch (error) {
     // A catalog read that fails outright, with nothing cached, is THIS
     // key's problem — a revoked key cannot even list models.
+    const reason = error instanceof Error ? error.message : String(error)
     skipped.push({
       provider: provider.id,
       model: "(none)",
       status: error instanceof LlmError ? error.status : 0,
-      reason: error instanceof Error ? error.message : String(error),
+      reason,
+    })
+    logger.warn("Model catalog unreadable for an account", {
+      chat_stage: options.stage,
+      provider: provider.id,
+      reason: reason.slice(0, 200),
     })
     return {
       run: null,
@@ -106,7 +130,14 @@ export async function attemptKey(
     return { run: null, next: "next-provider", rateLimitedFor, lastError }
   }
 
-  for (const candidate of ranked.slice(0, MAX_CANDIDATES)) {
+  const pinnedFirst = pinnedModel
+    ? [
+        ...ranked.filter((model) => model.id === pinnedModel),
+        ...ranked.filter((model) => model.id !== pinnedModel),
+      ]
+    : ranked
+
+  for (const candidate of pinnedFirst.slice(0, MAX_CANDIDATES)) {
     const model = candidate.id
     try {
       const content = await chatCompletion({
@@ -139,7 +170,26 @@ export async function attemptKey(
       if (status === 429) {
         rateLimitedFor = Math.max(rateLimitedFor, retryAfterMs(reason))
       }
+      // Remember, so the next run does not pay to learn the same thing.
+      // A no-op unless the provider bills per model (paid-models.ts).
+      if (status === 402) {
+        await recordPaidModel({ userId, provider, model })
+      }
       skipped.push({ provider: provider.id, model, status, reason })
+      // Logged as it happens, not only collected: the collected trail is
+      // discarded if the pass throws, and this is the line that says WHICH
+      // model failed and why.
+      // `run_id` and the pipeline `stage` arrive on their own: the worker
+      // wraps the whole job in `withRunContext` and pino's mixin reads it
+      // per line, so no logging call has to be told about the run.
+      logger.warn("Model passed over", {
+        chat_stage: options.stage,
+        provider: provider.id,
+        model,
+        status,
+        next,
+        reason: reason.slice(0, 200),
+      })
       if (next !== "next-model") {
         return { run: null, next, rateLimitedFor, lastError }
       }

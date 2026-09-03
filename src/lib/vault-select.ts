@@ -11,7 +11,7 @@ import { getCredentialChain } from "@/lib/settings"
  *
  * A provider may hold several credentials: two API keys from different
  * accounts, two Notion workspaces, two YouTube sessions. Every read path
- * resolves through `orderForProvider` so the whole app agrees on the
+ * resolves through `orderCredentials` so the whole app agrees on the
  * ORDER — the user's pick first, then the rest oldest-first — instead of
  * whatever SQLite happened to return.
  *
@@ -20,15 +20,16 @@ import { getCredentialChain } from "@/lib/settings"
  * what makes a second account a fallback for a rate-limited or dead key.
  */
 
-export async function orderForProvider<T extends { id: string }>(
+export async function orderCredentials<T extends { id: string }>(
   userId: string,
-  provider: string,
   rows: readonly T[],
 ): Promise<T[]> {
   if (rows.length < 2) return [...rows]
-  // One provider's slice of the flat chain (src/lib/extraction/chain.ts).
-  // Ids belonging to other providers simply do not match any row.
-  return applyOrder(rows, await getCredentialChain(userId))
+  // One provider's slice of a chain. EXTRACTION's, because these callers
+  // are not chat stages at all — the Notion Ray, transcription, a session
+  // jar — and extraction is the order a user actually curates. It only
+  // decides which of ONE provider's accounts is reached first.
+  return applyOrder(rows, await getCredentialChain(userId, "extraction"))
 }
 
 /**
@@ -52,12 +53,11 @@ function applyOrder<T extends { id: string }>(
   return [...ordered, ...rows.filter((row) => byId.has(row.id))]
 }
 
-export async function pickForProvider<T extends { id: string }>(
+export async function pickCredential<T extends { id: string }>(
   userId: string,
-  provider: string,
   rows: readonly T[],
 ): Promise<T | null> {
-  return (await orderForProvider(userId, provider, rows))[0] ?? null
+  return (await orderCredentials(userId, rows))[0] ?? null
 }
 
 /**
@@ -139,9 +139,8 @@ export async function orderedProviderKeys(
   provider: string,
   userId: string,
 ): Promise<ProviderKey[]> {
-  const ordered = await orderForProvider(
+  const ordered = await orderCredentials(
     userId,
-    provider,
     await secretRows(provider, userId),
   )
   return Promise.all(
@@ -157,11 +156,7 @@ export async function getAccessToken(
   provider: string,
   userId: string,
 ): Promise<string | null> {
-  const row = await pickForProvider(
-    userId,
-    provider,
-    await secretRows(provider, userId),
-  )
+  const row = await pickCredential(userId, await secretRows(provider, userId))
   if (!row) return null
   return decrypt(row.accessToken, row.iv)
 }

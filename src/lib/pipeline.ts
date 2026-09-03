@@ -12,6 +12,7 @@ import {
   isPermanent,
   messageOf,
   titleOf,
+  triedModelsOf,
 } from "@/lib/pipeline-errors"
 import { publishRun } from "@/lib/render/publish"
 import { getRunForWorker, updateRun } from "@/lib/runs"
@@ -218,6 +219,7 @@ async function runPipeline(runId: string): Promise<void> {
     logger.info("Run completed", { run_id: runId, source: run.source })
   } catch (error) {
     const permanent = isPermanent(error)
+    const tried = triedModelsOf(error)
     await updateRun(runId, {
       status: "failed",
       error: messageOf(error),
@@ -226,6 +228,9 @@ async function runPipeline(runId: string): Promise<void> {
         error_code: codeOf(error),
         failed_stage: stage,
         permanent,
+        // Which accounts and models the stage got through before giving
+        // up. Absent for failures that never reached a model.
+        ...(tried.length > 0 ? { tried_models: tried } : {}),
       },
     })
     logger.error("Run failed", {
@@ -234,6 +239,7 @@ async function runPipeline(runId: string): Promise<void> {
       code: codeOf(error),
       permanent,
       error: messageOf(error),
+      ...(tried.length > 0 ? { tried_models: tried } : {}),
     })
     // Re-thrown so BullMQ records the failure; Unrecoverable stops retries.
     throw permanent ? new UnrecoverableError(messageOf(error)) : error

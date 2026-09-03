@@ -3,6 +3,7 @@
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
+import { RunLogLines } from "@/components/queue/run-log-lines"
 import type { RunLogLine } from "@/lib/query/runs"
 import { cn } from "@/lib/utils"
 
@@ -18,79 +19,6 @@ import { cn } from "@/lib/utils"
  * The fetch is gated on the same disclosure — see `useRunLogs` — so a page
  * view that never expands a stage costs no log traffic at all.
  */
-
-/**
- * Level drives colour, but the level NAME is always rendered too: meaning
- * is never carried by colour alone. Solid foreground colours only, per
- * RULES.md.
- *
- * PAIRED `dark:` VARIANTS, not bare `-400` shades. This panel used to be a
- * hardcoded `bg-zinc-950` slab — the app's only fixed-dark surface outside
- * the modal scrims — with every tone inside picked to read against that
- * black. In LIGHT mode the slab stayed black while the empty-state text,
- * which correctly used `text-muted-foreground`, flipped to a dark grey and
- * became unreadable on it. The panel is now `bg-card`, so it follows the
- * theme, and every `-400` here needs a `-700` companion for the light
- * surface (RULES.md § UI, "Light mode contrast").
- *
- * Measured against the real token values in both themes: the weakest pair
- * in this panel is 4.83:1 (`--muted-foreground` on light `--card`) and the
- * weakest accent is 5.05:1 (amber-700, same surface), so all of them clear
- * WCAG AA 4.5 for the 11px monospace this renders at. `bg-muted` was tried
- * first and rejected: it put that metadata pair at 4.39:1.
- */
-const LEVEL_TONE: Record<string, string> = {
-  error: "text-red-700 dark:text-red-400",
-  fatal: "text-red-700 dark:text-red-400",
-  warn: "text-amber-700 dark:text-amber-400",
-  info: "text-sky-700 dark:text-sky-400",
-  // No accent to carry, so these take the same token as the metadata.
-  debug: "text-muted-foreground",
-  trace: "text-muted-foreground",
-}
-
-/**
- * Built ONCE at module scope, not per line.
- *
- * Constructing an `Intl.DateTimeFormat` is the expensive part; formatting
- * with an existing one is cheap. A panel can hold up to
- * `RUN_LOG_MAX_LINES` (500) rows and re-renders on every poll while a run
- * is live, so a formatter built inside the render would be rebuilt
- * thousands of times a minute. Same module-scope pattern as
- * `runs-table.tsx` and `run-detail.tsx`.
- *
- * `h23` pins 24-hour output regardless of the viewer's locale preference —
- * a log timestamp with an am/pm suffix is harder to scan and wider.
- * `fractionalSecondDigits` gets the milliseconds that matter when two
- * pipeline steps land in the same second.
- */
-const timeFormat = new Intl.DateTimeFormat("en", {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  fractionalSecondDigits: 3,
-  hourCycle: "h23",
-})
-
-/**
- * The structured half of a log line, flattened to `key=value`.
- *
- * Values are already redacted server-side (`redactLogValue`), so a
- * sensitive field arrives here as the literal string "[REDACTED]" and is
- * rendered as such — visible proof to an operator that something was
- * withheld, rather than a silently missing field.
- */
-function formatFields(fields: Record<string, unknown>): string {
-  return Object.entries(fields)
-    .map(([key, value]) => {
-      const text =
-        typeof value === "string"
-          ? value
-          : (JSON.stringify(value) ?? String(value))
-      return `${key}=${text}`
-    })
-    .join("  ")
-}
 
 export function RunStageLogs({
   lines,
@@ -183,34 +111,7 @@ export function RunStageLogs({
             ) : (
               /* Scrolls INTERNALLY: the app is a fixed-viewport shell, so
                  an expanded stage must not grow the page. */
-              <ol className="max-h-64 overflow-y-auto font-mono text-[11px] leading-relaxed">
-                {lines.map((line) => (
-                  <li key={line.id} className="flex gap-2 px-1 py-px">
-                    <span className="shrink-0 text-muted-foreground tabular-nums">
-                      {timeFormat.format(line.at)}
-                    </span>
-                    <span
-                      className={cn(
-                        "w-10 shrink-0 uppercase",
-                        LEVEL_TONE[line.level] ?? "text-muted-foreground",
-                      )}
-                    >
-                      {line.level}
-                    </span>
-                    {/* `break-words` + `min-w-0`: log lines carry video
-                        ids, file paths and URLs, which must reflow rather
-                        than force the panel to scroll sideways. */}
-                    <span className="wrap-break-word min-w-0 text-foreground">
-                      {line.message}
-                      {line.fields ? (
-                        <span className="ml-2 text-muted-foreground">
-                          {formatFields(line.fields)}
-                        </span>
-                      ) : null}
-                    </span>
-                  </li>
-                ))}
-              </ol>
+              <RunLogLines lines={lines} className="max-h-64" />
             )}
           </div>
         </div>

@@ -4,7 +4,7 @@ import { decrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
 import { type CredentialType, credentials } from "@/lib/db/schema"
 import { logger } from "@/lib/observability/logger"
-import { pickForProvider } from "@/lib/vault-select"
+import { pickCredential } from "@/lib/vault-select"
 
 /**
  * Type-scoped secret reads (SESSION_AUTH.md §3.6).
@@ -18,7 +18,7 @@ import { pickForProvider } from "@/lib/vault-select"
  * alone. A provider id is a MediaSourceId for a social session, and a user
  * could hold both a cookie jar and some future credential for the same
  * source — so callers that care WHICH KIND of secret they are asking for
- * use this instead. Both resolve the user's choice via `pickForProvider`.
+ * use this instead. Both resolve the user's choice via `pickCredential`.
  */
 
 export interface StoredSecret {
@@ -63,7 +63,7 @@ export async function getSecretByType(
     )
     .orderBy(asc(credentials.createdAt))
     .all()
-  const row = await pickForProvider(userId, provider, rows)
+  const row = await pickCredential(userId, rows)
   if (!row) return null
 
   return {
@@ -159,5 +159,5 @@ export async function getCredentialIdByType(
     )
     .orderBy(asc(credentials.createdAt))
     .all()
-  return (await pickForProvider(userId, provider, rows))?.id ?? null
+  return (await pickCredential(userId, rows))?.id ?? null
 }

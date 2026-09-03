@@ -1,6 +1,10 @@
 import { UnrecoverableError } from "bullmq"
 import { NoFrameTextError } from "@/lib/analysis-errors"
 import { ExtractionError, NoExtractionKeyError } from "@/lib/extraction"
+import {
+  ChatExhaustedError,
+  describeSkipped,
+} from "@/lib/extraction/chat-failures"
 import { MediaBinaryError } from "@/lib/media/binaries"
 import { MediaIngestError } from "@/lib/media/ingest"
 import {
@@ -69,12 +73,23 @@ export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/**
+ * Which accounts and models a failing stage got through, for the run
+ * record. Empty for every other kind of failure.
+ */
+export function triedModelsOf(error: unknown): string[] {
+  return error instanceof ChatExhaustedError
+    ? describeSkipped(error.skipped)
+    : []
+}
+
 export function codeOf(error: unknown): string {
   if (error instanceof MediaBinaryError) return error.code
   if (error instanceof MediaIngestError) return error.code
   if (error instanceof NoTranscriptionKeyError) return error.code
   if (error instanceof NoSpeechError) return error.code
   if (error instanceof NoFrameTextError) return error.code
+  if (error instanceof ChatExhaustedError) return error.code
   if (error instanceof NoExtractionKeyError) return error.code
   if (error instanceof ExtractionError) return error.code
   if (error instanceof NoNotionRayError) return error.code

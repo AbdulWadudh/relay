@@ -90,3 +90,36 @@ export function disposition(
   if (error.status >= 500) return "next-model"
   return "fail"
 }
+
+/**
+ * A stage that exhausted every account and model, carrying WHICH ones and
+ * why.
+ *
+ * Without this the run recorded only the last provider's last complaint,
+ * so "extraction failed" gave no way to tell a rate limit from a withdrawn
+ * model from a dead key — the trail was built in memory and discarded on
+ * the throw.
+ */
+export class ChatExhaustedError extends Error {
+  readonly code = "CHAT_EXHAUSTED"
+  readonly stage: string
+  readonly skipped: SkippedModel[]
+
+  constructor(stage: string, skipped: SkippedModel[], cause: unknown) {
+    super(
+      cause instanceof Error ? cause.message : `No model could serve ${stage}`,
+    )
+    this.name = "ChatExhaustedError"
+    this.stage = stage
+    this.skipped = skipped
+    this.cause = cause
+  }
+}
+
+/** One line per candidate, for a log field and a run record. */
+export function describeSkipped(skipped: readonly SkippedModel[]): string[] {
+  return skipped.map(
+    (entry) =>
+      `${entry.provider}/${entry.model} ${entry.status || "-"}: ${entry.reason.slice(0, 160)}`,
+  )
+}

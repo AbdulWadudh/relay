@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm"
 import { getDb } from "@/lib/db"
 import { userSettings } from "@/lib/db/schema"
 import { EXTRACTION_ORDER } from "@/lib/extraction/providers"
+import { CHAT_STAGE_IDS, type ChatStage } from "@/lib/extraction/stages"
 import type { AiKeyProviderId } from "@/lib/providers"
 
 /**
@@ -15,11 +16,15 @@ import type { AiKeyProviderId } from "@/lib/providers"
 
 export const SETTING_KEYS = {
   /**
-   * The order credentials are tried in, as a FLAT list of ids spanning
-   * every provider — so two accounts of one provider can sit either side
-   * of another provider's. Authoritative for anything that reads an order.
+   * The order credentials are tried in, PER STAGE:
+   * `{ [ChatStage]: credentialId[] }`. Flat within a stage, so two
+   * accounts of one provider can sit either side of another provider's.
+   *
+   * Still read when it holds a bare array — that was the shape before
+   * stages existed, and it then seeds every stage alike.
    */
   credentialChain: "credential_chain",
+  stageModels: "stage_models",
   shareAutoRun: "share_auto_run",
   /**
    * Superseded by credentialChain, still read to SEED it so an order set
@@ -100,21 +105,36 @@ export async function resolveExtractionOrder(
 /**
  * The stored credential chain, verbatim apart from junk filtering. Every
  * reader reconciles it against reality itself — `resolveChain` for the
- * pipeline, `orderForProvider` for one provider's slice — because an id
+ * pipeline, `orderCredentials` for one provider's slice — because an id
  * can be deleted or switched off between two reads of this row.
  *
  * Seeded from the two earlier keys when it is empty, so an order set
  * before the flat chain existed still applies.
  */
-export async function getCredentialChain(userId: string): Promise<string[]> {
+export async function getCredentialChain(
+  userId: string,
+  stage: ChatStage,
+): Promise<string[]> {
   const stored = await readSetting(userId, SETTING_KEYS.credentialChain)
+
+  // A bare array is the pre-stage shape. It applies to every stage, so an
+  // order set before this existed is not silently dropped.
   if (Array.isArray(stored)) {
-    const clean = stored.filter(
-      (id): id is string => typeof id === "string" && id.length > 0,
-    )
-    if (clean.length > 0) return clean
+    const flat = cleanIds(stored)
+    if (flat.length > 0) return flat
+  } else if (stored && typeof stored === "object") {
+    const perStage = cleanIds((stored as Record<string, unknown>)[stage])
+    if (perStage.length > 0) return perStage
   }
+
   return legacyChainSeed(userId)
+}
+
+function cleanIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
+  )
 }
 
 /**
@@ -155,24 +175,57 @@ async function legacyChainSeed(userId: string): Promise<string[]> {
   return seed
 }
 
+/**
+ * Read-modify-write over the whole map, and the bare-array shape is
+ * expanded first — writing one stage must not discard the order the other
+ * three inherited from it.
+ */
 export async function setCredentialChain(
   userId: string,
+  stage: ChatStage,
   chain: readonly string[],
 ): Promise<void> {
-  await writeSetting(userId, SETTING_KEYS.credentialChain, [...chain])
+  await writeSetting(userId, SETTING_KEYS.credentialChain, {
+    ...(await allCredentialChains(userId)),
+    [stage]: [...chain],
+  })
 }
 
-/** Drops a deleted credential from the chain. */
+export async function allCredentialChains(
+  userId: string,
+): Promise<Record<string, string[]>> {
+  const stored = await readSetting(userId, SETTING_KEYS.credentialChain)
+
+  if (Array.isArray(stored)) {
+    const flat = cleanIds(stored)
+    if (flat.length === 0) return {}
+    return Object.fromEntries(CHAT_STAGE_IDS.map((id) => [id, [...flat]]))
+  }
+  if (!stored || typeof stored !== "object") return {}
+
+  const chains: Record<string, string[]> = {}
+  for (const [stage, ids] of Object.entries(stored)) {
+    const clean = cleanIds(ids)
+    if (clean.length > 0) chains[stage] = clean
+  }
+  return chains
+}
+
+/** Drops a deleted credential from every stage's chain. */
 export async function forgetCredentialChain(
   userId: string,
   credentialId: string,
 ): Promise<void> {
-  const chain = await getCredentialChain(userId)
-  if (!chain.includes(credentialId)) return
-  await setCredentialChain(
-    userId,
-    chain.filter((id) => id !== credentialId),
-  )
+  const chains = await allCredentialChains(userId)
+  let changed = false
+  const next: Record<string, string[]> = {}
+  for (const [stage, ids] of Object.entries(chains)) {
+    const kept = ids.filter((id) => id !== credentialId)
+    if (kept.length !== ids.length) changed = true
+    if (kept.length > 0) next[stage] = kept
+  }
+  if (!changed) return
+  await writeSetting(userId, SETTING_KEYS.credentialChain, next)
 }
 
 /**
@@ -183,4 +236,45 @@ export async function forgetCredentialChain(
  */
 export async function getShareAutoRun(userId: string): Promise<boolean> {
   return (await readSetting(userId, SETTING_KEYS.shareAutoRun)) === true
+}
+
+export async function getStageModels(
+  userId: string,
+  stage: ChatStage,
+): Promise<Record<string, string>> {
+  const stored = await readSetting(userId, SETTING_KEYS.stageModels)
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {}
+  const forStage = (stored as Record<string, unknown>)[stage]
+  if (!forStage || typeof forStage !== "object" || Array.isArray(forStage)) {
+    return {}
+  }
+
+  const pins: Record<string, string> = {}
+  for (const [entryId, modelId] of Object.entries(forStage)) {
+    if (typeof modelId === "string" && modelId.length > 0) {
+      pins[entryId] = modelId
+    }
+  }
+  return pins
+}
+
+/** `null` unpins, which is how "let the ranker choose" is expressed. */
+export async function setStageModel(
+  userId: string,
+  stage: ChatStage,
+  entryId: string,
+  modelId: string | null,
+): Promise<void> {
+  const stored = await readSetting(userId, SETTING_KEYS.stageModels)
+  const all =
+    stored && typeof stored === "object" && !Array.isArray(stored)
+      ? { ...(stored as Record<string, Record<string, string>>) }
+      : {}
+
+  const forStage = { ...(await getStageModels(userId, stage)) }
+  if (modelId) forStage[entryId] = modelId
+  else delete forStage[entryId]
+
+  all[stage] = forStage
+  await writeSetting(userId, SETTING_KEYS.stageModels, all)
 }

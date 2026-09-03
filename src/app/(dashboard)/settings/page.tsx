@@ -2,14 +2,15 @@ import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 import { eq } from "drizzle-orm"
 
 import { ShellContent, ShellHeader } from "@/components/app-shell"
-import { ExtractionChainCard } from "@/components/settings/extraction-chain-card"
 import { ProfileCard } from "@/components/settings/profile-card"
 import { SecurityCard } from "@/components/settings/security-card"
 import { ShareCard } from "@/components/settings/share-card"
+import { StagePriorityCard } from "@/components/settings/stage-priority-card"
 import { requireSession } from "@/lib/auth-session"
 import { getDb } from "@/lib/db"
 import { authAccounts } from "@/lib/db/schema"
 import { resolveChain } from "@/lib/extraction/chain"
+import { CHAT_STAGE_IDS } from "@/lib/extraction/stages"
 import { getQueryClient } from "@/lib/query/client"
 import { credentialKeys, settingKeys } from "@/lib/query/keys"
 import { getShareAutoRun } from "@/lib/settings"
@@ -34,8 +35,16 @@ export default async function SettingsPage() {
   // (filtered) list arrived — RULES.md forbids that.
   const queryClient = getQueryClient()
   await queryClient.prefetchQuery({
-    queryKey: settingKeys.extractionChain(),
-    queryFn: () => resolveChain(session.user.id),
+    queryKey: settingKeys.chains(),
+    queryFn: async () =>
+      Object.fromEntries(
+        await Promise.all(
+          CHAT_STAGE_IDS.map(
+            async (stage) =>
+              [stage, await resolveChain(session.user.id, stage)] as const,
+          ),
+        ),
+      ),
   })
   await queryClient.prefetchQuery({
     queryKey: settingKeys.shareAutoRun(),
@@ -61,7 +70,7 @@ export default async function SettingsPage() {
             }}
           />
           <HydrationBoundary state={dehydrate(queryClient)}>
-            <ExtractionChainCard />
+            <StagePriorityCard />
             <ShareCard />
           </HydrationBoundary>
           <SecurityCard hasPassword={hasPassword} />

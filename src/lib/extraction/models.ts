@@ -194,20 +194,32 @@ export function rankModels(
   models: CatalogModel[],
   provider: ChatProvider,
   task: ChatTask,
-  /**
-   * Only models advertising image input. Not a soft preference: a text-only
-   * model handed a contact sheet either errors or, worse, answers
-   * confidently about an image it never received.
-   */
+  /** The stage needs image input (src/lib/extraction/stages.ts). */
   requireVision = false,
 ): CatalogModel[] {
   const capabilitiesPublished = models.some(
     (model) => model.contextLength > 0 || model.json,
   )
 
+  /**
+   * Whether this catalog says ANYTHING about modalities. `vision` is
+   * derived from `input_modalities`, and Gemini and Ollama Cloud publish
+   * none at all — measured 2026-09-04: 56 Gemini models and 19 Ollama
+   * Cloud models, zero vision flags between them, though both plainly
+   * serve models that read images.
+   *
+   * So a false flag in such a catalog means UNKNOWN, not "cannot", and
+   * excluding on it left the frames stage with "none eligible" for both
+   * providers. Same waiver `capabilitiesPublished` already applies to
+   * context and JSON: trust a catalog that reports, do not punish one that
+   * stays silent. A model that really cannot take an image answers 400,
+   * which `disposition` turns into the next candidate's turn.
+   */
+  const modalitiesPublished = models.some((model) => model.vision)
+
   const eligible = models.filter((model) => {
     if (NOT_A_CHAT_MODEL.test(model.id)) return false
-    if (requireVision && !model.vision) return false
+    if (requireVision && modalitiesPublished && !model.vision) return false
     if (provider.freeOnly && !model.free) return false
     if (!capabilitiesPublished) return true
     if (model.contextLength > 0 && model.contextLength < provider.minContext) {
@@ -225,6 +237,11 @@ export function rankModels(
   const usable = (model: CatalogModel) => Math.min(model.contextLength, ceiling)
 
   return eligible.sort((a, b) => {
+    // A catalog that DOES report modalities ranks its image models first
+    // for a vision stage; one that reports none has nothing to sort on.
+    if (requireVision && modalitiesPublished && a.vision !== b.vision) {
+      return a.vision ? -1 : 1
+    }
     if (a.json !== b.json) return a.json ? -1 : 1
     if (a.structured !== b.structured) return a.structured ? -1 : 1
     if (usable(a) !== usable(b)) return usable(b) - usable(a)

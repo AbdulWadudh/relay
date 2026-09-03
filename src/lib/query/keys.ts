@@ -44,7 +44,9 @@ export const settingKeys = {
   all: ["settings"] as const,
   details: () => [...settingKeys.all, "detail"] as const,
   detail: (key: string) => [...settingKeys.details(), key] as const,
-  extractionChain: () => [...settingKeys.detail("extraction-chain")] as const,
+  chains: () => [...settingKeys.detail("chains")] as const,
+  stageModels: (stage: string) =>
+    [...settingKeys.detail("models"), stage] as const,
   shareAutoRun: () => [...settingKeys.detail("share-auto-run")] as const,
 }
 

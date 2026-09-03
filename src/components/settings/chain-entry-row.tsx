@@ -41,6 +41,8 @@ interface ChainEntryRowProps {
   style?: React.CSSProperties
   /** dnd-kit attributes + listeners, spread onto the row itself. */
   dragProps: React.HTMLAttributes<HTMLLIElement>
+  /** The model chip and picker, when this stage's catalog has loaded. */
+  model?: React.ReactNode
 }
 
 export const ChainEntryRow = React.forwardRef<
@@ -58,6 +60,7 @@ export const ChainEntryRow = React.forwardRef<
     isDragging,
     style,
     dragProps,
+    model,
   },
   ref,
 ) {
@@ -115,6 +118,8 @@ export const ChainEntryRow = React.forwardRef<
           explained is worse than a cramped one. "Tried first" is, because
           at 380px it squeezed the account name away and the top position
           already carries its meaning. */}
+      {model}
+
       {active ? (
         triedFirst ? (
           <span className="hidden shrink-0 rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground text-xs sm:inline-block">

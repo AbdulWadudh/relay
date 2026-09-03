@@ -2675,3 +2675,240 @@ caption rung missing. Nothing verified in a browser: the frames path was
 exercised through scripts against the live database, and the submit
 dialog's three-mode picker has only been typechecked — the app needs a
 login I do not have.
+
+## Per-stage AI priority (2026-09-04)
+
+One chain was not enough: the account that should answer a routing question
+is not necessarily the one that should read a contact sheet. `Settings ->
+AI priority` is now tabbed, one tab per pipeline step that makes its own
+model call, each with its own flat account order.
+
+FOUR steps, and the fourth is not the one that was asked for.
+`evidence_contract` looked like a stage but is a PROMPT concatenated into
+the extraction system prompt (src/lib/extraction/index.ts:70) — there is no
+independent call to point a provider at, so it has no tab. The frames stage
+took its place: that one IS a real call and needs image-capable models, so
+ordering it separately actually changes behaviour.
+
+```
+extraction           extraction/index.ts        task extraction
+agent_router         extraction/route.ts        task synthesis
+schema_synthesizer   extraction/synthesize.ts   task synthesis
+frames               vision/screen-text.ts      task extraction, vision
+```
+
+`src/lib/extraction/stages.ts` is the registry — plain data, so the tabs
+render from it and adding a step is one entry plus a `stage:` at the new
+call site. `runChat` takes `stage` instead of `task` now and derives the
+task through `taskForStage`, so a stage cannot be added without deciding
+how the ranker should weigh its context.
+
+`user_settings.credential_chain` went from `string[]` to
+`{ [stage]: string[] }`. A stored BARE ARRAY is still read and expands to
+every stage alike, which is what carries the order set before stages
+existed — verified against the live database: writing one stage left the
+other three on the previous order and the stored map came back with all
+four keys.
+
+A stage nobody has ordered falls back to the same DEFAULT as the rest, not
+to another stage's order. Inheriting extraction's would mean curating
+extraction silently reordered the router.
+
+`orderForProvider` became `orderCredentials` and lost its `provider`
+argument: it matches ids against the chain and its callers already scope
+rows to one provider, so the parameter was dead. Those callers are not chat
+stages at all — the Notion Ray, transcription, a session jar — so they read
+the EXTRACTION chain as the general preference, since that is the order a
+user actually curates.
+
+### Still open
+
+Captions remain unfetched (`auto` is speech -> frames). Nothing here has
+been seen in a browser: the resolution was verified with scripts against
+the live database, and the tabbed card is typecheck-and-lint clean only,
+because the app needs a login I do not have.
+
+## Model visibility and pinning (2026-09-04)
+
+"I should have the option to select the models — currently there's no way
+to know which one it uses." Both halves now exist: each row in
+`Settings -> AI priority` shows the model that account WOULD use, and
+clicking it lists the alternatives.
+
+`src/lib/extraction/model-choice.ts` answers both from the provider's own
+live catalog, ranked by the SAME `rankModels` the pipeline runs — so what
+Settings shows is what a run picks, not a parallel guess. A pin lives in
+`user_settings.stage_models` as `{ [stage]: { [entryId]: modelId } }`.
+
+This does NOT contradict the no-hardcoded-model-ids decision of
+2026-09-01. That forbids the CODEBASE naming models; the list here is
+still discovered, and a pin is one user's preference expressed against it.
+
+A pin is moved to the FRONT of the ranked list, not substituted for it: it
+says which model to prefer, not that the run should fail when that one is
+withdrawn or rate-limited. A pin the catalog no longer lists is ignored
+outright, and `stageModels` reports the ranker's choice instead of a model
+that no longer exists.
+
+Fetched per stage, not all four at once: answering costs one catalog read
+per account (nearly always a cache hit — a day in `model_catalog`, Redis
+in front), so only the open tab pays.
+
+### What it revealed
+
+Measured against the live accounts:
+
+```
+extraction   groq          openai/gpt-oss-120b                        6 eligible
+             ollama-cloud  mistral-large-3:675b                      19
+             openrouter    nvidia/nemotron-3-super-120b-a12b:free    11
+             gemini        models/gemma-4-31b-it                     39
+frames       groq          qwen/qwen3.6-27b                           2
+             ollama-cloud  —                                          0
+             openrouter    dots-studio/dots-3-note-preview:free       7
+             gemini        —                                          0
+```
+
+**Gemini and Ollama Cloud have ZERO vision-eligible models**, so the
+frames chain skips both. Not because they cannot read images — Gemini
+plainly can — but because `vision` is derived from
+`input_modalities.includes("image")` (models.ts) and neither catalog
+publishes modalities at all. Gemini's registry entry already compensates
+for that silence with a `capabilities` fallback, and that fallback has no
+`vision` field to set.
+
+So the frames stage currently runs on OpenRouter's free pool or Groq's two
+vision models, and the cheapest good option is excluded by a missing flag
+rather than by a measurement. Adding `vision` to `ChatProvider.capabilities`
+would fix it, but it is a CLAIM about every model that provider serves, so
+it wants deciding rather than assuming.
+
+### Mobile tabs
+
+Four full labels do not fit one phone row. `flex-wrap` was worse than
+truncation: whichever tab was orphaned onto the second line kept `flex-1`
+and stretched to full width. The registry carries a `short` label
+("Extract", "Router", "Schema", "Frames") shown below `sm` instead, so
+there is one row at every width.
+
+## Vision and the silent catalog (2026-09-04)
+
+Gemini and Ollama Cloud both showed "none eligible" for the frames stage,
+which was wrong — both serve models that read images. Measured against
+live keys: 56 Gemini models and 19 Ollama Cloud models, and **zero vision
+flags between them**. Neither catalog publishes `input_modalities` at all,
+and `CatalogModel.vision` is derived from exactly that.
+
+So a false flag in such a catalog means UNKNOWN, not "cannot". `rankModels`
+now waives the vision filter when NO model in a catalog reports modalities
+— the same waiver `capabilitiesPublished` already applies to context and
+JSON: trust a catalog that reports, do not punish one that stays silent. A
+model that genuinely cannot take an image answers 400, which `disposition`
+already turns into the next candidate's turn.
+
+A name pattern was the other option and was rejected: it works for Gemini,
+whose families are documented, but Ollama Cloud's ids carry no signal at
+all (`glm-5.3-flash`, `kimi-k3`, `minimax-m2.7`, `deepseek-v4-pro`), so it
+would have been guesswork dressed as a rule. Where a catalog DOES report
+modalities the flag is still trusted and image models sort first — Groq
+correctly stays at 2 eligible for frames while the other two open up.
+
+```
+frames   before                    after
+groq      2 eligible                2 eligible   (publishes modalities)
+gemini    0 — "none eligible"      39, gemma-4-31b-it
+ollama    0 — "none eligible"      19, mistral-large-3:675b
+openrouter 7                        7
+```
+
+## Free-tier models learn themselves (2026-09-04)
+
+Ollama Cloud gates by PLAN, publishes no pricing, and serves six models
+free. Ranking is by capability, so measured against a live key its 19
+eligible models came back:
+
+```
+ 1. mistral-large-3:675b  paid   <= tried
+ 2. qwen3.5:397b          paid   <= tried
+ 3. gpt-oss:120b          FREE   <= tried
+ 4. gemma4:31b            FREE   <= tried
+ ... 8 more paid before the next free one
+```
+
+`MAX_CANDIDATES` is 4, so every visit burned two 402s to reach something
+usable — and two more big paid releases would have pushed the free models
+out of the window entirely, failing a provider that has six.
+
+`src/lib/extraction/paid-models.ts` remembers a 402 against the catalog
+snapshot (`model_catalog.additional_data.paid_models`) and `catalogFor`
+applies it as a VIEW over the cached models. NO MODEL ID IS WRITTEN DOWN:
+the provider teaches us its own free set by refusing the rest, so a plan
+upgrade or a pricing change needs no code edit — the record dies with the
+snapshot, and a rotated key re-learns.
+
+The filter is applied at ONE boundary. `catalogFor` now wraps `resolve`,
+which has four return points (Redis, the row, a fresh fetch, a stale
+fallback); filtering at each was a hole waiting for the next edit.
+
+Not currently reached in practice: recent runs land on
+`groq / openai/gpt-oss-120b` with `skipped_models: []`, so Ollama Cloud is
+only visited when Groq rate-limits.
+
+### Still open
+
+An image rejection is NOT remembered the way a 402 is. A 400 on a vision
+stage could be about the schema rather than the image, so conflating them
+would blacklist working models — which means Ollama Cloud may re-burn
+candidates on non-vision models each frames run until something answers.
+
+## Which model failed, and the whole-run log (2026-09-04)
+
+"Will logs show if the stage failed due to which model?" No, they would
+not have. Three separate reasons, all fixed:
+
+**Nothing logged a per-model failure at all.** `attemptKey` pushed each
+passed-over candidate into an in-memory `skipped` array and logged
+nothing. Only `chat.ts` logged, and only on a rate limit, and only
+`candidates_tried: <count>` — a number, not an id. There is now a
+`Model passed over` warning per candidate carrying provider, model,
+status, disposition and the reason.
+
+**The trail was discarded on failure.** `runChat` threw `lastError`, and
+`skipped` was a local that died with the frame — so a failed stage
+recorded only the last provider's last complaint. `ChatExhaustedError`
+carries the whole trail, `exhausted()` logs it once as `tried`, and
+`triedModelsOf` puts it on the run as `additional_data.tried_models`.
+
+**Only extraction ever persisted it, and only on success.** `route.ts`,
+`synthesize.ts` and `screen-text.ts` never collected `run.skipped`.
+
+A mistake worth recording: I first threaded a `runId` through `runChat`
+and all four call sites so the lines could be attributed. That was
+unnecessary — pipeline.ts wraps the whole job in `withRunContext` and
+pino's `mixin` reads that AsyncLocalStorage per line, which is why "no
+logging call in the pipeline had to change to get it". Reverted. The new
+fields use `chat_stage`, NOT `stage`: the mixin already puts the PIPELINE
+stage there, and overwriting it would have cost the run detail view its
+per-stage grouping.
+
+### The full log panel
+
+`Run detail -> Full log` shows every line in order. The stage rail answers
+"what did this step say"; this answers "what happened, in order".
+
+It also shows lines the rail structurally COULD NOT. The rail buckets on
+`line.stage` and renders only the five `PIPELINE_STAGES`, so anything
+logged with `stage: ""` — outside a stage — or under a stage it does not
+draw was fetched, bucketed, and silently dropped. Those rows now appear
+with a "—" stage.
+
+No new endpoint and no extra traffic: `/runs/:id/logs` already returned
+every line for the run, and both views share one query key. The line
+renderer moved to `run-log-lines.tsx` so a timestamp or level colour
+cannot differ depending on which panel you opened. Filtering is a severity
+FLOOR (All / warn+ / error+), because "warnings and worse" is the question
+an operator actually asks.
+
+### Still open
+
+Captions. And an image rejection is still not remembered the way a 402 is.

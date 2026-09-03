@@ -15,6 +15,7 @@ import {
   processingFacts,
   sourceFacts,
 } from "@/components/queue/run-facts"
+import { RunLogStream } from "@/components/queue/run-log-stream"
 import { RunModels } from "@/components/queue/run-models"
 import { RunRawData } from "@/components/queue/run-raw-data"
 import { RunStageTimeline } from "@/components/queue/run-stage-timeline"
@@ -123,6 +124,13 @@ export function RunDetail({ runId }: { runId: string }) {
             }
           />
         </div>
+      </Section>
+
+      {/* Separate from the rail on purpose: the rail answers "what did this
+          step say", this answers "what happened, in order" — and shows the
+          lines the rail's per-stage buckets structurally cannot. */}
+      <Section title="Full log">
+        <RunLogStream runId={runId} status={run.status} />
       </Section>
 
       {published?.url ? (

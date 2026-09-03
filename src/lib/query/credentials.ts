@@ -165,9 +165,9 @@ export function useSetCredentialActive() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
-      // Settings renders the same credential in the fallback chain, greyed
-      // when it is off, so that list is stale now too.
-      queryClient.invalidateQueries({ queryKey: settingKeys.extractionChain() })
+      // Settings renders the same credential in every stage's chain, greyed
+      // when it is off, so those lists are stale now too.
+      queryClient.invalidateQueries({ queryKey: settingKeys.chains() })
     },
   })
 }
