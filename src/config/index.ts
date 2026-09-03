@@ -74,7 +74,25 @@ export const config = {
     prefix: "{relay}",
     concurrency: Number(process.env.QUEUE_CONCURRENCY ?? 2),
     attempts: Number(process.env.QUEUE_ATTEMPTS ?? 2),
-    backoffMs: Number(process.env.QUEUE_BACKOFF_MS ?? 5000),
+    /**
+     * First retry delay, exponential from there.
+     *
+     * WAS 5000, which made the retryable classifications nearly worthless:
+     * the failures that earn a retry are a proxy blip, a degraded exit
+     * address, or a bot check (src/lib/media/classify.ts), and NONE of
+     * those resolve in five seconds. A retry that fast just reaches the
+     * same flagged address and spends the attempt budget to fail twice.
+     *
+     * Two minutes is sized for a blip -- a sidecar restart, a momentary
+     * challenge -- and deliberately NOT for a flagged exit, which lasts
+     * hours and is a rotation or a proxy change, not a retry (see
+     * EGRESS_PROXY.md 2a). No budget exists that outlasts that, so this
+     * does not pretend to.
+     *
+     * Costs nothing when nothing fails, and a run in backoff still reads
+     * as in-flight rather than failed.
+     */
+    backoffMs: Number(process.env.QUEUE_BACKOFF_MS ?? 120_000),
     healthPort: Number(process.env.QUEUE_HEALTH_PORT ?? 3001),
     perUserConcurrency: Number(process.env.QUEUE_PER_USER_CONCURRENCY ?? 1),
     userSlotTtlMs: Number(process.env.QUEUE_USER_SLOT_TTL_MS ?? 1_800_000),
@@ -133,6 +151,29 @@ export const config = {
      * — see `scrubProxy` in src/lib/media/download.ts.
      */
     proxyUrl: process.env.MEDIA_PROXY_URL ?? "",
+    /**
+     * Proof-of-origin token provider (yt-dlp's PO Token framework), served
+     * by the `bgutil-pot` sidecar in docker-compose.yml.
+     *
+     * WHY THIS EXISTS, and why it is NOT the same lever as `proxyUrl`.
+     * A bot check has two halves and the proxy only answers one of them.
+     * MEASURED 2026-09-04 on the production host, one Short, all six
+     * attempts, every one proxied:
+     *
+     *   signed out, 3 clients   every one "Sign in to confirm you're not a bot"
+     *   signed IN,  3 clients   past the challenge, then NO usable formats
+     *
+     * The second row is not an address problem -- it is the documented
+     * missing-PO-token symptom. The proxy changes WHERE a request comes
+     * from; this changes what it can PROVE about itself, and the signed-in
+     * path needs the second one.
+     *
+     * Empty disables it: no `--extractor-args` is passed and every
+     * invocation is byte-for-byte what shipped before, which is the
+     * rollback for the whole feature. An unreachable provider is also
+     * safe -- yt-dlp warns and fetches without a token.
+     */
+    potProviderUrl: process.env.MEDIA_POT_PROVIDER_URL ?? "",
     /**
      * Ordered `--extractor-args` fallbacks, keyed by media source id
      * (src/lib/media/sources.ts). Tried in sequence when a download fails

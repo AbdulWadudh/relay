@@ -4,6 +4,12 @@
 # the runtime this repo is developed against. `-slim` because the only OS
 # packages Relay needs are the media binaries installed explicitly below.
 ARG BUN_VERSION=1.3.1
+# yt-dlp's JavaScript runtime, and the PO token plugin. Both pinned for the
+# same reason the yt-dlp binary is: they change YouTube extraction
+# behaviour, so a floating tag would let a deploy that touched only app
+# code change how media is fetched.
+ARG DENO_VERSION=2.9.6
+ARG BGUTIL_VERSION=1.3.2
 
 # ---------------------------------------------------------------- deps ---
 # Dependencies on their own layer so editing source never re-runs install.
@@ -11,6 +17,11 @@ ARG BUN_VERSION=1.3.1
 # NODE_ENV is deliberately left unset: the build needs devDependencies
 # (tailwind, typescript) and the runtime needs drizzle-kit, which
 # `bun run db:migrate` invokes on container start.
+# Nothing but the `deno` binary at /deno. Used as a COPY source below --
+# a stage alias rather than `COPY --from=denoland/deno:bin-${DENO_VERSION}`,
+# because tag interpolation in a COPY source is not portable across builders.
+FROM denoland/deno:bin-${DENO_VERSION} AS deno
+
 FROM oven/bun:${BUN_VERSION}-slim AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
@@ -123,6 +134,26 @@ ENV NODE_ENV=production \
 # one. It was a stale extractor. When a 403 is widespread, A/B the version
 # BEFORE concluding anything about the source or the network.
 ARG YT_DLP_VERSION=2026.08.19
+# Re-declared so the global ARG is in this stage's scope.
+ARG BGUTIL_VERSION
+#
+# THE PO TOKEN PLUGIN, dropped in as a ZIP: yt-dlp loads a plugin package
+# straight out of an archive, so `/etc/yt-dlp/plugins/<pkg>.zip` containing
+# a `yt_dlp_plugins/` root is a documented plugin location and needs no
+# unzip in the image. VERIFIED in this exact base image before it was
+# written here -- yt-dlp reports:
+#   Plugin directories: /etc/yt-dlp/plugins/bgutil-ytdlp-pot-provider.zip/yt_dlp_plugins
+#   PO Token Providers: bgutil:http-1.3.2 (external)
+#
+# IT NEEDS NO INTERPRETER, which is the whole reason this is viable: the
+# plugin is pure Python and the standalone yt-dlp build bundles its own,
+# so Python stays out of the image (RUNBOOK.md 5) and the plugin still
+# loads. The plugin only TALKS to a provider; minting happens in the
+# `bgutil-pot` sidecar in docker-compose.yml.
+#
+# An unreachable provider is a WARNING, not an error -- yt-dlp carries on
+# without a token. So this degrades to exactly today's behaviour instead of
+# becoming a new way for every download to fail.
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
@@ -137,10 +168,30 @@ RUN set -eux; \
     curl -fsSL -o /usr/local/bin/yt-dlp \
       "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/${asset}"; \
     chmod +x /usr/local/bin/yt-dlp; \
+    mkdir -p /etc/yt-dlp/plugins; \
+    curl -fsSL -o /etc/yt-dlp/plugins/bgutil-ytdlp-pot-provider.zip \
+      "https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/download/${BGUTIL_VERSION}/bgutil-ytdlp-pot-provider.zip"; \
     yt-dlp --version; \
     ffmpeg -version | head -n 1; \
     apt-get purge -y --auto-remove curl; \
     rm -rf /var/lib/apt/lists/*
+
+# yt-dlp's JavaScript runtime.
+#
+# NOT optional any more, and not a nicety. yt-dlp 2026.08.19 warns:
+#   "YouTube extraction without a JS runtime has been deprecated, and some
+#    formats may be missing"
+# -- and MISSING FORMATS is precisely the "Requested format is not
+# available" shape that failed the signed-in half of the 2026-09-04 outage
+# on two clients. Measured in this image: without Deno the default chain
+# resolves through the visionos player API; with it, yt-dlp uses the web
+# client, mints a PO token, and returns the same media.
+#
+# A single static binary copied from the vendor's own `bin` image -- no
+# package manager, no interpreter, and nothing added to the runtime PATH
+# but this one file. Deno rather than Node because it is the runtime
+# yt-dlp enables by DEFAULT (`--js-runtimes` is otherwise required).
+COPY --from=deno /deno /usr/local/bin/deno
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next

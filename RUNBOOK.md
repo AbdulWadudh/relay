@@ -304,7 +304,35 @@ over 90 days old — treat that warning as the trigger.
 client on a client-shaped failure. It costs nothing when nothing fails;
 keep it, because which clients YouTube serves changes without notice.
 
-Python is deliberately **not** in the image. ffmpeg is.
+Python is deliberately **not** in the image. ffmpeg is. Two things were
+added 2026-09-04 and both change YouTube extraction, so check them before
+blaming the pin:
+
+**Deno** (`DENO_VERSION`), copied as a single static binary from the
+vendor's `bin` image. yt-dlp now warns `YouTube extraction without a JS
+runtime has been deprecated, and some formats may be missing` — and missing
+formats is exactly the `Requested format is not available` shape that
+failed the signed-in half of the 2026-09-04 outage. Confirm it is seen:
+
+```bash
+yt-dlp --verbose --simulate "<url>" 2>&1 | grep "JS runtimes"
+# expect: [debug] JS runtimes: deno-2.9.6
+```
+
+**The PO token plugin** (`BGUTIL_VERSION`), a zip in
+`/etc/yt-dlp/plugins/`. It only TALKS to the `bgutil-pot` sidecar; minting
+happens there. It is pure Python and the standalone yt-dlp build bundles
+its own interpreter, which is why this does not put Python back in the
+image. Confirm both halves:
+
+```bash
+yt-dlp --verbose --simulate "<url>" 2>&1 | grep -E "Plugin directories|PO Token Providers"
+# expect the zip path, and: bgutil:http-<version> (external)
+```
+
+A provider that is unreachable is a **warning**, not an error — yt-dlp
+fetches without a token. So `bgutil-pot` being down degrades ingestion, it
+does not stop it, and it is deliberately not a `depends_on`.
 
 ---
 

@@ -69,6 +69,16 @@ x-app-env: &app-env
   # block by design (see above), so it is defined here rather than on one
   # service -- a split would be a runtime-only bug the moment ingest moved.
   MEDIA_PROXY_URL: ${MEDIA_PROXY_URL-socks5://warp:1080}
+  # Proof-of-origin token provider for YouTube, `bgutil-pot` below.
+  #
+  # Same shape as MEDIA_PROXY_URL on purpose: a service name that resolves
+  # for free on the app network, overridable, and CLEARABLE. Set it to ""
+  # and no `--extractor-args` is passed at all, which is byte-for-byte the
+  # invocation that shipped before -- the rollback for the whole feature.
+  #
+  # Not a hard dependency in either direction: if this is unreachable
+  # yt-dlp logs a warning and fetches without a token.
+  MEDIA_POT_PROVIDER_URL: ${MEDIA_POT_PROVIDER_URL-http://bgutil-pot:4416}
 
 services:
   relay:
@@ -266,6 +276,54 @@ services:
     # No secret of ours is in here: there is no account and no license key.
     volumes:
       - warp_data:/var/lib/cloudflare-warp
+
+  # Mints proof-of-origin tokens for YouTube, which yt-dlp attaches via the
+  # plugin baked into the image (see the Dockerfile). This is the OTHER
+  # half of the bot-check problem: the WARP sidecar above changes WHERE the
+  # request comes from, this changes what the request can PROVE about
+  # itself. Measured 2026-09-04 -- signed out every client returned "not a
+  # bot"; signed IN they got past the challenge and were served no usable
+  # formats, which is the documented missing-PO-token symptom.
+  #
+  # NO `ports:`, and here that is sharper than it is for `warp`. This image
+  # binds ALL interfaces by default (it logs `[::]:4416`; the `--host` flag
+  # in upstream's README does not exist in this release and makes the
+  # container exit 1 if passed). Publishing 4416 on a public VPS would hand
+  # anyone who scans the host a free token minter running under this
+  # server's identity. `expose` documents the port without opening it.
+  #
+  # Pinned like every other sidecar: this participates in YouTube
+  # extraction, so a floating tag could change fetch behaviour under a
+  # deploy that only touched app code.
+  #
+  # KNOWN UNKNOWN, written down rather than guessed at: this mints from the
+  # container's OWN egress, which is direct, while the fetch it serves goes
+  # out through `warp`. Tokens are content-bound (video ID / visitor data)
+  # rather than IP-bound, so this is the upstream-documented deployment --
+  # but if tokens ever stop helping, sharing warp's network namespace is
+  # the next thing to try, not the first.
+  bgutil-pot:
+    image: brainicism/bgutil-ytdlp-pot-provider:1.3.2
+    restart: unless-stopped
+    # The server is PID 1 in a Node image and spawns helpers; without an
+    # init it accumulates zombies across a long uptime.
+    init: true
+    expose:
+      - "4416"
+    # `node` is the only HTTP client in the image -- it ships no curl and no
+    # wget, so the usual curl probe would fail closed and mark a healthy
+    # container unhealthy forever. Verified against the running container.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4416/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging: *logging
 
 volumes:
   relay_data:

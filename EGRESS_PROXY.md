@@ -132,6 +132,20 @@ docker volume rm "$(docker volume ls -q | grep warp_data)"
 docker compose up -d warp
 ```
 
+If `registration delete` does not take, Cloudflare documents
+`warp-cli --accept-tos registration delete-all` as the stronger form.
+
+The client was renamed to **Cloudflare One Client** in 2026, but `warp-cli`
+and its subcommands are unchanged and Cloudflare's own release notes still
+use them. CHECKED 2026-09-04: the latest Linux client is 2026.7.1377.0 and
+the pinned image is built on that exact version, so there is no upgrade to
+be had here -- do not spend time bumping it when a fetch starts failing.
+
+Cloudflare's own permanent answer, **dedicated egress IPs** (static
+addresses no other customer shares), is an add-on to Zero Trust
+**Enterprise** and provisioned by an account team. Out of reach for this
+deployment; noted so it is not rediscovered as an option every outage.
+
 Record the `ip=` before and after — if it did not change, the delete did not
 take and there is no point testing a download.
 
@@ -250,6 +264,36 @@ Puts a canary password through five real yt-dlp failure shapes and a log
 record. 8 paths, expected 0 leaks. **Run this if you ever change
 `scrubProxy`, the logger's redaction list, or point `MEDIA_PROXY_URL` at an
 authenticated proxy.**
+
+---
+
+## 4a. The other half: proof-of-origin tokens
+
+A bot check has two halves, and the proxy only answers one. MEASURED
+2026-09-04 on the production host, one Short, all six attempts, **every one
+proxied**:
+
+| pass | clients | result |
+| --- | --- | --- |
+| signed out | default, web_embedded, mweb | every one `Sign in to confirm you're not a bot` |
+| signed **in** | default, web_embedded, mweb | past the challenge, then `page needs to be reloaded` / `Requested format is not available` |
+
+The second row is not an address problem. Those clients require a
+proof-of-origin token, and without one YouTube serves no usable formats —
+the documented symptom. **The proxy changes where a request comes from; a
+PO token changes what it can prove about itself.** The signed-in path needs
+the second one, which is why rotating the exit fixes the first row and
+leaves the second untouched.
+
+`bgutil-pot` in `docker-compose.yml` mints them; the plugin that consumes
+them is baked into the image (RUNBOOK.md §5); `MEDIA_POT_PROVIDER_URL`
+points one at the other. Verified end to end before it shipped — token
+minted cross-container, then the same 640,993-byte download on the default
+client.
+
+Upstream is explicit that a token **may** help and does not guarantee
+bypassing a bot check. It is not a substitute for §2a or for a residential
+proxy; it is the half of the problem those cannot reach.
 
 ---
 

@@ -53,6 +53,8 @@ export async function runYtDlp(
   // read as this attempt's output, so the file is cleared each time.
   await $`rm -f ${pathFile}`.nothrow().quiet()
 
+  const potProvider = config.media.potProviderUrl
+
   // A newline inside a Bun `$` template is a command separator, so the
   // invocation stays one line and passes its arguments as an array — each
   // element is escaped into exactly one argv entry.
@@ -73,6 +75,20 @@ export async function runYtDlp(
     "after_move:%(filepath)s",
     pathFile,
     ...(extractorArgs ? ["--extractor-args", extractorArgs] : []),
+    // The proof-of-origin token provider, on EVERY invocation once it is
+    // configured -- the plugin decides when a token is actually needed,
+    // and for the clients that need one, not having it is the difference
+    // between formats and no formats.
+    //
+    // `--extractor-args` is repeatable, so this composes with the player
+    // client above rather than replacing it (verified: both are honoured
+    // in one invocation). The key is namespaced to the plugin, so it is
+    // inert for a source that is not YouTube -- which is why there is no
+    // platform check here, and this file still names no platform
+    // (RULES.md).
+    ...(potProvider
+      ? ["--extractor-args", `youtubepot-bgutilhttp:base_url=${potProvider}`]
+      : []),
     // Read-write: yt-dlp writes the rotated jar back here on exit, which
     // src/lib/media/cookies.ts persists.
     ...(cookiesPath ? ["--cookies", cookiesPath] : []),
