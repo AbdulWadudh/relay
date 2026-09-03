@@ -17,7 +17,7 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["productivity", "utilities"],
     display: "standalone",
     scope: "/",
-    start_url: "/runs",
+    start_url: config.app.homePath,
     background_color: "#09090b",
     theme_color: "#09090b",
     icons: [

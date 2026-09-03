@@ -15,6 +15,7 @@ import * as React from "react"
 import { ModePicker } from "@/components/queue/analysis-mode-picker"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import config from "@/config"
 import { authClient } from "@/lib/auth-client"
 import type { AnalysisMode } from "@/lib/db/schema"
 import { useCreateRun } from "@/lib/query/runs"
@@ -222,7 +223,7 @@ export function ShareTarget({
         <Button
           variant="outline"
           nativeButton={false}
-          render={<Link href="/runs" />}
+          render={<Link href={config.app.homePath} />}
           className="transition-all duration-200 hover:-translate-y-px"
         >
           Not now

@@ -15,6 +15,14 @@ export const config = {
       "Self-hosted bridge from short-form video to structured markdown pages — evidence-grounded extraction, BYOK, local media processing.",
     version: "0.1.0",
     baseUrl: BASE_URL,
+    /**
+     * Where a signed-in user lands, and where every "home" affordance
+     * points: the logo, the login redirect, the PWA start_url, the
+     * landing page's CTA. Moved from /runs to /dashboard — human decision
+     * 2026-09-04 (it was /vault before /runs, so this has moved twice;
+     * hence a config value rather than a literal in eight files).
+     */
+    homePath: "/dashboard",
   },
   server: {
     port: PORT,

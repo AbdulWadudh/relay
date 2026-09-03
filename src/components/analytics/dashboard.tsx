@@ -52,11 +52,10 @@ export function Dashboard() {
           so is every other page. */}
       <ShellContent fill className="px-2 sm:px-8">
         <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4">
-          {/* Hidden on phone AND tablet, where scrolling is a touch
+          {/* No track on phone or tablet, where scrolling is a touch
               gesture and a persistent 10px bar is just a stripe down the
-              edge. `lg` is the cut, not `sm`: a tablet in portrait is
-              ~820px and is still a touch device. It returns from `lg` up,
-              where a pointer user wants the position cue. */}
+              edge — but it comes BACK from `lg` up, where a pointer user
+              wants the position cue (human decision 2026-09-04). */}
           <ScrollPanel
             bordered={false}
             className="[&_[data-slot=scroll-area-scrollbar]]:hidden lg:[&_[data-slot=scroll-area-scrollbar]]:flex"

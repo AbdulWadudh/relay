@@ -62,7 +62,7 @@ export function LandingPage({ isAuthenticated }: { isAuthenticated: boolean }) {
   const pageRef = useRef<HTMLElement>(null)
   const storyRef = useRef<HTMLElement>(null)
   const [activeStory, setActiveStory] = useState(0)
-  const appHref = isAuthenticated ? "/runs" : "/login"
+  const appHref = isAuthenticated ? config.app.homePath : "/login"
 
   useGSAP(() => {
     const context = gsap.context(() => {

@@ -116,7 +116,7 @@ export function AppSidebar({
               size="lg"
               className="group/logo transition-colors duration-200 hover:bg-muted"
               onClick={closeOnMobile}
-              render={<Link href="/runs" />}
+              render={<Link href={config.app.homePath} />}
             >
               <Image
                 src={config.assets.logo}
@@ -138,7 +138,11 @@ export function AppSidebar({
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
+      {/* The icon rail must scroll too. SidebarContent ships
+          `group-data-[collapsible=icon]:overflow-hidden`, so in landscape
+          on a phone — ~390px tall — the last nav icons were simply
+          unreachable. `no-scrollbar` keeps the track invisible. */}
+      <SidebarContent className="group-data-[collapsible=icon]:overflow-auto">
         <SidebarGroup>
           <SidebarMenu className="gap-2">
             {NAV.map((item) => {

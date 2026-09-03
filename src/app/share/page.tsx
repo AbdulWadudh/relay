@@ -51,7 +51,7 @@ export default async function SharePage({
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-8 bg-background px-5 py-10">
       <Link
-        href="/runs"
+        href={config.app.homePath}
         className="font-heading font-semibold text-lg tracking-wide"
       >
         {config.app.name}

@@ -13,6 +13,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* `no-scrollbar` was REFERENCED by src/components/ui/sidebar.tsx and
+   defined nowhere — not here, not in shadcn/tailwind.css — so it was a
+   no-op and the sidebar showed a bar whenever it scrolled. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);

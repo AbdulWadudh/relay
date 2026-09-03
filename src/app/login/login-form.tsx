@@ -6,6 +6,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import config from "@/config"
 import { authClient } from "@/lib/auth-client"
 
 export default function LoginForm() {
@@ -30,7 +31,7 @@ export default function LoginForm() {
       setError(result.error.message ?? "Unable to authenticate")
       return
     }
-    router.push("/runs")
+    router.push(config.app.homePath)
     router.refresh()
   }
 
@@ -39,7 +40,7 @@ export default function LoginForm() {
     setPending(true)
     const result = await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/runs",
+      callbackURL: config.app.homePath,
     })
     if (result.error) {
       setPending(false)

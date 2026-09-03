@@ -4,8 +4,8 @@ import { Alert02Icon } from "@hugeicons/core-free-icons"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
+import config from "@/config"
 import { relayProcessSchema } from "@/lib/schemas"
-
 import type { ShareResolution } from "./resolve-share"
 import { SharePanel } from "./share-panel"
 
@@ -35,7 +35,7 @@ export function ShareRejected({ resolution }: { resolution: ShareResolution }) {
     >
       <Button
         nativeButton={false}
-        render={<Link href="/runs" />}
+        render={<Link href={config.app.homePath} />}
         className="transition-all duration-200 hover:-translate-y-px"
       >
         Open Relay

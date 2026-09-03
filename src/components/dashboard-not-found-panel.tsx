@@ -4,6 +4,7 @@ import Link from "next/link"
 
 import { ShellContent, ShellHeader } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
+import config from "@/config"
 
 /**
  * Shared by `(dashboard)/not-found.tsx` (generic fallback) and the
@@ -61,9 +62,9 @@ export function DashboardNotFoundPanel({ title }: { title: string }) {
               size="lg"
               nativeButton={false}
               className="transition-all duration-200 hover:-translate-y-px"
-              render={<Link href="/runs" />}
+              render={<Link href={config.app.homePath} />}
             >
-              Back to your vault
+              Back to the dashboard
             </Button>
           </div>
           <p

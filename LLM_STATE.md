@@ -3464,3 +3464,51 @@ was left alone.
     horizontal overflow   0 elements
     tables overflowing X  0 of 8, with every table view open
     row disclosure        opens, and carries the folded values
+
+## /dashboard is home, and the scrollbars (2026-09-04)
+
+`config.app.homePath` is the single definition of "where a signed-in user
+lands", now `/dashboard`. It is a config value rather than a literal
+because it has moved twice (`/vault` -> `/runs` -> `/dashboard`) and was
+spread across eight files: the sidebar logo, the login `router.push` AND
+its `callbackURL`, the PWA `start_url`, the landing page CTA, the share
+sheet's wordmark, "Open Relay", "Not now", and the 404 panel.
+
+A link to the runs LIST is not home and stays `/runs`: the sidebar's Runs
+nav item, the pager, the run-detail back button, and the share sheet's
+"All runs".
+
+### Two label/href mismatches found while doing it
+
+- `nav-user.tsx` had a menu item captioned "Credential vault", with the
+  vault icon, linking to `/runs`. Now `/vault`.
+- `dashboard-not-found-panel.tsx` had a button captioned "Back to your
+  vault" linking to `/runs`. It is a go-home button, so it takes
+  `homePath` and now says "Back to the dashboard".
+
+Neither was introduced here; both were pre-existing.
+
+### `no-scrollbar` was a dead class
+
+`src/components/ui/sidebar.tsx` has applied `no-scrollbar` to
+SidebarContent all along, and it was **defined nowhere** — not in
+globals.css, not in shadcn/tailwind.css. So the sidebar showed a track
+whenever it scrolled. Now a real `@utility` in globals.css.
+
+### The icon rail could not scroll at all
+
+SidebarContent ships `group-data-[collapsible=icon]:overflow-hidden`, and
+the rail IS icon-collapsed. In landscape on a phone (932x430) the content
+is 288px inside a 270px box, so the last nav icons were simply
+unreachable. Overridden to `overflow-auto`; measured scrolling 0 -> 136px
+with the track hidden.
+
+### Dashboard scrollbar: hidden below `lg`, visible above
+
+Briefly hidden at every width, then restored for desktop on request. `lg`
+is the cut — a tablet in portrait is ~820px and still a touch device,
+while a pointer user wants the position cue. The panel scrolls by wheel,
+touch and keyboard either way; only the track is conditional.
+
+Verified 932x430 (landscape phone): dashboard track hidden, rail scrolls.
+1346px: dashboard track visible, logo href `/dashboard`.
