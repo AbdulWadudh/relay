@@ -8,6 +8,11 @@ import {
   ensureGuidesTarget,
   NotionGuidesError,
 } from "@/lib/render/notion-guides"
+import {
+  buildProperties,
+  ensureAgentColumn,
+  type PropertySchema,
+} from "@/lib/render/notion-properties"
 import { getAccessToken } from "@/lib/vault"
 
 /**
@@ -44,63 +49,6 @@ export class NoNotionRayError extends Error {
 /** Notion caps how many blocks one request may carry. */
 const MAX_BLOCKS_PER_REQUEST = 100
 
-type PropertySchema = Record<string, { type: string }>
-
-/**
- * Fills a property only if the data source actually has it, matching the
- * type it was created with. The user's own table uses Notion's `status`
- * type — which the API can SET but cannot CREATE — so a table Relay made
- * itself has a `select` in the same place, and both are handled.
- */
-function buildProperties(
-  schema: PropertySchema,
-  values: { title: string; summary: string; sourceUrl: string; date: string },
-): Record<string, unknown> {
-  const properties: Record<string, unknown> = {}
-
-  for (const [name, definition] of Object.entries(schema)) {
-    const key = name.trim().toLowerCase()
-    switch (definition.type) {
-      case "title":
-        properties[name] = {
-          title: [
-            { type: "text", text: { content: values.title.slice(0, 200) } },
-          ],
-        }
-        break
-      case "rich_text":
-        if (key.includes("summary") || key.includes("description")) {
-          properties[name] = {
-            rich_text: [
-              {
-                type: "text",
-                text: { content: values.summary.slice(0, 1900) },
-              },
-            ],
-          }
-        }
-        break
-      case "url":
-        properties[name] = { url: values.sourceUrl }
-        break
-      case "date":
-        properties[name] = { date: { start: values.date } }
-        break
-      case "status":
-        properties[name] = { status: { name: "New" } }
-        break
-      case "select":
-        if (key.includes("status")) {
-          properties[name] = { select: { name: "New" } }
-        }
-        break
-      default:
-        break
-    }
-  }
-  return properties
-}
-
 export interface PublishResult {
   pageId: string
   url: string
@@ -116,9 +64,18 @@ export async function publishToNotion(options: {
   emoji: string
   summary: string
   sourceUrl: string
+  agentName: string
 }): Promise<PublishResult> {
-  const { userId, runId, document, category, emoji, summary, sourceUrl } =
-    options
+  const {
+    userId,
+    runId,
+    document,
+    category,
+    emoji,
+    summary,
+    sourceUrl,
+    agentName,
+  } = options
   const token = await getAccessToken("notion", userId)
   if (!token) throw new NoNotionRayError()
 
@@ -126,9 +83,13 @@ export async function publishToNotion(options: {
 
   try {
     const target = await ensureGuidesTarget(notion, category, emoji)
-    const source = (await notion.dataSources.retrieve({
-      data_source_id: target.entriesDataSourceId,
-    })) as unknown as { properties: PropertySchema }
+    let schema = (
+      (await notion.dataSources.retrieve({
+        data_source_id: target.entriesDataSourceId,
+      })) as unknown as { properties: PropertySchema }
+    ).properties
+
+    schema = await ensureAgentColumn(notion, target.entriesDataSourceId, schema)
 
     const blocks = toNotionBlocks(document)
     const page = await notion.pages.create({
@@ -137,11 +98,12 @@ export async function publishToNotion(options: {
         data_source_id: target.entriesDataSourceId,
       },
       icon: { type: "emoji", emoji: emoji as never },
-      properties: buildProperties(source.properties, {
+      properties: buildProperties(schema, {
         title: document.title,
         summary,
         sourceUrl,
         date: new Date().toISOString().slice(0, 10),
+        agentName,
       }) as never,
       children: blocks.slice(0, MAX_BLOCKS_PER_REQUEST) as never,
     })

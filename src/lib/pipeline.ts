@@ -217,6 +217,20 @@ async function runPipeline(runId: string): Promise<void> {
           category: extraction.routing.category,
           emoji: extraction.routing.emoji,
           verification,
+          // Only the two streams that exist. Whisper returns native
+          // script and `toRomanScript` transliterates in place, so there
+          // is no separate original-script text to publish -- `roman` IS
+          // the verbatim record, in Latin script.
+          transcripts: [
+            {
+              label: "Transcript — original (Roman script)",
+              text: transcription.roman.text,
+            },
+            {
+              label: "Transcript — English translation",
+              text: transcription.english.text,
+            },
+          ],
         })
       },
     )

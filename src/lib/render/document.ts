@@ -23,6 +23,12 @@ export type DocNode =
   | { type: "bullet"; text: string }
   | { type: "step"; text: string; note: string | null }
   | { type: "caption"; text: string }
+  /**
+   * Collapsed by default. `body` is already split into paragraph-sized
+   * pieces by the caller, because the split depends on the destination's
+   * per-block text limit rather than on anything about the document.
+   */
+  | { type: "toggle"; text: string; body: string[] }
 
 export interface RelayDocument {
   title: string
@@ -113,13 +119,64 @@ function sectionFor(field: ExtractedField): DocNode[] {
   return blocks
 }
 
+/**
+ * How much of one transcript reaches the page.
+ *
+ * A cap, not a formatting choice: a long clip can produce tens of
+ * thousands of characters, and every paragraph is a separate Notion block
+ * counted against the per-request limit. 24 paragraphs at
+ * `TRANSCRIPT_CHUNK` is ~40k characters, which is far more than any Short
+ * produces and still leaves room for the actual content blocks.
+ */
+const TRANSCRIPT_MAX_CHUNKS = 24
+/** Notion rejects a rich-text run over 2000; kept under it with headroom. */
+const TRANSCRIPT_CHUNK = 1800
+
+/**
+ * Splits a transcript on WORD boundaries, never mid-word. These are
+ * phonetic transliterations, so a broken word is unreadable rather than
+ * merely ugly — and indistinguishable from a mistranscription.
+ */
+function chunkText(text: string): string[] {
+  const clean = text.trim().replace(/\s+/g, " ")
+  if (clean.length === 0) return []
+
+  const chunks: string[] = []
+  let rest = clean
+  while (rest.length > 0 && chunks.length < TRANSCRIPT_MAX_CHUNKS) {
+    if (rest.length <= TRANSCRIPT_CHUNK) {
+      chunks.push(rest)
+      break
+    }
+    const window = rest.slice(0, TRANSCRIPT_CHUNK)
+    const cut = window.lastIndexOf(" ")
+    const take = cut > TRANSCRIPT_CHUNK * 0.6 ? cut : TRANSCRIPT_CHUNK
+    chunks.push(rest.slice(0, take).trim())
+    rest = rest.slice(take).trim()
+  }
+  // Says so rather than trailing off, so a truncated transcript is never
+  // mistaken for the whole thing.
+  if (rest.length > 0 && chunks.length === TRANSCRIPT_MAX_CHUNKS) {
+    chunks.push(
+      "[Transcript truncated — the full text is on the run in Relay.]",
+    )
+  }
+  return chunks
+}
+
 export function buildDocument(options: {
   title: string
   extraction: Record<string, unknown>
   sourceUrl: string
   agentName: string
+  /**
+   * Appended last, each in its own collapsed toggle. Empty or absent
+   * streams are skipped, so a clip with no translation gets one toggle
+   * rather than an empty heading.
+   */
+  transcripts?: readonly { label: string; text: string }[]
 }): RelayDocument {
-  const { title, extraction, sourceUrl, agentName } = options
+  const { title, extraction, sourceUrl, agentName, transcripts } = options
   const fields = readFields(extraction)
   const byKey = new Map(fields.map((f) => [f.key, f]))
   const used = new Set<string>()
@@ -179,6 +236,15 @@ export function buildDocument(options: {
     type: "caption",
     text: `Extracted by Relay from ${sourceUrl} using the ${agentName} agent.`,
   })
+
+  // LAST, and collapsed. The transcript is the evidence behind the page
+  // rather than the page itself: useful to check a claim against, but it
+  // would bury the extracted content if it were open or higher up.
+  for (const transcript of transcripts ?? []) {
+    const body = chunkText(transcript.text)
+    if (body.length === 0) continue
+    blocks.push({ type: "toggle", text: transcript.label, body })
+  }
 
   return { title: sentence(pageTitle), summary, blocks }
 }

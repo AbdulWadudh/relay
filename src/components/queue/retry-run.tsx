@@ -2,6 +2,7 @@
 
 import { RefreshIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -31,6 +32,14 @@ import type { RunSummary } from "@/lib/runs"
  * Offered only on a FINISHED run (`done` / `failed`). Retrying something
  * still in flight would not cancel it — it would just queue a duplicate of
  * work already running, and bill for it twice.
+ *
+ * NAVIGATION IS PER VARIANT, deliberately. From the DETAIL page you are
+ * looking at one run and asked for it again, so the new run is what you
+ * want to watch — staying put would leave you staring at a finished record
+ * while the interesting one runs elsewhere. From a TABLE ROW you are
+ * usually triaging several failures in sequence, and being pulled onto a
+ * detail page after each click would break that; there the toast is the
+ * whole feedback and the new row appears at the top of the list.
  */
 
 const TERMINAL: ReadonlySet<RunSummary["status"]> = new Set(["done", "failed"])
@@ -48,18 +57,25 @@ export function RetryRun({
   variant?: "icon" | "button"
 }) {
   const createRun = useCreateRun()
+  const router = useRouter()
 
   function retry() {
     if (createRun.isPending) return
     createRun.mutate(
       { url: run.sourceUrl, agentId: run.agentId ?? undefined },
       {
-        onSuccess: () =>
+        onSuccess: (created) => {
           toast.add({
             type: "success",
             title: "Run started again",
-            description: `A new run was queued for this ${run.sourceLabel}. The original stays in the list.`,
-          }),
+            description:
+              variant === "button"
+                ? `Showing the new run for this ${run.sourceLabel}. The original is untouched.`
+                : `A new run was queued for this ${run.sourceLabel}. It is at the top of the list.`,
+          })
+
+          if (variant === "button") router.push(`/runs/${created.id}`)
+        },
         onError: (error) =>
           toast.add({
             type: "error",

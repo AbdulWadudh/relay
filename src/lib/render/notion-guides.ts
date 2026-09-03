@@ -123,6 +123,10 @@ async function ensureEntriesDataSource(
       properties: {
         Name: { title: {} },
         Summary: { rich_text: {} },
+        // Which agent produced the page. `rich_text`, not `select`: a
+        // select would gain an option per agent name and the user could
+        // not rename one without orphaning the rows using it.
+        Agent: { rich_text: {} },
         "Source Link": { url: {} },
         Date: { date: {} },
         Status: {

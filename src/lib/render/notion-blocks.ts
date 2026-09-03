@@ -132,6 +132,29 @@ function toBlocks(node: DocNode): NotionBlock[] {
           },
         },
       ]
+    case "toggle":
+      // Notion's toggle is collapsed on creation and there is no property
+      // to change that, which is exactly the behaviour wanted here — the
+      // transcript is available without occupying the page.
+      //
+      // `body` arrives pre-split (see `chunkText`) because the limit being
+      // respected is Notion's per-run 2000 characters, and one paragraph
+      // per chunk is what keeps each run under it. Children nest one level
+      // deep, which the page-create call allows.
+      return [
+        {
+          object: "block",
+          type: "toggle",
+          toggle: {
+            rich_text: richText(node.text, { bold: true }),
+            children: node.body.map((paragraph) => ({
+              object: "block",
+              type: "paragraph",
+              paragraph: { rich_text: richText(paragraph) },
+            })),
+          },
+        },
+      ]
   }
 }
 

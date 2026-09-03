@@ -21,6 +21,14 @@ export async function publishRun(options: {
   category: string
   emoji: string
   verification: VerificationSummary
+  /**
+   * The transcript streams, appended to the page in collapsed toggles.
+   *
+   * Passed in rather than re-read from the run: the pipeline already holds
+   * them in memory at this point, and a second read would be a database
+   * round trip for text that never left the process.
+   */
+  transcripts?: readonly { label: string; text: string }[]
 }): Promise<void> {
   const {
     runId,
@@ -32,6 +40,7 @@ export async function publishRun(options: {
     category,
     emoji,
     verification,
+    transcripts,
   } = options
 
   const startedAt = performance.now()
@@ -40,6 +49,7 @@ export async function publishRun(options: {
     extraction,
     sourceUrl,
     agentName,
+    transcripts,
   })
 
   const published = await publishToNotion({
@@ -51,6 +61,7 @@ export async function publishRun(options: {
     // The lead paragraph doubles as the database row's Summary column.
     summary: document.summary ?? document.title,
     sourceUrl,
+    agentName,
   })
   const publishMs = Math.round(performance.now() - startedAt)
 

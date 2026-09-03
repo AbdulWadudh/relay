@@ -1525,3 +1525,66 @@ and motion there hinders; only the disclosure itself and its chevron
 animate. Timestamps use a module-scope `Intl.DateTimeFormat` (not a hand
 rolled pad, and not a new dependency) because a panel can hold 500 rows and
 re-renders every poll while a run is live.
+
+## Notion: transcripts and the Agent column (2026-09-03) — DONE
+
+Two additions to the published page, both requested by the user.
+
+### Transcripts, last and collapsed
+
+The two transcript streams are appended to the page in Notion `toggle`
+blocks, which are collapsed on creation and have no property to change
+that — exactly the behaviour wanted.
+
+Only TWO streams exist, and this is worth knowing before someone is asked
+for a third. Whisper returns the native script and `toRomanScript`
+transliterates IN PLACE, so `roman.text` IS the verbatim record, in Latin
+script. There is no separate native-script original retained anywhere.
+Publishing one would mean changing the transcription layer to keep it, not
+changing the renderer.
+
+Placed after the attribution caption, so the extracted content stays the
+page and the transcript reads as the evidence behind it.
+
+`chunkText` splits on WORD boundaries at 1800 characters, capped at 24
+chunks. Both numbers are constraints rather than taste: Notion rejects a
+rich-text run over 2000, and every chunk is a separate block counted
+against the 100-per-request limit. Mid-word truncation matters more than
+usual here — these are phonetic transliterations, so a broken word is
+unreadable and indistinguishable from a mistranscription. A transcript that
+hits the cap says so in a final line rather than trailing off.
+
+Verified by rendering, not by reading: a 4000-character transcript produced
+3 children of 1797/1790/490, none over 2000, each ending on a whole word,
+and an all-whitespace stream produced no toggle at all.
+
+### The Agent column
+
+`buildProperties` fills a property whose name contains "agent", as
+`rich_text`. NOT `select`: a select gains an option per agent name and the
+user cannot rename one without orphaning the rows already using it.
+
+Two paths, because the two cases are different:
+
+* Tables Relay creates get `Agent` up front (`notion-guides.ts`).
+* Tables that PREDATE the column get it added by `ensureAgentColumn` on the
+  next publish, via `PATCH /v1/data_sources/{id}` with the same
+  `{ Agent: { rich_text: {} } }` shape `databases.create` uses.
+
+`buildProperties` only ever fills columns that EXIST, which is what keeps
+it safe against a table the user shaped themselves — but it also means the
+migration was necessary, or an existing table would have silently never
+shown a value.
+
+The add is logged at INFO on success, deliberately. It runs once, against a
+schema the integration may only have read access to, and a failure is
+swallowed so a missing column can never cost a published page. Without the
+success line, "could not modify" and "modified fine" look identical from
+the outside.
+
+### Also: `notion.ts` was split
+
+Row properties moved to `src/lib/render/notion-properties.ts`. The file was
+over the 250-line cap after `ensureAgentColumn`, and the two concerns move
+at different rates — block rendering changes when the document shape
+changes, column mapping changes when the user reshapes their table.

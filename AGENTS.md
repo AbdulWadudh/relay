@@ -26,6 +26,13 @@ The ones most often broken by not knowing they exist:
 `LLM_STATE.md` is the companion log — what was tried, what was measured, and the
 dead ends worth not repeating. Check it before re-litigating a decision.
 
+`RUNBOOK.md` is what to read when production is broken: a triage order, what
+each container does, the error-message table, and the approaches that were
+tried and rejected with the evidence. **Start there for any "why is this
+failing in prod" question** — it is faster than reading code and it records
+which diagnostics are decisive versus merely plausible. `EGRESS_PROXY.md` is
+the same depth for the YouTube proxy specifically.
+
 
 # Codebase knowledge graph (graphify)
 
