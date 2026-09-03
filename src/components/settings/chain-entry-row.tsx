@@ -14,7 +14,7 @@ import { providerLabel } from "@/lib/providers"
 import { cn } from "@/lib/utils"
 
 /**
- * One provider in the extraction-priority list.
+ * One ACCOUNT in the extraction chain.
  *
  * THE WHOLE ROW is the drag handle — dnd-kit's listeners are spread onto
  * the <li> by the parent, not onto a grip button. The grip glyph stays as
@@ -23,12 +23,17 @@ import { cn } from "@/lib/utils"
  * misleads more than it helps.
  *
  * Every row carries its provider's OWN accent (RULES.md: no single global
- * accent) as a solid fill, with both light and dark values — the dark
- * highlight is -900, since -950 is invisible on a near-black card.
+ * accent) as a solid fill, with both light and dark values.
  */
 
-interface ProviderOrderRowProps {
-  id: string
+interface ChainEntryRowProps {
+  provider: string
+  /** The account this row is, when the provider holds a credential. */
+  account: string | null
+  /** Switched off in the vault: still ordered here, but never reached. */
+  active: boolean
+  /** First of the ACTIVE rows — not necessarily the first row. */
+  triedFirst: boolean
   index: number
   total: number
   onMove: (from: number, to: number) => void
@@ -38,17 +43,30 @@ interface ProviderOrderRowProps {
   dragProps: React.HTMLAttributes<HTMLLIElement>
 }
 
-export const ProviderOrderRow = React.forwardRef<
+export const ChainEntryRow = React.forwardRef<
   HTMLLIElement,
-  ProviderOrderRowProps
->(function ProviderOrderRow(
-  { id, index, total, onMove, isDragging, style, dragProps },
+  ChainEntryRowProps
+>(function ChainEntryRow(
+  {
+    provider,
+    account,
+    active,
+    triedFirst,
+    index,
+    total,
+    onMove,
+    isDragging,
+    style,
+    dragProps,
+  },
   ref,
 ) {
-  const accent = providerAccent(id)
-  const label = providerLabel(id)
+  const accent = providerAccent(provider)
+  const label = providerLabel(provider)
   const first = index === 0
   const last = index === total - 1
+  // Names the row for a screen reader: two rows can share a provider.
+  const name = account ? `${label} — ${account}` : label
 
   // The arrow buttons live inside the draggable row, so their pointer
   // events must not reach the drag sensor or a click reads as a drag start.
@@ -61,8 +79,11 @@ export const ProviderOrderRow = React.forwardRef<
       {...dragProps}
       className={cn(
         "flex touch-none items-center gap-3 rounded-lg border border-border bg-card px-4 py-3",
-        "cursor-grab transition-colors duration-150 active:cursor-grabbing",
+        "cursor-grab transition-all duration-150 active:cursor-grabbing",
         accent.hover,
+        // Still ordered, still draggable — so you can park it where you
+        // want it before switching it back on — but visibly out of play.
+        !active && "opacity-55",
         // Lifted while dragging. Shadow/border only — no scale, which
         // re-rasterises text and reads as a blur.
         isDragging && "relative z-10 border-primary shadow-lg",
@@ -70,27 +91,44 @@ export const ProviderOrderRow = React.forwardRef<
     >
       <HugeiconsIcon
         icon={DragDropVerticalIcon}
-        className="size-5 shrink-0 text-muted-foreground"
+        className="hidden size-5 shrink-0 text-muted-foreground sm:block"
         aria-hidden
       />
 
-      <ProviderMark provider={id} className="size-5" />
+      <ProviderMark
+        provider={provider}
+        className={cn("size-5", !active && "grayscale")}
+      />
 
-      <span className="min-w-0 flex-1 truncate font-medium text-sm">
-        {label}
-      </span>
+      {/* Provider and account stack on a phone: side by side, a long
+            email truncated the provider name away entirely. */}
+      <div className="grid min-w-0 flex-1 leading-tight">
+        <span className="truncate font-medium text-sm">{label}</span>
+        {account ? (
+          <span className="truncate text-muted-foreground text-xs">
+            {account}
+          </span>
+        ) : null}
+      </div>
 
-      {/* Hidden on narrow screens: at 380px the badge plus both buttons
-          squeezed the provider name down to "Olla…", and the name matters
-          more than a label whose meaning the top position already carries. */}
-      {first ? (
-        <span className="hidden shrink-0 rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground text-xs sm:inline-block">
-          Tried first
+      {/* "Off" is never hidden — a row that looks skippable but is not
+          explained is worse than a cramped one. "Tried first" is, because
+          at 380px it squeezed the account name away and the top position
+          already carries its meaning. */}
+      {active ? (
+        triedFirst ? (
+          <span className="hidden shrink-0 rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground text-xs sm:inline-block">
+            Tried first
+          </span>
+        ) : null
+      ) : (
+        <span className="shrink-0 rounded-md border border-border px-2 py-1 font-medium text-muted-foreground text-xs uppercase">
+          Off
         </span>
-      ) : null}
+      )}
 
       {/* WCAG 2.2 AA: drag alone is not an accessible reorder control.
-          These are the single-pointer + keyboard alternative. */}
+            These are the single-pointer + keyboard alternative. */}
       <div className="flex shrink-0 items-center gap-1">
         <Button
           type="button"
@@ -100,7 +138,7 @@ export const ProviderOrderRow = React.forwardRef<
           disabled={first}
           onPointerDown={stopDrag}
           onClick={() => onMove(index, index - 1)}
-          aria-label={`Move ${label} up`}
+          aria-label={`Move ${name} up`}
         >
           <HugeiconsIcon icon={ArrowUp01Icon} className="size-4" />
         </Button>
@@ -112,7 +150,7 @@ export const ProviderOrderRow = React.forwardRef<
           disabled={last}
           onPointerDown={stopDrag}
           onClick={() => onMove(index, index + 1)}
-          aria-label={`Move ${label} down`}
+          aria-label={`Move ${name} down`}
         >
           <HugeiconsIcon icon={ArrowDown01Icon} className="size-4" />
         </Button>

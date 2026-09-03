@@ -1,11 +1,11 @@
 import { Hono } from "hono"
-
+import { resolveChain } from "@/lib/extraction/chain"
 import { logger } from "@/lib/observability/logger"
-import { extractionOrderSchema, shareAutoRunSchema } from "@/lib/schemas"
+import { extractionChainSchema, shareAutoRunSchema } from "@/lib/schemas"
 import {
-  getExtractionOrder,
   getShareAutoRun,
   SETTING_KEYS,
+  setCredentialChain,
   writeSetting,
 } from "@/lib/settings"
 import { requireSession, type SessionEnv } from "@/server/require-session"
@@ -21,33 +21,29 @@ import { requireSession, type SessionEnv } from "@/server/require-session"
 export const settingsModule = new Hono<SessionEnv>()
 settingsModule.use("*", requireSession)
 
-settingsModule.get("/extraction-order", async (c) => {
+settingsModule.get("/extraction-chain", async (c) => {
   const session = c.get("session")
-  return c.json({ order: await getExtractionOrder(session.user.id) })
+  return c.json({ chain: await resolveChain(session.user.id) })
 })
 
-settingsModule.put("/extraction-order", async (c) => {
+settingsModule.put("/extraction-chain", async (c) => {
   const session = c.get("session")
 
   const body = await c.req.json().catch(() => null)
-  const parsed = extractionOrderSchema.safeParse(body)
+  const parsed = extractionChainSchema.safeParse(body)
   if (!parsed.success) {
     return c.json(
-      { error: "Invalid provider order", issues: parsed.error.issues },
+      { error: "Invalid extraction chain", issues: parsed.error.issues },
       400,
     )
   }
 
-  await writeSetting(
-    session.user.id,
-    SETTING_KEYS.extractionOrder,
-    parsed.data.order,
-  )
-  logger.info("Extraction order updated", { count: parsed.data.order.length })
+  await setCredentialChain(session.user.id, parsed.data.chain)
+  logger.info("Extraction chain updated", { count: parsed.data.chain.length })
 
   // Read back through the reconciler rather than echoing the request, so
   // the client renders exactly what the pipeline will use.
-  return c.json({ order: await getExtractionOrder(session.user.id) })
+  return c.json({ chain: await resolveChain(session.user.id) })
 })
 
 settingsModule.get("/share-auto-run", async (c) => {

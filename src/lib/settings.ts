@@ -1,9 +1,9 @@
 import { and, eq } from "drizzle-orm"
 
 import { getDb } from "@/lib/db"
-import { credentials, userSettings } from "@/lib/db/schema"
-import { chatProvider, EXTRACTION_ORDER } from "@/lib/extraction/providers"
-import { type AiKeyProviderId, isKeylessProvider } from "@/lib/providers"
+import { userSettings } from "@/lib/db/schema"
+import { EXTRACTION_ORDER } from "@/lib/extraction/providers"
+import type { AiKeyProviderId } from "@/lib/providers"
 
 /**
  * Per-user preferences, stored in `user_settings` (one row per user+key).
@@ -14,8 +14,19 @@ import { type AiKeyProviderId, isKeylessProvider } from "@/lib/providers"
  */
 
 export const SETTING_KEYS = {
-  extractionOrder: "extraction_order",
+  /**
+   * The order credentials are tried in, as a FLAT list of ids spanning
+   * every provider — so two accounts of one provider can sit either side
+   * of another provider's. Authoritative for anything that reads an order.
+   */
+  credentialChain: "credential_chain",
   shareAutoRun: "share_auto_run",
+  /**
+   * Superseded by credentialChain, still read to SEED it so an order set
+   * before the flat chain existed is not silently discarded.
+   */
+  extractionOrder: "extraction_order",
+  credentialOrder: "credential_order",
   credentialSelection: "credential_selection",
 } as const
 
@@ -58,20 +69,17 @@ export async function writeSetting(
 }
 
 /**
- * The user's provider order, reconciled against the code's own list.
+ * Provider-level order, reconciled against the code's own list.
  *
- * Reconciliation is the point of this function rather than returning the
- * stored array verbatim. A saved order is a snapshot of the providers that
- * existed the day it was saved, so:
+ * No longer what the pipeline reads — `resolveChain`
+ * (src/lib/extraction/chain.ts) does, and it is per-ACCOUNT. This survives
+ * as the SEED for a user who has never touched the flat chain, so the
+ * provider order they set earlier still decides where their accounts start
+ * out.
  *
- *  - ids no longer in EXTRACTION_ORDER are DROPPED (a provider removed
- *    from the codebase must not resurrect itself from a stale row), and
- *  - ids the user has never seen are APPENDED in their default relative
- *    order (a newly added provider must not be invisible until they
- *    happen to revisit the settings page).
- *
- * Falls back to EXTRACTION_ORDER when nothing is stored or the row is
- * malformed — a broken preference must never stop extraction.
+ * Ids no longer in EXTRACTION_ORDER are dropped (a provider removed from
+ * the codebase must not resurrect itself from a stale row); ids the user
+ * has never seen are appended in their default relative order.
  */
 export async function resolveExtractionOrder(
   userId: string,
@@ -90,35 +98,80 @@ export async function resolveExtractionOrder(
 }
 
 /**
- * What the settings UI renders: this user's order, narrowed to providers
- * they can ACTUALLY use.
+ * The stored credential chain, verbatim apart from junk filtering. Every
+ * reader reconciles it against reality itself — `resolveChain` for the
+ * pipeline, `orderForProvider` for one provider's slice — because an id
+ * can be deleted or switched off between two reads of this row.
  *
- * A provider qualifies when it is registered in the chat registry (not
- * every AI_KEY_PROVIDERS entry has a chat endpoint) AND either it
- * needs no credential (local Ollama) or the user has stored a key for it.
- *
- * Listing the rest would be a lie: reordering a provider you have no key
- * for changes nothing, because the runtime skips it. The stored order is
- * left untouched — `resolveExtractionOrder` re-appends anything filtered
- * out here, so adding a key later restores that provider's saved position
- * instead of resetting it.
+ * Seeded from the two earlier keys when it is empty, so an order set
+ * before the flat chain existed still applies.
  */
-export async function getExtractionOrder(
+export async function getCredentialChain(userId: string): Promise<string[]> {
+  const stored = await readSetting(userId, SETTING_KEYS.credentialChain)
+  if (Array.isArray(stored)) {
+    const clean = stored.filter(
+      (id): id is string => typeof id === "string" && id.length > 0,
+    )
+    if (clean.length > 0) return clean
+  }
+  return legacyChainSeed(userId)
+}
+
+/**
+ * `credential_order` was `{ [provider]: id[] }` and `credential_selection`
+ * was `{ [provider]: id }`. Flattened in provider order, they are already
+ * a valid chain — anything they omit gets appended by the reader.
+ */
+async function legacyChainSeed(userId: string): Promise<string[]> {
+  const [order, selection] = await Promise.all([
+    readSetting(userId, SETTING_KEYS.credentialOrder),
+    readSetting(userId, SETTING_KEYS.credentialSelection),
+  ])
+  const perProvider = new Map<string, string[]>()
+  if (order && typeof order === "object" && !Array.isArray(order)) {
+    for (const [provider, ids] of Object.entries(order)) {
+      if (!Array.isArray(ids)) continue
+      const clean = ids.filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      )
+      if (clean.length > 0) perProvider.set(provider, clean)
+    }
+  }
+  if (selection && typeof selection === "object" && !Array.isArray(selection)) {
+    for (const [provider, id] of Object.entries(selection)) {
+      if (typeof id === "string" && id.length > 0 && !perProvider.has(provider))
+        perProvider.set(provider, [id])
+    }
+  }
+  if (perProvider.size === 0) return []
+
+  const providers = await resolveExtractionOrder(userId)
+  const seed: string[] = []
+  for (const provider of providers)
+    seed.push(...(perProvider.get(provider) ?? []))
+  for (const [provider, ids] of perProvider) {
+    if (!providers.includes(provider as AiKeyProviderId)) seed.push(...ids)
+  }
+  return seed
+}
+
+export async function setCredentialChain(
   userId: string,
-): Promise<readonly AiKeyProviderId[]> {
-  const order = await resolveExtractionOrder(userId)
+  chain: readonly string[],
+): Promise<void> {
+  await writeSetting(userId, SETTING_KEYS.credentialChain, [...chain])
+}
 
-  const rows = await getDb()
-    .select({ provider: credentials.provider })
-    .from(credentials)
-    .where(and(eq(credentials.userId, userId), eq(credentials.type, "api_key")))
-    .all()
-  const configured = new Set(rows.map((row) => row.provider))
-
-  return order.filter(
-    (id) =>
-      chatProvider(id) !== null &&
-      (isKeylessProvider(id) || configured.has(id)),
+/** Drops a deleted credential from the chain. */
+export async function forgetCredentialChain(
+  userId: string,
+  credentialId: string,
+): Promise<void> {
+  const chain = await getCredentialChain(userId)
+  if (!chain.includes(credentialId)) return
+  await setCredentialChain(
+    userId,
+    chain.filter((id) => id !== credentialId),
   )
 }
 
@@ -130,48 +183,4 @@ export async function getExtractionOrder(
  */
 export async function getShareAutoRun(userId: string): Promise<boolean> {
   return (await readSetting(userId, SETTING_KEYS.shareAutoRun)) === true
-}
-
-/**
- * Which credential a provider uses when several are stored, as
- * `{ [provider]: credentialId }`. Selection is a preference, not vault
- * state, so it lives here rather than as a column with a "one row is
- * primary" invariant to keep true.
- */
-export async function getCredentialSelection(
-  userId: string,
-): Promise<Record<string, string>> {
-  const stored = await readSetting(userId, SETTING_KEYS.credentialSelection)
-  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {}
-
-  const selection: Record<string, string> = {}
-  for (const [provider, id] of Object.entries(stored)) {
-    if (typeof id === "string" && id.length > 0) selection[provider] = id
-  }
-  return selection
-}
-
-export async function setCredentialSelection(
-  userId: string,
-  provider: string,
-  credentialId: string,
-): Promise<void> {
-  const current = await getCredentialSelection(userId)
-  await writeSetting(userId, SETTING_KEYS.credentialSelection, {
-    ...current,
-    [provider]: credentialId,
-  })
-}
-
-/** Drops any provider pointing at a credential that no longer exists. */
-export async function forgetCredentialSelection(
-  userId: string,
-  credentialId: string,
-): Promise<void> {
-  const current = await getCredentialSelection(userId)
-  const next = Object.fromEntries(
-    Object.entries(current).filter(([, id]) => id !== credentialId),
-  )
-  if (Object.keys(next).length === Object.keys(current).length) return
-  await writeSetting(userId, SETTING_KEYS.credentialSelection, next)
 }

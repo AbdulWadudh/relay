@@ -2,16 +2,18 @@ import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 import { eq } from "drizzle-orm"
 
 import { ShellContent, ShellHeader } from "@/components/app-shell"
+import { ExtractionChainCard } from "@/components/settings/extraction-chain-card"
 import { ProfileCard } from "@/components/settings/profile-card"
-import { ProviderOrderCard } from "@/components/settings/provider-order-card"
 import { SecurityCard } from "@/components/settings/security-card"
 import { ShareCard } from "@/components/settings/share-card"
 import { requireSession } from "@/lib/auth-session"
 import { getDb } from "@/lib/db"
 import { authAccounts } from "@/lib/db/schema"
+import { resolveChain } from "@/lib/extraction/chain"
 import { getQueryClient } from "@/lib/query/client"
-import { settingKeys } from "@/lib/query/keys"
-import { getExtractionOrder, getShareAutoRun } from "@/lib/settings"
+import { credentialKeys, settingKeys } from "@/lib/query/keys"
+import { getShareAutoRun } from "@/lib/settings"
+import { listCredentials } from "@/lib/vault"
 
 export const dynamic = "force-dynamic"
 
@@ -26,18 +28,24 @@ export default async function SettingsPage() {
     .all()
   const hasPassword = accounts.some((a) => a.providerId === "credential")
 
-  // Prefetched into the same key the client hydrates, so the provider list
-  // renders at its real length on first paint. Without this the skeleton
-  // would have to guess a row count and the layout would jump when the
-  // actual (filtered) list arrived — RULES.md forbids that.
+  // Prefetched into the same keys the client hydrates, so the chain renders
+  // at its real length on first paint. Without this the skeleton would have
+  // to guess a row count and the layout would jump when the actual
+  // (filtered) list arrived — RULES.md forbids that.
   const queryClient = getQueryClient()
   await queryClient.prefetchQuery({
-    queryKey: settingKeys.extractionOrder(),
-    queryFn: () => getExtractionOrder(session.user.id),
+    queryKey: settingKeys.extractionChain(),
+    queryFn: () => resolveChain(session.user.id),
   })
   await queryClient.prefetchQuery({
     queryKey: settingKeys.shareAutoRun(),
     queryFn: () => getShareAutoRun(session.user.id),
+  })
+  // The chain rows read their account names from the credential list, so
+  // it has to be here on the first paint too.
+  await queryClient.prefetchQuery({
+    queryKey: credentialKeys.list(),
+    queryFn: () => listCredentials(session.user.id),
   })
 
   return (
@@ -53,7 +61,7 @@ export default async function SettingsPage() {
             }}
           />
           <HydrationBoundary state={dehydrate(queryClient)}>
-            <ProviderOrderCard />
+            <ExtractionChainCard />
             <ShareCard />
           </HydrationBoundary>
           <SecurityCard hasPassword={hasPassword} />

@@ -1,5 +1,6 @@
 import config from "@/config"
 import { catalogFor } from "@/lib/extraction/catalog"
+import { resolveChain } from "@/lib/extraction/chain"
 import {
   disposition,
   MAX_CANDIDATES,
@@ -14,19 +15,18 @@ import {
 } from "@/lib/extraction/providers"
 import { chatCompletion, LlmError } from "@/lib/llm/client"
 import { logger } from "@/lib/observability/logger"
-import { resolveExtractionOrder } from "@/lib/settings"
-import { orderedProviderKeys, type ProviderKey } from "@/lib/vault-select"
+import { accessTokenById } from "@/lib/vault-select"
 
 /**
  * Runs one chat call for the extraction stage, over whichever provider the
  * user has a key for (Task 4.4).
  *
  * Wraps the shared client in src/lib/llm/client.ts — there is exactly one
- * HTTP client in this codebase — and adds three things transcription did
- * not need: provider resolution against the vault, MODEL fall-through, and
- * CREDENTIAL fall-through. Free catalogs churn constantly and free tiers
- * rate-limit per account, so both a withdrawn model and a spent key must
- * degrade to the next candidate instead of failing the run.
+ * HTTP client in this codebase — and adds two things transcription did not
+ * need: MODEL fall-through within an account, and the ACCOUNT chain itself
+ * (src/lib/extraction/chain.ts). Free catalogs churn constantly and free
+ * tiers rate-limit per account, so both a withdrawn model and a spent key
+ * must degrade to the next candidate instead of failing the run.
  *
  * Decrypted keys are held only for the duration of the pass and are never
  * logged, stored, or included in a thrown message (PRD §6).
@@ -165,53 +165,47 @@ interface PassResult {
   lastError: unknown
 }
 
-/** One sweep over every provider, its keys, and each key's models. */
+/** One sweep over the whole chain: every account, and each one's models. */
 async function attemptPass(options: AttemptOptions): Promise<PassResult> {
   const { userId } = options
   let sawKey = false
   let rateLimitedFor = 0
   let lastError: unknown = null
 
-  // The user's own preference order (Settings → Extraction), reconciled
-  // against the code's list and falling back to it. Unregistered ids are
-  // skipped below, so a provider that is off in this deploy costs nothing.
-  for (const id of await resolveExtractionOrder(userId)) {
-    const provider = chatProvider(id)
+  // A flat list of ACCOUNTS the user ordered themselves, so two keys for
+  // one provider can sit either side of another provider's (chain.ts).
+  const chain = await resolveChain(userId)
+  // A provider-level refusal (413) rules out its other accounts too, and
+  // the chain can revisit that provider later on.
+  const abandoned = new Set<string>()
+
+  for (const entry of chain) {
+    // Switched off in the vault. It keeps its place in the chain so
+    // Settings can show where it sits, but nothing reaches for it.
+    if (!entry.active) continue
+    if (abandoned.has(entry.provider)) continue
+    const provider = chatProvider(entry.provider)
     if (!provider) continue
+
     // A keyless provider (local Ollama) has no credential to look up. It
     // still needs a non-empty bearer because Ollama's OpenAI-compat layer
     // requires the header and ignores its value.
-    const keys: ProviderKey[] = provider.keyless
-      ? [{ credentialId: provider.id, apiKey: config.ollama.localApiKey }]
-      : await orderedProviderKeys(id, userId)
-    if (keys.length === 0) continue
+    const apiKey = entry.credentialId
+      ? await accessTokenById(entry.credentialId, userId)
+      : config.ollama.localApiKey
+    if (!apiKey) continue
     // Counts as "the user can run extraction": a keyless provider is
     // reachable without them configuring anything, so a missing-key error
     // would be wrong.
     sawKey = true
 
-    // The account they marked first, then the rest as fallbacks.
-    for (const [index, key] of keys.entries()) {
-      if (index > 0) {
-        logger.info("Trying the next account for this provider", {
-          provider: provider.id,
-          task: options.task,
-          account: index + 1,
-          of: keys.length,
-        })
-      }
-      const attempt = await attemptKey({
-        ...options,
-        provider,
-        apiKey: key.apiKey,
-      })
-      rateLimitedFor = Math.max(rateLimitedFor, attempt.rateLimitedFor)
-      lastError = attempt.lastError ?? lastError
-      if (attempt.run) {
-        return { run: attempt.run, sawKey, rateLimitedFor, lastError }
-      }
-      if (attempt.next === "next-provider") break
+    const attempt = await attemptKey({ ...options, provider, apiKey })
+    rateLimitedFor = Math.max(rateLimitedFor, attempt.rateLimitedFor)
+    lastError = attempt.lastError ?? lastError
+    if (attempt.run) {
+      return { run: attempt.run, sawKey, rateLimitedFor, lastError }
     }
+    if (attempt.next === "next-provider") abandoned.add(entry.provider)
   }
 
   return { run: null, sawKey, rateLimitedFor, lastError }

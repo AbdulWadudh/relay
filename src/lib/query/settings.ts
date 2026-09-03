@@ -7,63 +7,69 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
+import type { ChainEntry } from "@/lib/extraction/chain"
 import { apiFetch } from "@/lib/query/http"
 import { settingKeys } from "@/lib/query/keys"
 
 /**
  * Per-user settings server-state.
  *
- * The extraction-order mutation is OPTIMISTIC: a drag that waits for a
+ * The extraction-chain mutation is OPTIMISTIC: a drag that waits for a
  * round-trip before the row moves feels broken, and the list snapping back
  * mid-drag is worse than a brief inconsistency. The rollback in `onError`
  * is what makes that safe, and `onSettled` reconciles against the server's
- * reconciled order (which can differ from what we sent — see
- * `resolveExtractionOrder`).
+ * answer, which can differ from what we sent — see `resolveChain`.
  */
 
-async function fetchExtractionOrder(): Promise<string[]> {
-  const { order } = await apiFetch<{ order: string[] }>(
-    "/settings/extraction-order",
+async function fetchExtractionChain(): Promise<ChainEntry[]> {
+  const { chain } = await apiFetch<{ chain: ChainEntry[] }>(
+    "/settings/extraction-chain",
   )
-  return order
+  return chain
 }
 
-export function extractionOrderQueryOptions() {
+export function extractionChainQueryOptions() {
   return queryOptions({
-    queryKey: settingKeys.extractionOrder(),
-    queryFn: fetchExtractionOrder,
+    queryKey: settingKeys.extractionChain(),
+    queryFn: fetchExtractionChain,
   })
 }
 
-export function useExtractionOrder() {
-  return useQuery(extractionOrderQueryOptions())
+export function useExtractionChain() {
+  return useQuery(extractionChainQueryOptions())
 }
 
-export function useSaveExtractionOrder() {
+export function useSaveExtractionChain() {
   const queryClient = useQueryClient()
-  const key = settingKeys.extractionOrder()
+  const key = settingKeys.extractionChain()
 
   return useMutation({
-    mutationFn: async (order: string[]) => {
-      const result = await apiFetch<{ order: string[] }>(
-        "/settings/extraction-order",
-        { method: "PUT", body: JSON.stringify({ order }) },
+    mutationFn: async (chain: ChainEntry[]) => {
+      const result = await apiFetch<{ chain: ChainEntry[] }>(
+        "/settings/extraction-chain",
+        {
+          method: "PUT",
+          body: JSON.stringify({ chain: chain.map((entry) => entry.id) }),
+        },
       )
-      return result.order
+      return result.chain
     },
-    onMutate: async (order) => {
+    onMutate: async (chain) => {
       // Stop an in-flight refetch from landing on top of the optimistic
       // value and visibly reverting the row the user just dropped.
       await queryClient.cancelQueries({ queryKey: key })
-      const previous = queryClient.getQueryData<string[]>(key)
-      queryClient.setQueryData(key, order)
+      const previous = queryClient.getQueryData<ChainEntry[]>(key)
+      queryClient.setQueryData(key, chain)
       return { previous }
     },
-    onError: (_error, _order, context) => {
+    onError: (_error, _chain, context) => {
       if (context?.previous) queryClient.setQueryData(key, context.previous)
     },
+    onSuccess: (chain) => {
+      queryClient.setQueryData(key, chain)
+    },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: key })
+      queryClient.invalidateQueries({ queryKey: key })
     },
   })
 }

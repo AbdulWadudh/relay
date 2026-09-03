@@ -44,7 +44,7 @@ export const settingKeys = {
   all: ["settings"] as const,
   details: () => [...settingKeys.all, "detail"] as const,
   detail: (key: string) => [...settingKeys.details(), key] as const,
-  extractionOrder: () => [...settingKeys.detail("extraction-order")] as const,
+  extractionChain: () => [...settingKeys.detail("extraction-chain")] as const,
   shareAutoRun: () => [...settingKeys.detail("share-auto-run")] as const,
 }
 

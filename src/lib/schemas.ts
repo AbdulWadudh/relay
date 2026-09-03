@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 import { parseSourceUrl, SUPPORTED_SOURCE_LABELS } from "@/lib/media/sources"
-import { AI_KEY_PROVIDERS, PROVIDER_IDS } from "@/lib/providers"
+import { PROVIDER_IDS } from "@/lib/providers"
 
 /**
  * Zod validation schemas (RULES.md: all external input is Zod-validated
@@ -102,29 +102,24 @@ export const promptUpdateSchema = z.object({
 
 export type PromptUpdateInput = z.infer<typeof promptUpdateSchema>
 
-/**
- * Provider preference order for the extraction stage.
- *
- * Validated against the provider catalog rather than as free strings, so a
- * typo or an id from an older build is rejected at the boundary instead of
- * being silently dropped later by `resolveExtractionOrder`. That reconciler
- * still runs — it handles orders that were VALID when saved and have since
- * gone stale, which validation here cannot see.
- */
-const AI_PROVIDER_IDS = AI_KEY_PROVIDERS.map((p) => p.id) as [
-  string,
-  ...string[],
-]
-
 export const shareAutoRunSchema = z.object({ enabled: z.boolean() })
 
 export type ShareAutoRunInput = z.infer<typeof shareAutoRunSchema>
 
-export const extractionOrderSchema = z.object({
-  order: z.array(z.enum(AI_PROVIDER_IDS)).min(1).max(AI_PROVIDER_IDS.length),
+/**
+ * The extraction fallback chain: credential ids, plus a provider id for a
+ * provider that holds no credential (local Ollama).
+ *
+ * Free strings rather than an enum, because most entries are uuids. Every
+ * id is checked against the user's own credentials by `resolveChain`, which
+ * drops anything it does not recognise — validation here only bounds the
+ * shape and the size.
+ */
+export const extractionChainSchema = z.object({
+  chain: z.array(z.string().min(1).max(64)).max(100),
 })
 
-export type ExtractionOrderInput = z.infer<typeof extractionOrderSchema>
+export type ExtractionChainInput = z.infer<typeof extractionChainSchema>
 
 /**
  * A cookies.txt file the user exported from their own browser

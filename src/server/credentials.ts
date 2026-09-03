@@ -9,7 +9,6 @@ import {
   createCredential,
   deleteCredential,
   listCredentials,
-  selectCredential,
   setCredentialActive,
   updateCredentialMeta,
   updateCredentialSecret,
@@ -94,17 +93,7 @@ credentialsModule.patch("/:id", async (c) => {
   return c.json({ credential })
 })
 
-/** Which of a provider's credentials the pipeline uses. */
-credentialsModule.put("/:id/select", async (c) => {
-  const session = c.get("session")
-  const id = c.req.param("id")
-  const provider = await selectCredential(id, session.user.id)
-  if (!provider) return c.json({ error: "Credential not found" }, 404)
-  logger.info("Credential selected", { credential_id: id, provider })
-  return c.json({ credentials: await listCredentials(session.user.id) })
-})
-
-/** Switches a credential in or out of its provider's fallback chain. */
+/** Switches a credential in or out of the fallback chain. */
 credentialsModule.put("/:id/active", async (c) => {
   const session = c.get("session")
   const id = c.req.param("id")

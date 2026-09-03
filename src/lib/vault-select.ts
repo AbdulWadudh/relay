@@ -3,7 +3,7 @@ import { and, asc, eq } from "drizzle-orm"
 import { decrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
 import { credentials } from "@/lib/db/schema"
-import { getCredentialSelection, setCredentialSelection } from "@/lib/settings"
+import { getCredentialChain } from "@/lib/settings"
 
 /**
  * Which of a provider's credentials the pipeline uses (RULES.md: provider
@@ -26,10 +26,30 @@ export async function orderForProvider<T extends { id: string }>(
   rows: readonly T[],
 ): Promise<T[]> {
   if (rows.length < 2) return [...rows]
-  const selected = (await getCredentialSelection(userId))[provider]
-  const head = rows.find((row) => row.id === selected)
-  if (!head) return [...rows]
-  return [head, ...rows.filter((row) => row.id !== head.id)]
+  // One provider's slice of the flat chain (src/lib/extraction/chain.ts).
+  // Ids belonging to other providers simply do not match any row.
+  return applyOrder(rows, await getCredentialChain(userId))
+}
+
+/**
+ * `rows` must already be oldest-first: that is what anything the stored
+ * order does not mention falls back to, so a newly added credential lands
+ * at the end of the chain instead of jumping it.
+ */
+function applyOrder<T extends { id: string }>(
+  rows: readonly T[],
+  ids: readonly string[] | undefined,
+): T[] {
+  if (!ids || ids.length === 0) return [...rows]
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const ordered: T[] = []
+  for (const id of ids) {
+    const row = byId.get(id)
+    if (!row) continue
+    byId.delete(id)
+    ordered.push(row)
+  }
+  return [...ordered, ...rows.filter((row) => byId.has(row.id))]
 }
 
 export async function pickForProvider<T extends { id: string }>(
@@ -40,25 +60,12 @@ export async function pickForProvider<T extends { id: string }>(
   return (await orderForProvider(userId, provider, rows))[0] ?? null
 }
 
-/** Marks a credential as the first its provider reaches for. */
-export async function selectCredential(
-  id: string,
-  userId: string,
-): Promise<string | null> {
-  const row = await getDb()
-    .select({ provider: credentials.provider })
-    .from(credentials)
-    .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))
-    .get()
-  if (!row) return null
-  await setCredentialSelection(userId, row.provider, id)
-  return row.provider
-}
-
 /**
- * Switches a credential in or out of its provider's chain. Switching one
- * on also makes it preferred — the only reason to re-enable a key is to
- * use it, and it would otherwise sit behind whatever took over.
+ * Switches a credential in or out of the fallback chain. The stored order
+ * is left alone: a credential switched off keeps its place (only
+ * `resolveChain` filters it), so switching it back on restores exactly
+ * where the user had put it. One the chain has never heard of is appended
+ * by the reader's reconciliation.
  */
 export async function setCredentialActive(
   id: string,
@@ -71,9 +78,7 @@ export async function setCredentialActive(
     .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))
     .returning({ provider: credentials.provider })
     .all()
-  if (!row) return null
-  if (isActive) await setCredentialSelection(userId, row.provider, id)
-  return row.provider
+  return row?.provider ?? null
 }
 
 /** Switched-off credentials are absent from every pipeline read path. */
@@ -95,6 +100,26 @@ function secretRows(provider: string, userId: string) {
     )
     .orderBy(asc(credentials.createdAt))
     .all()
+}
+
+/** Decrypt ONE credential by id, for a chain that already picked it. */
+export async function accessTokenById(
+  credentialId: string,
+  userId: string,
+): Promise<string | null> {
+  const row = await getDb()
+    .select({ accessToken: credentials.accessToken, iv: credentials.iv })
+    .from(credentials)
+    .where(
+      and(
+        eq(credentials.id, credentialId),
+        eq(credentials.userId, userId),
+        eq(credentials.isActive, true),
+      ),
+    )
+    .get()
+  if (!row) return null
+  return decrypt(row.accessToken, row.iv)
 }
 
 export interface ProviderKey {

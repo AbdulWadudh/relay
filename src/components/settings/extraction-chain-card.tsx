@@ -19,36 +19,64 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import * as React from "react"
 
-import { ProviderOrderRow } from "@/components/settings/provider-order-row"
+import { ChainEntryRow } from "@/components/settings/chain-entry-row"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import type { ChainEntry } from "@/lib/extraction/chain"
+import { useCredentials } from "@/lib/query/credentials"
 import {
-  useExtractionOrder,
-  useSaveExtractionOrder,
+  useExtractionChain,
+  useSaveExtractionChain,
 } from "@/lib/query/settings"
+import type { MaskedCredential } from "@/lib/vault"
 
 /**
- * Extraction provider priority (Settings).
+ * The extraction fallback chain (Settings).
  *
- * The WHOLE ROW is draggable. Because WCAG 2.2 AA requires a
- * single-pointer alternative for any author-controlled drag, every row
- * ALSO carries Move up / Move down buttons, and dnd-kit's KeyboardSensor
- * makes the row itself keyboard-draggable — so the list is fully operable
- * without a mouse.
+ * One FLAT list of accounts, not providers (human decision 2026-09-04), so
+ * a second key for one provider can sit either side of another provider's
+ * instead of being locked behind it.
  *
- * Only providers the user can actually use are listed; the server filters
- * them (see getExtractionOrder), and the page prefetches so there is no
- * loading flash and no row-count guess in a skeleton.
+ * The WHOLE ROW is draggable. Because WCAG 2.2 AA requires a single-pointer
+ * alternative for any author-controlled drag, every row ALSO carries
+ * Move up / Move down buttons, and dnd-kit's KeyboardSensor makes the row
+ * itself keyboard-draggable — so the list is fully operable without a
+ * mouse.
+ *
+ * Only accounts the pipeline would ACTUALLY reach are listed: the server
+ * filters to chat-capable providers and switched-on credentials (see
+ * `resolveChain`), and the page prefetches so there is no loading flash and
+ * no row-count guess in a skeleton.
  */
 
-function SortableProvider({
-  id,
+/** The account label for a row, or null when the provider holds no key. */
+function accountFor(
+  credentials: MaskedCredential[] | undefined,
+  entry: ChainEntry,
+): string | null {
+  if (!entry.credentialId) return null
+  const row = credentials?.find((c) => c.id === entry.credentialId)
+  if (!row) return null
+  if (row.label) return row.label
+  for (const key of ["account_name", "account_email"]) {
+    const value = row.metaData?.[key]
+    if (typeof value === "string" && value.length > 0) return value
+  }
+  return null
+}
+
+function SortableEntry({
+  entry,
+  account,
+  triedFirst,
   index,
   total,
   onMove,
 }: {
-  id: string
+  entry: ChainEntry
+  account: string | null
+  triedFirst: boolean
   index: number
   total: number
   onMove: (from: number, to: number) => void
@@ -60,12 +88,15 @@ function SortableProvider({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id })
+  } = useSortable({ id: entry.id })
 
   return (
-    <ProviderOrderRow
+    <ChainEntryRow
       ref={setNodeRef}
-      id={id}
+      provider={entry.provider}
+      account={account}
+      active={entry.active}
+      triedFirst={triedFirst}
       index={index}
       total={total}
       onMove={onMove}
@@ -81,9 +112,10 @@ function SortableProvider({
   )
 }
 
-export function ProviderOrderCard() {
-  const { data: order, isPending, isError } = useExtractionOrder()
-  const save = useSaveExtractionOrder()
+export function ExtractionChainCard() {
+  const { data: chain, isPending, isError } = useExtractionChain()
+  const { data: credentials } = useCredentials()
+  const save = useSaveExtractionChain()
   /**
    * dnd-kit derives `aria-describedby` from a module-level counter, which
    * runs independently on the server and in the browser — the two disagree
@@ -104,15 +136,15 @@ export function ProviderOrderCard() {
     }),
   )
 
-  const items = order ?? []
+  const items = chain ?? []
 
   const commit = React.useCallback(
-    (next: string[]) => {
+    (next: ChainEntry[]) => {
       save.mutate(next, {
         onError: () =>
           toast.add({
             type: "error",
-            title: "Could not save provider order",
+            title: "Could not save the fallback order",
             description: "Your previous order has been restored.",
           }),
       })
@@ -131,11 +163,21 @@ export function ProviderOrderCard() {
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    const from = items.indexOf(String(active.id))
-    const to = items.indexOf(String(over.id))
+    const from = items.findIndex((entry) => entry.id === String(active.id))
+    const to = items.findIndex((entry) => entry.id === String(over.id))
     if (from < 0 || to < 0) return
     commit(arrayMove(items, from, to))
   }
+
+  // "Tried first" belongs to the first row the pipeline would ACTUALLY
+  // reach, which is not row 0 when row 0 is switched off.
+  const firstActiveId = items.find((entry) => entry.active)?.id
+  const rows = items.map((entry, index) => ({
+    entry,
+    index,
+    account: accountFor(credentials, entry),
+    triedFirst: entry.id === firstActiveId,
+  }))
 
   return (
     <Card>
@@ -145,24 +187,35 @@ export function ProviderOrderCard() {
           {save.isPending ? <Spinner className="size-4" /> : null}
         </CardTitle>
         <p className="text-muted-foreground text-sm">
-          The order Relay tries AI providers in when extracting. The first one
-          you have configured wins; the rest are fallbacks.
+          The order Relay tries your AI accounts in when extracting. The first
+          one that answers wins; the rest are fallbacks for a rate limit or a
+          dead key. Accounts from different providers can be interleaved however
+          you like. Ones switched off in the Vault keep their place here but are
+          skipped.
         </p>
       </CardHeader>
       <CardContent>
         {isPending ? (
-          <ProviderOrderSkeleton />
+          <ChainSkeleton />
         ) : isError ? (
           <p className="py-4 text-destructive text-sm">
-            Could not load your provider order.
+            Could not load your fallback order.
+          </p>
+        ) : items.length === 0 ? (
+          <p className="py-4 text-muted-foreground text-sm">
+            No usable accounts yet. Add an API key in the Vault and it will
+            appear here.
           </p>
         ) : !mounted ? (
           // Same rows, same classes — only the drag wiring is absent.
           <ol className="flex flex-col gap-2">
-            {items.map((id, index) => (
-              <ProviderOrderRow
-                key={id}
-                id={id}
+            {rows.map(({ entry, account, triedFirst, index }) => (
+              <ChainEntryRow
+                key={entry.id}
+                provider={entry.provider}
+                account={account}
+                active={entry.active}
+                triedFirst={triedFirst}
                 index={index}
                 total={items.length}
                 onMove={move}
@@ -178,14 +231,16 @@ export function ProviderOrderCard() {
             onDragEnd={onDragEnd}
           >
             <SortableContext
-              items={items}
+              items={items.map((entry) => entry.id)}
               strategy={verticalListSortingStrategy}
             >
               <ol className="flex flex-col gap-2">
-                {items.map((id, index) => (
-                  <SortableProvider
-                    key={id}
-                    id={id}
+                {rows.map(({ entry, account, triedFirst, index }) => (
+                  <SortableEntry
+                    key={entry.id}
+                    entry={entry}
+                    account={account}
+                    triedFirst={triedFirst}
                     index={index}
                     total={items.length}
                     onMove={move}
@@ -201,7 +256,7 @@ export function ProviderOrderCard() {
 }
 
 /** Mirrors the real row heights so nothing shifts on load (RULES.md). */
-function ProviderOrderSkeleton() {
+function ChainSkeleton() {
   return (
     <div className="flex flex-col gap-2">
       {[0, 1, 2, 3, 4].map((i) => (

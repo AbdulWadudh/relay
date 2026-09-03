@@ -2475,3 +2475,71 @@ Extraction priority still lists Gemini once rather than once per key.
 Migration 0007 is NOT applied to the live Turso database. Until it is,
 `is_active` does not exist and the vault renders every row as switched
 off. `bun run db:migrate`.
+
+## The chain became flat, per account (2026-09-04)
+
+Ordering was two nested lists — providers, then each provider's accounts —
+so every account of one provider had to be tried before any account of the
+next. It is ONE list of accounts now (human decision 2026-09-04): a second
+Gemini key can sit behind Groq rather than ahead of it.
+
+`user_settings.credential_chain` is a flat `string[]` of credential ids
+(plus a provider id for a keyless provider — only local Ollama, which
+holds no credential and whose id can never collide with a uuid). It
+replaced `extraction_order` and `credential_order`, both of which are
+still READ, once, to seed the flat chain for a user who has never touched
+it — flattening `{provider: ids}` in provider order is already a valid
+chain.
+
+One store, two projections:
+
+- `resolveChain` (src/lib/extraction/chain.ts) — the pipeline's view:
+  api_key credentials that are switched on, for chat-registered providers.
+- `orderForProvider` (src/lib/vault-select.ts) — one provider's slice, for
+  `getAccessToken`, `getSecretByType` and transcription. Ids belonging to
+  other providers simply match no row, so the same array serves both.
+
+Neither trusts the stored array: ids that are gone, switched off, or
+unreachable in this deploy are dropped, and credentials it does not
+mention are appended in the default order. So a new key never jumps the
+queue and a stale row can never strand extraction.
+
+### What the vault no longer does
+
+The vault had a pin ("try this account first") and First/Fallback badges.
+Both are gone (human decision 2026-09-04). Order is one cross-provider
+list; a vault row can only see its own provider, so expressing a global
+order from there was a half-truth. `MaskedCredential` lost `chainIndex`
+and `selected` with them, and `PUT /credentials/:id/select` went too. The
+row keeps only the green-tick/red-cross on/off toggle.
+
+### Disable vs delete
+
+Measured through the browser, not reasoned about:
+
+```
+interleave to  groq:work, gemini:peace, groq:personal, gemini:abdul
+disable gemini:peace   list shows 3 rows; STORED chain still holds 4 ids
+re-enable              gemini:peace is back at position 2, not the end
+delete gemini:peace    id purged from the stored array; rest keep order
+```
+
+Disabling deliberately does NOT touch the stored array — only the readers
+filter it — which is what lets a hand-arranged position survive an off/on
+round trip. An earlier version re-pinned a credential ahead of its
+siblings on enable and silently destroyed that arrangement.
+
+### Gotcha for anyone testing this
+
+Two of them, both hit during this work:
+
+- `DATABASE_URL=... bun --bun next dev` does NOT reliably override
+  `.env.local` — Next loads that file and won. A signup meant for a
+  scratch sqlite created a real user in the production Turso database
+  (removed; it held no credentials). Verify against a git worktree with
+  its OWN `.env.local` instead, and confirm where a write landed before
+  trusting it.
+- dnd-kit puts `role="button"` on the draggable `<li>`, so its accessible
+  name CONTAINS the inner arrow labels. `agent-browser find role button
+  --name "Move ... up"` matches the row and clicks nothing. Snapshot for
+  the ref and click that.

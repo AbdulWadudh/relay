@@ -6,16 +6,9 @@ import { encrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
 import { type CredentialType, credentials } from "@/lib/db/schema"
 import type { CredentialInput } from "@/lib/schemas"
-import {
-  forgetCredentialSelection,
-  getCredentialSelection,
-} from "@/lib/settings"
+import { forgetCredentialChain } from "@/lib/settings"
 
-export {
-  getAccessToken,
-  selectCredential,
-  setCredentialActive,
-} from "@/lib/vault-select"
+export { getAccessToken, setCredentialActive } from "@/lib/vault-select"
 
 /**
  * Credential vault service (TRD §4, PRD §4.4).
@@ -35,10 +28,8 @@ export interface MaskedCredential {
   expiresAt: number | null
   metaData: Record<string, unknown> | null
   stale: boolean
-  /** In its provider's fallback chain at all (vault-select.ts). */
+  /** In the fallback chain at all (src/lib/extraction/chain.ts). */
   active: boolean
-  /** First in that chain — what the provider reaches for. */
-  selected: boolean
   createdAt: number
   updatedAt: number
 }
@@ -74,7 +65,7 @@ type MaskedRow = {
 }
 
 /** Lifts the user-chosen label out of plaintext meta_data. */
-function toMasked(row: MaskedRow, selected = false): MaskedCredential {
+function toMasked(row: MaskedRow): MaskedCredential {
   const { additionalData, isActive, ...rest } = row
   const label = rest.metaData?.label
   const rejects = additionalData?.reject_count
@@ -84,7 +75,6 @@ function toMasked(row: MaskedRow, selected = false): MaskedCredential {
     stale:
       typeof rejects === "number" && rejects >= config.social.staleAfterRejects,
     active: isActive,
-    selected: isActive && selected,
   }
 }
 
@@ -98,14 +88,7 @@ export async function listCredentials(
     .orderBy(asc(credentials.createdAt))
     .all()
 
-  const selection = await getCredentialSelection(userId)
-  const live = new Map<string, string>()
-  for (const row of rows) {
-    if (selection[row.provider] === row.id) live.set(row.provider, row.id)
-    else if (!live.has(row.provider)) live.set(row.provider, row.id)
-  }
-
-  return rows.map((row) => toMasked(row, live.get(row.provider) === row.id))
+  return rows.map((row) => toMasked(row))
 }
 
 export async function createCredential(
@@ -262,6 +245,6 @@ export async function deleteCredential(
     .returning({ id: credentials.id })
     .all()
   if (deleted.length === 0) return false
-  await forgetCredentialSelection(userId, id)
+  await forgetCredentialChain(userId, id)
   return true
 }
