@@ -16,6 +16,8 @@ import { type AiKeyProviderId, isKeylessProvider } from "@/lib/providers"
 export const SETTING_KEYS = {
   /** Order the extraction stage tries chat providers in. */
   extractionOrder: "extraction_order",
+  /** Queue a shared link immediately, instead of asking first. */
+  shareAutoRun: "share_auto_run",
 } as const
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
@@ -119,4 +121,14 @@ export async function getExtractionOrder(
       chatProvider(id) !== null &&
       (isKeylessProvider(id) || configured.has(id)),
   )
+}
+
+/**
+ * Whether a link arriving from the Android share sheet is queued on sight.
+ *
+ * Defaults to FALSE: a share is one tap away from any app, so running on
+ * arrival makes a mis-tap cost a real download and a real LLM call.
+ */
+export async function getShareAutoRun(userId: string): Promise<boolean> {
+  return (await readSetting(userId, SETTING_KEYS.shareAutoRun)) === true
 }

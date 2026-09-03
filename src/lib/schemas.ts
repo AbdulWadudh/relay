@@ -114,6 +114,10 @@ const AI_PROVIDER_IDS = AI_KEY_PROVIDERS.map((p) => p.id) as [
   ...string[],
 ]
 
+export const shareAutoRunSchema = z.object({ enabled: z.boolean() })
+
+export type ShareAutoRunInput = z.infer<typeof shareAutoRunSchema>
+
 export const extractionOrderSchema = z.object({
   order: z.array(z.enum(AI_PROVIDER_IDS)).min(1).max(AI_PROVIDER_IDS.length),
 })

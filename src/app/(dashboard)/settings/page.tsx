@@ -5,12 +5,13 @@ import { ShellContent, ShellHeader } from "@/components/app-shell"
 import { ProfileCard } from "@/components/settings/profile-card"
 import { ProviderOrderCard } from "@/components/settings/provider-order-card"
 import { SecurityCard } from "@/components/settings/security-card"
+import { ShareCard } from "@/components/settings/share-card"
 import { requireSession } from "@/lib/auth-session"
 import { getDb } from "@/lib/db"
 import { authAccounts } from "@/lib/db/schema"
 import { getQueryClient } from "@/lib/query/client"
 import { settingKeys } from "@/lib/query/keys"
-import { getExtractionOrder } from "@/lib/settings"
+import { getExtractionOrder, getShareAutoRun } from "@/lib/settings"
 
 export const dynamic = "force-dynamic"
 
@@ -34,6 +35,10 @@ export default async function SettingsPage() {
     queryKey: settingKeys.extractionOrder(),
     queryFn: () => getExtractionOrder(session.user.id),
   })
+  await queryClient.prefetchQuery({
+    queryKey: settingKeys.shareAutoRun(),
+    queryFn: () => getShareAutoRun(session.user.id),
+  })
 
   return (
     <>
@@ -49,6 +54,7 @@ export default async function SettingsPage() {
           />
           <HydrationBoundary state={dehydrate(queryClient)}>
             <ProviderOrderCard />
+            <ShareCard />
           </HydrationBoundary>
           <SecurityCard hasPassword={hasPassword} />
         </div>

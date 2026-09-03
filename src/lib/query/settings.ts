@@ -67,3 +67,52 @@ export function useSaveExtractionOrder() {
     },
   })
 }
+
+async function fetchShareAutoRun(): Promise<boolean> {
+  const { enabled } = await apiFetch<{ enabled: boolean }>(
+    "/settings/share-auto-run",
+  )
+  return enabled
+}
+
+export function shareAutoRunQueryOptions() {
+  return queryOptions({
+    queryKey: settingKeys.shareAutoRun(),
+    queryFn: fetchShareAutoRun,
+  })
+}
+
+export function useShareAutoRun() {
+  return useQuery(shareAutoRunQueryOptions())
+}
+
+// Optimistic, like the order above: a toggle that waits for a round trip
+// before it moves reads as broken.
+export function useSaveShareAutoRun() {
+  const queryClient = useQueryClient()
+  const key = settingKeys.shareAutoRun()
+
+  return useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const result = await apiFetch<{ enabled: boolean }>(
+        "/settings/share-auto-run",
+        { method: "PUT", body: JSON.stringify({ enabled }) },
+      )
+      return result.enabled
+    },
+    onMutate: async (enabled) => {
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData<boolean>(key)
+      queryClient.setQueryData(key, enabled)
+      return { previous }
+    },
+    onError: (_error, _enabled, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(key, context.previous)
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: key })
+    },
+  })
+}
