@@ -54,6 +54,22 @@ x-app-env: &app-env
   OPENOBSERVE_URL: ${OPENOBSERVE_URL}
   OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-default}
   OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN}
+  # Egress proxy for sources marked `proxied` in src/lib/media/sources.ts,
+  # which today is YouTube only.
+  #
+  # `warp` is NOT a service in this file. It is a separate Coolify resource
+  # (`warp-egress`), attached to this app's network with the alias `warp`.
+  # See EGRESS_PROXY.md -- that attachment is a manual step, and the
+  # consequence of getting it wrong is documented there.
+  #
+  # Overridable so this can be pointed at a commercial residential proxy
+  # without a code change, and CLEARABLE: set it to "" and every fetch goes
+  # direct again, which is the rollback for the whole feature.
+  #
+  # The WORKER is what actually downloads, but both services read one env
+  # block by design (see above), so it is defined here rather than on one
+  # service -- a split would be a runtime-only bug the moment ingest moved.
+  MEDIA_PROXY_URL: ${MEDIA_PROXY_URL-socks5://warp:1080}
 
 services:
   relay:

@@ -25,6 +25,19 @@ export interface MediaSource {
   patterns: readonly RegExp[]
   /** Rebuilds a clean URL from the item id, dropping tracking params. */
   canonical: (itemId: string) => string
+  /**
+   * Send this source's fetches through `config.media.proxyUrl`.
+   *
+   * Per-source and declared HERE rather than in the download step, so
+   * adding or removing it is one line in the registry and
+   * src/lib/media/download.ts never names a platform (RULES.md).
+   *
+   * Only YouTube needs it: it is the only source measured to refuse the
+   * production host's datacenter address outright. Instagram authenticates
+   * with the user's own jar and works direct, so proxying it would put a
+   * third party in the path of a live session and buy nothing.
+   */
+  proxied?: boolean
 }
 
 export const MEDIA_SOURCES = [
@@ -46,6 +59,7 @@ export const MEDIA_SOURCES = [
     hosts: ["youtube.com"],
     patterns: [/^\/shorts\/([A-Za-z0-9_-]{5,})\/?$/],
     canonical: (itemId) => `https://www.youtube.com/shorts/${itemId}`,
+    proxied: true,
   },
 ] as const satisfies readonly MediaSource[]
 
@@ -67,6 +81,13 @@ export interface ParsedSource {
   itemId: string
   /** Tracking-free URL handed to yt-dlp and stored on the run. */
   canonicalUrl: string
+  /**
+   * Resolved from the registry's `proxied` flag at parse time, exactly as
+   * `label` and `canonicalUrl` are. Carrying it on the parsed source is
+   * what lets the download step decide whether to proxy by reading a
+   * boolean instead of comparing a source id against a literal.
+   */
+  proxied: boolean
 }
 
 /** "Instagram Reel or YouTube Short" — for validation and empty-state copy. */
@@ -116,6 +137,7 @@ export function parseSourceUrl(raw: string): ParsedSource | null {
         label: source.label,
         itemId,
         canonicalUrl: source.canonical(itemId),
+        proxied: source.proxied === true,
       }
     }
   }

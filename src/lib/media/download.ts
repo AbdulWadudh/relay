@@ -180,6 +180,23 @@ const FORMAT_MISSING = /requested format is not available|no video formats/i
  */
 const BOT_CHECK = /not a bot|confirm you.{0,4}re not a bot|too many requests/i
 
+/**
+ * OUR OWN egress proxy is down or refusing, which is infrastructure — the
+ * item is fine, the session is fine, and nothing about the source has been
+ * learned. Distinct from every pattern above, all of which are things a
+ * SOURCE said; this is a failure that happened before the source was ever
+ * reached.
+ *
+ * Tested FIRST in the ladder, ahead of CLIENT_REFUSED, because the SOCKS
+ * layer reports a refused tunnel as a 403 in some yt-dlp versions. Read as
+ * CLIENT_REFUSED that would be classified permanent (see
+ * src/lib/pipeline-errors.ts) and the run would never retry — so a sidecar
+ * restart of a few seconds would permanently fail every run overlapping
+ * it, which is precisely the failure a queue exists to absorb.
+ */
+const PROXY_UNREACHABLE =
+  /proxy|socks|tunnel connection failed|cannot connect to proxy/i
+
 interface YtDlpAttempt {
   ok: boolean
   /** Last stderr line — the line carrying the actual reason. */
@@ -219,6 +236,7 @@ async function runYtDlp(
   pathFile: string,
   extractorArgs: string | null,
   cookiesPath: string | null,
+  proxy: string,
 ): Promise<YtDlpAttempt> {
   // `--print-to-file` APPENDS. A line left by a previous attempt would be
   // read as this attempt's output, so the file is cleared each time.
@@ -246,14 +264,46 @@ async function runYtDlp(
     // Read-write: yt-dlp writes the rotated jar back here on exit, which
     // src/lib/media/cookies.ts persists.
     ...(cookiesPath ? ["--cookies", cookiesPath] : []),
+    // Whether to proxy is the SOURCE's property, read off the parsed
+    // source, so this file still names no platform. Both halves must be
+    // true: a source that wants a proxy but has none configured runs
+    // direct rather than failing, which is what keeps the default
+    // deployment and local development working untouched.
+    ...(proxy && source.proxied ? ["--proxy", proxy] : []),
     source.canonicalUrl,
   ]
   const result = await $`${config.media.ytDlpPath} ${args}`.nothrow().quiet()
   return {
     ok: result.exitCode === 0,
-    stderr: lastLine(result.stderr.toString()),
+    // Scrubbed HERE, at the single point stderr enters the program, rather
+    // than at each of the places it leaves — `lastLine` output reaches the
+    // user-visible `run.error`, the logs, and the attempts list, and one
+    // missed call site would be a credential leak.
+    stderr: scrubProxy(lastLine(result.stderr.toString())),
     exitCode: result.exitCode,
   }
+}
+
+/**
+ * Removes the proxy URL from anything derived from yt-dlp's output.
+ *
+ * yt-dlp echoes the proxy it was given when it cannot reach it — "Unable
+ * to connect to proxy" carries the URL verbatim. `config.media.proxyUrl`
+ * may legitimately be `socks5://user:pass@host`, and `lastLine`'s result
+ * is stored on the run and shown to the user, so unscrubbed that puts a
+ * credential on a page. Replaced with a fixed token so the failure is
+ * still diagnosable as "the proxy", just not as "the proxy's password".
+ */
+export function scrubProxy(text: string): string {
+  const proxy = config.media.proxyUrl
+  if (!proxy) return text
+  // The bare `host:port` is scrubbed as well as the full URL: yt-dlp and
+  // the SOCKS layer below it report the endpoint in both shapes.
+  const forms = [proxy, proxy.replace(/^[a-z0-9+.-]+:\/\//i, "")]
+  return forms.reduce(
+    (acc, form) => (form ? acc.split(form).join("[proxy]") : acc),
+    text,
+  )
 }
 
 async function downloadWithYtDlp(
@@ -262,19 +312,38 @@ async function downloadWithYtDlp(
   cookiesPath: string | null,
 ): Promise<DownloadResult> {
   const pathFile = `${dir}/source.path`
+  const proxy = config.media.proxyUrl
+
+  // Whether a proxy was used, never WHICH one — the URL can carry
+  // credentials and is scrubbed everywhere else, so logging the boolean is
+  // the whole diagnostic that is safe to keep. `proxied` is deliberately
+  // not a key the logger redacts; `proxy` is.
+  logger.debug("Download starting", {
+    source: source.source,
+    item_id: source.itemId,
+    proxied: Boolean(proxy) && source.proxied,
+  })
 
   // The default client chain first — it resolves the richest format set,
   // and for every source but YouTube it is the only thing tried. Fallbacks
   // engage only on a client-shaped failure, so a private or deleted item
   // still fails once rather than being re-fetched under three more clients.
-  let attempt = await runYtDlp(source, dir, pathFile, null, cookiesPath)
+  let attempt = await runYtDlp(source, dir, pathFile, null, cookiesPath, proxy)
   // Every client tried and what it said. A run that exhausts the chain
   // previously surfaced only the LAST stderr, which is why diagnosing the
   // `tv` failure took a local reproduction rather than a read of the logs.
   const attempts: string[] = [`default: ${attempt.ok ? "ok" : attempt.stderr}`]
   for (const extractorArgs of config.media.ytDlpFallbacks[source.source] ??
     []) {
-    if (attempt.ok || !CLIENT_RETRYABLE.test(attempt.stderr)) break
+    // An unreachable proxy is not a client problem, so re-running the same
+    // fetch under three more player clients cannot fix it and only delays
+    // the real error by however long each attempt takes to time out.
+    if (
+      attempt.ok ||
+      PROXY_UNREACHABLE.test(attempt.stderr) ||
+      !CLIENT_RETRYABLE.test(attempt.stderr)
+    )
+      break
     logger.warn("Download failed on this client, trying the next", {
       source: source.source,
       item_id: source.itemId,
@@ -282,7 +351,14 @@ async function downloadWithYtDlp(
       // Never the URL or the jar — a client name and yt-dlp's own reason.
       previous_error: attempt.stderr.slice(0, 200),
     })
-    attempt = await runYtDlp(source, dir, pathFile, extractorArgs, cookiesPath)
+    attempt = await runYtDlp(
+      source,
+      dir,
+      pathFile,
+      extractorArgs,
+      cookiesPath,
+      proxy,
+    )
     attempts.push(`${extractorArgs}: ${attempt.ok ? "ok" : attempt.stderr}`)
   }
 
@@ -296,6 +372,27 @@ async function downloadWithYtDlp(
 
   if (!attempt.ok) {
     const { stderr } = attempt
+    // FIRST, ahead of every source-shaped branch. Our own egress being
+    // down says nothing about the item and nothing about the jar, so it
+    // must not reach SESSION_EXPIRED (which would burn a reject against a
+    // living credential) or the permanent 403 branch (which would stop the
+    // queue retrying something a sidecar restart fixes).
+    //
+    // DOWNLOAD_FAILED is deliberate: it is the one code the queue treats
+    // as retryable, and a proxy outage is the textbook retryable failure.
+    if (proxy && source.proxied && PROXY_UNREACHABLE.test(stderr)) {
+      logger.error("Egress proxy unreachable", {
+        source: source.source,
+        item_id: source.itemId,
+        // Scrubbed by `runYtDlp`, so this cannot carry the proxy's
+        // credentials even though it is yt-dlp's own text.
+        error: stderr.slice(0, 200),
+      })
+      throw new MediaIngestError(
+        "DOWNLOAD_FAILED",
+        `Could not fetch this ${source.label}: this server's outbound proxy is unavailable. Nothing is wrong with the link or your connected account — this will retry on its own.`,
+      )
+    }
     // Checked BEFORE the login-shaped branch below. A 403 that survived
     // every fallback client is the GVS/SABR refusal of §1.1 — it means the
     // same thing whether or not a jar was supplied, so it must never be

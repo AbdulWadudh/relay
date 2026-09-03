@@ -104,6 +104,21 @@ in a source file.
 
 ### 1.1b PO Tokens — VERDICT: **not the answer; do not build**
 
+**CONFIRMED BY MEASUREMENT 2026-09-03, not just by reading.** This call was
+reached from the documentation; it has since been tested end to end on the
+production host. `bgutil-ytdlp-pot-provider` 1.3.2 was installed, the plugin
+loaded as `bgutil:http-1.3.2`, and it minted a real token
+(`Generating a gvs PO Token for web client`). Downloads went 5/9 with it and
+5/9 without — identical. On the default client yt-dlp never REQUESTS a GVS
+token, so there is no gate for one to open.
+
+What actually fixed YouTube from production was an egress proxy: the address
+was the problem, exactly as §1.1 concluded. See "YouTube egress proxy" in
+LLM_STATE.md. **A consequence for this document: YouTube Shorts now work
+ANONYMOUSLY from production (11/12, on the default client), so a connected
+YouTube session is no longer required for basic YouTube function.** Whether
+a signed-in jar is accepted from a proxied address is untested.
+
 yt-dlp already carries the framework — `-v` prints
 `[debug] [youtube] [pot] PO Token Providers: none` — so a provider plugin would
 slot in. It should still not be built now:

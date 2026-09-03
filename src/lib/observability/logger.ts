@@ -173,6 +173,11 @@ const SENSITIVE_WORDS = new Set([
   "apikey",
   "credential",
   "credentials",
+  // An egress proxy URL may carry `user:pass@` (config.media.proxyUrl), so
+  // any key that IS the proxy is redacted. Deliberately does not catch
+  // `proxied`, which is the boolean the download step logs instead — the
+  // useful half of the diagnostic without the half that can hold a secret.
+  "proxy",
 ])
 
 export function isSensitiveKey(key: string): boolean {

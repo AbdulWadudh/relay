@@ -15,7 +15,8 @@
     "db:generate": "bunx --bun drizzle-kit generate",
     "db:migrate": "bunx --bun drizzle-kit migrate",
     "db:studio": "bunx --bun drizzle-kit studio",
-    "verify:ytdlp": "bun scripts/verify-ytdlp.ts"
+    "verify:ytdlp": "bun scripts/verify-ytdlp.ts",
+    "verify:proxy": "MEDIA_PROXY_URL=socks5://relay:s3cr3t-canary-do-not-ship@warp.internal:1080 bun scripts/verify-proxy.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

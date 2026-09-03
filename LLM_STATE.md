@@ -1166,7 +1166,11 @@ restart.
 
 ## Deferred: YouTube is IP-blocked on the production host (2026-09-02)
 
-**Status: open. Deferred by the user on 2026-09-02 — "will work on this later".**
+**Status: RESOLVED 2026-09-03 by an egress proxy — see "YouTube egress proxy"
+at the end of this file.** The measurements below stand and are why the fix
+took the shape it did; only the "what to do about it" is superseded. Both
+levers named here were tested and only one of them worked, which is recorded
+in the new section rather than left implied.
 Instagram is unaffected and working. Only YouTube fails, and only from prod.
 
 ### What was measured, not guessed
@@ -1284,3 +1288,187 @@ sees the Suspense fallback and looks like a hang. An A/B against `HEAD` was
 briefly read as "this change broke agents"; it had not. Assert
 `location.pathname` inside the same probe that measures, and give a hard
 load after an edit at least 12 seconds.
+
+## YouTube egress proxy (2026-09-03) — CODE DONE, NOT DEPLOYED
+
+Supersedes the "what to do about it" half of the deferred section above.
+Resolves it: YouTube works from production again, anonymously, on the
+default player client.
+
+**Status: code complete and validated on the production host in throwaway
+containers. NOT committed and NOT deployed — both need the user. The deploy
+needs one Coolify variable.**
+
+### The decision, and the objective it changed
+
+The task began as "make `@hoangquyet/ytdown` the primary YouTube
+downloader". That is ABANDONED, on evidence:
+
+* Phase 0 of that plan failed. ytdown 1.0.2 is bot-checked from the prod IP
+  on 8 of 9 videos (the 9th, `dQw4w9WgXcQ`, is the package README's own
+  example and succeeds — running Phase 0 against only the README URL would
+  have read as a clean pass).
+* `YTW_SESSION` is never consulted on that path: `resolve()` calls
+  `tube.player()`, which throws the bot check, before any session lookup at
+  `downloader.js:649`. The session feature cannot rescue it.
+* ytdown has NO proxy support of any kind — `src/net/http.js` hardcodes
+  `node:https` agents with no dispatcher hook. Both levers the objective
+  named (a PO-token provider, a residential proxy) are **yt-dlp** levers:
+  bgutil is a yt-dlp plugin, `--proxy` is a yt-dlp flag. Neither can be
+  aimed at ytdown without patching a zero-dependency package's internals.
+
+So the fix went to the tool already integrated. yt-dlp needed **no code
+change to work** — only a flag.
+
+### What was measured, and where
+
+12 real Shorts, the pinned `yt-dlp 2026.03.17` from the running app image,
+our own `-f bestaudio/best`, the same client chain, minutes apart:
+
+| egress | result |
+| --- | --- |
+| direct from the VPS | **0/12** — every one "Sign in to confirm you're not a bot" |
+| through the WARP sidecar | **11/12** — all on the DEFAULT client |
+| a residential connection | **11/12** — byte-identical files |
+
+The twelfth (`LiH-P4rSkLI`) 403s from a residential connection too. **This
+closes the gap to residential; it does not beat it.** Nothing in the code or
+its comments should be read as claiming otherwise.
+
+A trap worth recording: four long-form music videos (`dQw4w9WgXcQ`,
+`kJQP7kiw5Fk`, `9bZkp7q19f0`, `n5t23nvU_t0`) 403 through the proxy, and it
+looks exactly like a proxy limitation. The residential control fails on the
+**same four** and succeeds on the same five, byte-identical. It is
+source-side, unrelated to egress — and irrelevant here anyway, since
+`sources.ts` only accepts `/shorts/`. Run the residential control before
+attributing a failure to the network.
+
+### The PO-token lever: works, and is not needed
+
+Tested rather than assumed, because the deferred section above had chosen it
+as the direction. `bgutil-ytdlp-pot-provider` 1.3.2 ran on prod, the plugin
+loaded as `bgutil:http-1.3.2`, and it minted a genuine token —
+`Generating a gvs PO Token for web client via bgutil HTTP server`.
+
+It changed **nothing**: 5/9 with it, 5/9 without. On the default client
+yt-dlp never requests a GVS token at all, so there was no gate to open.
+Forcing `player_client=web` (which does require one) returns "Requested
+format is not available" — the signed-out web-client limitation, not a token
+failure.
+
+**Do not reach for bgutil again without first confirming the failure is
+actually a GVS 403 on a client that requires a token.** It costs a Node
+sidecar and a port to buy nothing at present.
+
+### Why Cloudflare's own client, and not the popular WireGuard wrapper
+
+The first attempt used `wgcf` plus `wireproxy` for a userspace tunnel. It
+worked (11/12, identical bytes) but was rejected: `pufferffish/wireproxy`
+now redirects to `windtf/wireproxy` — the repository changed hands, and it
+publishes prebuilt binaries. That is not a supply chain to put a production
+egress on.
+
+What ships instead runs Cloudflare's **official** `warp-svc` daemon, exposed
+as SOCKS5 by gost, pinned to `caomingjun/warp:2026.7.1377.0-2.12.0`. The
+pinned tag was re-measured, not assumed from `latest`.
+
+### Shape of the change
+
+Deliberately not "add WARP support". The pipeline reads a **URL**, so
+swapping to WARP Connector, a Zero Trust plan, or a commercial residential
+proxy is one variable and no code change.
+
+* `sources.ts` — a `proxied` flag on the source registry, resolved onto
+  `ParsedSource` at parse time. `download.ts` therefore decides by reading a
+  boolean and still names no platform (RULES.md). YouTube true, Instagram
+  false.
+* `config/index.ts` — `media.proxyUrl` from `MEDIA_PROXY_URL`. Empty
+  disables it; that is the rollback for the entire feature.
+* `download.ts` — `--proxy` when the source opts in AND a URL is set, so a
+  deployment without one runs exactly as before.
+* The proxy itself is a SEPARATE Coolify resource, `warp-egress`, not a
+  service in `docker-compose.yml`. It was built as a compose sidecar first
+  and moved on the user's instruction. **Operational cost of that choice,
+  recorded because it will bite someone:** Coolify puts a standalone
+  resource on the shared `coolify` network, `--network` in Custom Docker Run
+  Options is silently STRIPPED (tried, does not work), so the container must
+  be `docker network connect`-ed to the app network with alias `warp` after
+  every one of its own deploys. Full runbook in EGRESS_PROXY.md.
+  Joining the app to the `coolify` network instead would have been the easy
+  fix and is REJECTED: 7 other containers sit there and Dragonfly runs with
+  an empty `requirepass`, so it would expose the unauthenticated job queue
+  to every other app on the box. Attaching warp inward is the narrow
+  direction — warp holds no secrets.
+* Coolify auto-assigned `warp-egress` a public domain from the server
+  wildcard at creation. Removed before it ever served traffic. `gost -L
+  :1080` auto-detects HTTP as well as SOCKS5, so that route would have been
+  a usable OPEN PROXY. Never give this resource a domain.
+
+### Two failure modes that had to be got right
+
+**A dead proxy must not look like a dead session.** `PROXY_UNREACHABLE` is
+tested FIRST, ahead of the 403 branch, because the SOCKS layer reports a
+refused tunnel as a 403 in some yt-dlp versions — read as `CLIENT_REFUSED`
+that classifies permanent and the run never retries, so a few seconds of
+sidecar restart would permanently fail every overlapping run. It resolves to
+`DOWNLOAD_FAILED`, the retryable code, and it also breaks out of the
+fallback loop: re-running an unreachable proxy under three more player
+clients cannot help and only delays the real error.
+
+Verified on prod with the real `download()`:
+
+```
+MEDIA_PROXY_URL=socks5://relay:hunter2@warp:9999
+  -> code=DOWNLOAD_FAILED, one attempt, no fallback walk
+MEDIA_PROXY_URL=            (cleared)
+  -> code=SOURCE_UNAVAILABLE, bot-check message, full chain — the old path
+instagram URL + dead proxy
+  -> proxied=false, never touches the proxy, fails for its own reason
+```
+
+**The proxy URL is a credential.** It may be `socks5://user:pass@host`,
+yt-dlp echoes the proxy it was handed when it cannot reach it, and
+`lastLine`'s output is stored on the run and rendered to the user. So
+`scrubProxy` runs at the single point stderr enters the program rather than
+at each point it leaves; `proxy` was added to the logger's redaction words
+while `proxied` — the boolean the download step logs — deliberately was not,
+keeping the diagnostic without the secret.
+
+Shown, not asserted: `bun run verify:proxy` puts a canary password through
+five real yt-dlp failure shapes and a log record. 8 paths, 0 leaks. It fails
+loudly if the canary is not armed, because `scrubProxy` short-circuits on an
+empty proxy and would otherwise pass while testing nothing.
+
+### Open, and the honest caveats
+
+* **Free WARP is a CONSUMER product.** Using it as server-side egress is
+  outside its intended use; Cloudflare may rate-limit or block it. The
+  sanctioned paths are WARP Connector or a Zero Trust plan. This is a
+  business call, and it is the main risk in the whole change.
+* **One shared exit.** If it is flagged, everything fails at once, where a
+  proxy pool would degrade gradually.
+* **The signed-in path is UNTESTED.** Anonymous is 11/12, so cookies are no
+  longer needed for public Shorts and the Vault's "Connect YouTube" wizard
+  is no longer load-bearing for basic YouTube function — which dissolves
+  most of the Phase 1 dilemma. What is untested is whether a signed-in jar
+  is ACCEPTED from a WARP address, and whether routing a live Google session
+  through a foreign consumer IP trips Google's account-security heuristics.
+  Current behaviour sends the jar through the proxy when one exists. Only
+  the account's owner can test this, and it should be tested on an account
+  they can afford to have challenged.
+* **A free-proxy pool also works** and was measured: 1888 raw proxyscrape
+  entries -> 484 that tunnel TLS from prod -> 34/60 clearing the bot check
+  -> 32/34 still working 20 minutes later, latency 12-114s. Rejected in
+  favour of WARP: 2-3s instead, one known operator instead of unknown hosts
+  (many open proxies are misconfigured or compromised machines whose owners
+  did not consent), and no pool refresh, health-scoring or retry logic to
+  build and maintain. Recorded because it is the fallback if WARP is
+  blocked, and because measuring it cost real time.
+
+### A correction worth keeping
+
+An earlier report in this work said "6 of 8 downloads succeeded" for the
+free-proxy pool. That was 8 attempts at ONE video, not 8 videos — it
+measured proxy reliability and never per-video coverage, and it read as
+stronger evidence than it was. The 12-Short table above is the measurement
+that actually answers the question.

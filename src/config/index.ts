@@ -194,6 +194,34 @@ export const config = {
     ytDlpPath: process.env.YT_DLP_PATH ?? "yt-dlp",
     ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
     /**
+     * Egress proxy for sources marked `proxied` in
+     * src/lib/media/sources.ts. Any value yt-dlp's `--proxy` accepts
+     * (`socks5://host:port`, `http://host:port`).
+     *
+     * WHY THIS EXISTS. YouTube refuses DATACENTER addresses, and a VPS is
+     * nothing but a datacenter address. MEASURED 2026-09-03 from the
+     * production host against 12 real Shorts, same pinned yt-dlp
+     * (2026.03.17), same format selector, minutes apart:
+     *
+     *   direct from the VPS       0/12 — every one "not a bot"
+     *   through a WARP sidecar   11/12 — all on the DEFAULT client
+     *   residential connection   11/12 — byte-identical
+     *
+     * The twelfth (LiH-P4rSkLI) 403s from a residential connection too,
+     * so it is a source-side problem this cannot fix and must not claim
+     * to. Proxied prod is not "better" than residential, it is EQUAL to
+     * it — which is the whole objective.
+     *
+     * Empty disables it: the source's `proxied` flag is then inert and
+     * every invocation is byte-for-byte what shipped before, which is
+     * what makes this safe to roll back by clearing one variable.
+     *
+     * NEVER logged and NEVER allowed into a user-visible error, because
+     * this may legitimately carry credentials (`socks5://user:pass@host`)
+     * — see `scrubProxy` in src/lib/media/download.ts.
+     */
+    proxyUrl: process.env.MEDIA_PROXY_URL ?? "",
+    /**
      * Ordered `--extractor-args` fallbacks, keyed by media source id
      * (src/lib/media/sources.ts). Tried in sequence when a download fails
      * the MEDIA fetch with a 403 — metadata resolves fine, then the CDN
