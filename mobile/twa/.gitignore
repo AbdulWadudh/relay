@@ -1,0 +1,19 @@
+# Gradle caches and build intermediates — 43MB of the 43MB this dir weighs.
+.gradle/
+app/build/
+build/
+local.properties
+
+# Signed artifacts. Rebuildable from twa-manifest.json + the release key, and
+# a 2MB binary per build is not a diff.
+*.aab
+*.apk
+*.idsig
+
+# ⚠ The RELEASE SIGNING KEY. Never commit. It lives OUTSIDE the repo at
+# ~/.relay-twa/ — see RUNBOOK.md § PWA / TWA. Losing it means no user can
+# ever install an update; leaking it means anyone can ship one.
+*.keystore
+*.jks
+keystore-password.txt
+assetlinks.json

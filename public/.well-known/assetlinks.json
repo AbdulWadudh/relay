@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "space.k79.relay",
+        "sha256_cert_fingerprints": ["7C:51:9F:AE:2F:05:42:F2:92:1E:A2:1C:12:01:2B:BC:C6:BC:91:7A:AE:42:CD:BE:BA:6C:11:2F:7E:5E:08:F8"]
+      }
+    }]

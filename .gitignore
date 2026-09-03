@@ -61,3 +61,15 @@ local.db*
 next-env.d.ts
 
 _ytdown
+
+# Android release signing keys — belt-and-braces on top of
+# mobile/twa/.gitignore, so a keystore is never committable from anywhere in
+# this repo. The real key lives outside it (~/.relay-twa/); see RUNBOOK.md.
+*.keystore
+*.jks
+keystore-password.txt
+
+# TWA build artifacts
+*.aab
+*.apk
+*.idsig

@@ -1,0 +1,59 @@
+{
+  "packageId": "space.k79.relay",
+  "host": "relay.k79.quest",
+  "name": "Relay",
+  "launcherName": "Relay",
+  "display": "standalone",
+  "themeColor": "#09090B",
+  "themeColorDark": "#09090B",
+  "navigationColor": "#09090B",
+  "navigationColorDark": "#09090B",
+  "navigationDividerColor": "#09090B",
+  "navigationDividerColorDark": "#09090B",
+  "backgroundColor": "#09090B",
+  "enableNotifications": false,
+  "startUrl": "/runs",
+  "iconUrl": "https://relay.k79.quest/icons/icon-512.png",
+  "maskableIconUrl": "https://relay.k79.quest/icons/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "relay"
+  },
+  "appVersionName": "0.1.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://relay.k79.quest/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://relay.k79.quest/",
+  "minSdkVersion": 23,
+  "shareTarget": {
+    "action": "https://relay.k79.quest/share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "orientation": "default",
+  "fingerprints": [
+    {
+      "name": "release",
+      "value": "7C:51:9F:AE:2F:05:42:F2:92:1E:A2:1C:12:01:2B:BC:C6:BC:91:7A:AE:42:CD:BE:BA:6C:11:2F:7E:5E:08:F8"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "displayOverride": [],
+  "appVersion": "0.1.0"
+}
