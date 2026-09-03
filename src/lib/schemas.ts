@@ -51,6 +51,8 @@ export const credentialUpdateSchema = z
 
 export type CredentialUpdateInput = z.infer<typeof credentialUpdateSchema>
 
+export const credentialActiveSchema = z.object({ active: z.boolean() })
+
 export const agentInputSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().min(1).max(280),

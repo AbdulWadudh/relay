@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm"
+import { and, asc, eq } from "drizzle-orm"
 
 import { decrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
 import { type CredentialType, credentials } from "@/lib/db/schema"
 import { logger } from "@/lib/observability/logger"
+import { pickForProvider } from "@/lib/vault-select"
 
 /**
  * Type-scoped secret reads (SESSION_AUTH.md §3.6).
@@ -13,12 +14,11 @@ import { logger } from "@/lib/observability/logger"
  * the decrypted value is returned to pipeline code and NEVER logged,
  * returned by an API, or written to a run record.
  *
- * `getAccessToken` (src/lib/vault.ts) filters on (user, provider) alone
- * and takes the first row. That is unambiguous only while a provider has
- * exactly one credential. Social sessions break the assumption — a
- * provider id is a MediaSourceId there, and a user could hold both a
- * cookie jar and some future credential for the same source — so callers
- * that care WHICH KIND of secret they are asking for use this instead.
+ * `getAccessToken` (src/lib/vault-select.ts) filters on (user, provider)
+ * alone. A provider id is a MediaSourceId for a social session, and a user
+ * could hold both a cookie jar and some future credential for the same
+ * source — so callers that care WHICH KIND of secret they are asking for
+ * use this instead. Both resolve the user's choice via `pickForProvider`.
  */
 
 export interface StoredSecret {
@@ -43,7 +43,7 @@ export async function getSecretByType(
   userId: string,
   type: CredentialType,
 ): Promise<StoredSecret | null> {
-  const row = await getDb()
+  const rows = await getDb()
     .select({
       id: credentials.id,
       accessToken: credentials.accessToken,
@@ -58,9 +58,12 @@ export async function getSecretByType(
         eq(credentials.userId, userId),
         eq(credentials.provider, provider),
         eq(credentials.type, type),
+        eq(credentials.isActive, true),
       ),
     )
-    .get()
+    .orderBy(asc(credentials.createdAt))
+    .all()
+  const row = await pickForProvider(userId, provider, rows)
   if (!row) return null
 
   return {
@@ -143,7 +146,7 @@ export async function getCredentialIdByType(
   userId: string,
   type: CredentialType,
 ): Promise<string | null> {
-  const row = await getDb()
+  const rows = await getDb()
     .select({ id: credentials.id })
     .from(credentials)
     .where(
@@ -151,8 +154,10 @@ export async function getCredentialIdByType(
         eq(credentials.userId, userId),
         eq(credentials.provider, provider),
         eq(credentials.type, type),
+        eq(credentials.isActive, true),
       ),
     )
-    .get()
-  return row?.id ?? null
+    .orderBy(asc(credentials.createdAt))
+    .all()
+  return (await pickForProvider(userId, provider, rows))?.id ?? null
 }

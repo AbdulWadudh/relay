@@ -61,6 +61,11 @@ export function EditCredentialDialog({
 
   const name = credential.label ?? providerLabel(credential.provider)
   const canRotate = credential.type === "api_key"
+  // An OAuth row gets `account_name` from the provider on every reconnect,
+  // so a hand-typed value there would be silently overwritten. A session
+  // jar's account name is the one the user typed at import, and it was
+  // previously unreachable — only the display label was editable.
+  const canName = credential.type !== "oauth"
 
   function reset() {
     setLabel(credential.label ?? "")
@@ -74,7 +79,7 @@ export function EditCredentialDialog({
     if (label !== (credential.label ?? "")) input.label = label
     // The account is only ours to set on API keys; OAuth rows get theirs
     // from the provider on every reconnect.
-    if (canRotate && account !== currentAccount(credential)) {
+    if (canName && account !== currentAccount(credential)) {
       input.account = account
     }
     if (canRotate && secret.trim().length > 0) input.accessToken = secret.trim()
@@ -137,7 +142,9 @@ export function EditCredentialDialog({
               Give this credential a name you will recognise
               {canRotate
                 ? ", record which account issued it, or replace the stored secret."
-                : "."}
+                : canName
+                  ? ", and record which account it belongs to."
+                  : "."}
             </DialogDescription>
           </DialogHeader>
 
@@ -157,7 +164,7 @@ export function EditCredentialDialog({
               </FieldDescription>
             </Field>
 
-            {canRotate ? (
+            {canName ? (
               <Field>
                 <FieldLabel htmlFor="credential-account">Account</FieldLabel>
                 <Input
@@ -169,8 +176,10 @@ export function EditCredentialDialog({
                   autoComplete="off"
                 />
                 <FieldDescription>
-                  Which account this key was generated from. Shown in the
-                  Account column.
+                  {canRotate
+                    ? "Which account this key was generated from."
+                    : "Which account this session belongs to."}{" "}
+                  Shown in the Account column.
                 </FieldDescription>
               </Field>
             ) : null}

@@ -14,10 +14,9 @@ import { type AiKeyProviderId, isKeylessProvider } from "@/lib/providers"
  */
 
 export const SETTING_KEYS = {
-  /** Order the extraction stage tries chat providers in. */
   extractionOrder: "extraction_order",
-  /** Queue a shared link immediately, instead of asking first. */
   shareAutoRun: "share_auto_run",
+  credentialSelection: "credential_selection",
 } as const
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
@@ -131,4 +130,48 @@ export async function getExtractionOrder(
  */
 export async function getShareAutoRun(userId: string): Promise<boolean> {
   return (await readSetting(userId, SETTING_KEYS.shareAutoRun)) === true
+}
+
+/**
+ * Which credential a provider uses when several are stored, as
+ * `{ [provider]: credentialId }`. Selection is a preference, not vault
+ * state, so it lives here rather than as a column with a "one row is
+ * primary" invariant to keep true.
+ */
+export async function getCredentialSelection(
+  userId: string,
+): Promise<Record<string, string>> {
+  const stored = await readSetting(userId, SETTING_KEYS.credentialSelection)
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {}
+
+  const selection: Record<string, string> = {}
+  for (const [provider, id] of Object.entries(stored)) {
+    if (typeof id === "string" && id.length > 0) selection[provider] = id
+  }
+  return selection
+}
+
+export async function setCredentialSelection(
+  userId: string,
+  provider: string,
+  credentialId: string,
+): Promise<void> {
+  const current = await getCredentialSelection(userId)
+  await writeSetting(userId, SETTING_KEYS.credentialSelection, {
+    ...current,
+    [provider]: credentialId,
+  })
+}
+
+/** Drops any provider pointing at a credential that no longer exists. */
+export async function forgetCredentialSelection(
+  userId: string,
+  credentialId: string,
+): Promise<void> {
+  const current = await getCredentialSelection(userId)
+  const next = Object.fromEntries(
+    Object.entries(current).filter(([, id]) => id !== credentialId),
+  )
+  if (Object.keys(next).length === Object.keys(current).length) return
+  await writeSetting(userId, SETTING_KEYS.credentialSelection, next)
 }

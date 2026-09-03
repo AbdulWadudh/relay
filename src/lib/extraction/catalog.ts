@@ -2,46 +2,15 @@ import { and, eq } from "drizzle-orm"
 
 import config from "@/config"
 import { getDb } from "@/lib/db"
-import { credentials, modelCatalog } from "@/lib/db/schema"
+import { modelCatalog } from "@/lib/db/schema"
 import { cacheKeys, get, invalidate, put } from "@/lib/extraction/cache"
 import { type CatalogModel, normaliseCatalog } from "@/lib/extraction/models"
 import type { ChatProvider } from "@/lib/extraction/providers"
 import { logger } from "@/lib/observability/logger"
-
-/**
- * The DB-backed model catalog cache (Task 4.4, human decision 2026-09-01).
- *
- * Refreshed when EITHER trigger fires:
- *  - the snapshot is older than the TTL (OpenRouter's free pool turns over
- *    daily, so a day is the useful ceiling), or
- *  - the credential has been modified since the snapshot was taken.
- *    Rotating a key can change what it reaches, so the cached answer is no
- *    longer about the same key.
- *
- * The cache lives in the database rather than in memory because the web
- * process and the worker are separate processes, and the worker restarts
- * on every deploy — an in-process Map would refetch constantly and share
- * nothing.
- *
- * A refresh that fails does NOT fail the run: a stale catalog is far more
- * useful than none, so the last good snapshot is served and the failure is
- * logged.
- */
+import { providerCredentialStamp } from "@/lib/vault-select"
 
 const TTL_MS = 24 * 60 * 60 * 1000
-
-/**
- * Bump whenever `CatalogModel` gains a field the ranker reads. A snapshot
- * written by an older normaliser is missing that field, and ranking on a
- * silently-absent value is worse than refetching.
- */
-// 4: provider-level capability fallbacks are now folded in at normalise
-// time (ChatProvider.capabilities), so a v3 snapshot of a provider that
-// advertises nothing — Ollama — has zeroed capabilities the ranker would
-// reject. Those snapshots must be refetched, not reused.
 const CATALOG_VERSION = 4
-
-/** Never let a provider outage stall the pipeline on a network read. */
 const FETCH_TIMEOUT_MS = 15_000
 
 interface CachedCatalog {
@@ -63,21 +32,6 @@ async function fetchModels(
   }
   const payload = (await response.json()) as { data?: unknown[] }
   return normaliseCatalog(payload.data ?? [], provider.capabilities)
-}
-
-/** The credential's own `updated_at`, which is the key-rotation signal. */
-async function credentialStamp(
-  userId: string,
-  provider: string,
-): Promise<number> {
-  const row = await getDb()
-    .select({ updatedAt: credentials.updatedAt })
-    .from(credentials)
-    .where(
-      and(eq(credentials.userId, userId), eq(credentials.provider, provider)),
-    )
-    .get()
-  return row?.updatedAt ?? 0
 }
 
 async function readCache(
@@ -140,7 +94,9 @@ export async function catalogFor(options: {
   apiKey: string
 }): Promise<CachedCatalog> {
   const { userId, provider, apiKey } = options
-  const stamp = await credentialStamp(userId, provider.id)
+  // Shared by every key the provider holds, so walking the fallback chain
+  // does not invalidate the snapshot (src/lib/vault-select.ts).
+  const stamp = await providerCredentialStamp(provider.id, userId)
 
   // Redis first. The snapshot is keyed to the credential stamp, so a
   // rotated key misses rather than serving the previous key's catalog.

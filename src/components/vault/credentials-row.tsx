@@ -23,6 +23,10 @@ import { AddCredentialDialog } from "@/components/vault/add-credential-dialog"
 import { DeleteCredential } from "@/components/vault/delete-credential"
 import { EditCredentialDialog } from "@/components/vault/edit-credential-dialog"
 import { ImportSessionDialog } from "@/components/vault/import-session-dialog"
+import {
+  CredentialActiveToggle,
+  SelectCredential,
+} from "@/components/vault/select-credential"
 import { providerLabel } from "@/lib/providers"
 import { cn } from "@/lib/utils"
 import type { MaskedCredential } from "@/lib/vault"
@@ -163,6 +167,7 @@ export function StaleBadge({ credential }: { credential: MaskedCredential }) {
 export function RowActions({ credential }: { credential: MaskedCredential }) {
   return (
     <div className="flex items-center justify-end gap-1">
+      <SelectCredential credential={credential} />
       {credential.type === "cookie" ? (
         <ReconnectSession credential={credential} />
       ) : null}
@@ -189,6 +194,7 @@ export function RowActions({ credential }: { credential: MaskedCredential }) {
           </TooltipContent>
         </Tooltip>
       ) : null}
+      <CredentialActiveToggle credential={credential} />
       <EditCredentialDialog credential={credential} />
       <DeleteCredential
         credentialId={credential.id}

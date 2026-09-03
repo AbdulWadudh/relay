@@ -119,3 +119,96 @@ export function useUpdateCredential() {
     },
   })
 }
+
+/**
+ * Picks which credential a provider uses. The server returns the whole
+ * list, since selecting one row unselects its sibling.
+ */
+export function useSelectCredential() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { credentials } = await apiFetch<{
+        credentials: MaskedCredential[]
+      }>(`/credentials/${id}/select`, { method: "PUT" })
+      return credentials
+    },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: credentialKeys.lists() })
+      const previous = queryClient.getQueryData<MaskedCredential[]>(
+        credentialKeys.list(),
+      )
+      const provider = previous?.find((row) => row.id === id)?.provider
+      queryClient.setQueryData<MaskedCredential[]>(
+        credentialKeys.list(),
+        (rows) =>
+          rows?.map((row) =>
+            row.provider === provider
+              ? { ...row, selected: row.id === id }
+              : row,
+          ),
+      )
+      return { previous }
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(credentialKeys.list(), context.previous)
+      }
+    },
+    onSuccess: (credentials) => {
+      queryClient.setQueryData(credentialKeys.list(), credentials)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
+    },
+  })
+}
+
+export interface SetCredentialActiveVariables {
+  id: string
+  active: boolean
+}
+
+/**
+ * Switches a credential in or out of its provider's chain. Like select, the
+ * server returns the whole list because turning one off promotes a sibling.
+ */
+export function useSetCredentialActive() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, active }: SetCredentialActiveVariables) => {
+      const { credentials } = await apiFetch<{
+        credentials: MaskedCredential[]
+      }>(`/credentials/${id}/active`, {
+        method: "PUT",
+        body: JSON.stringify({ active }),
+      })
+      return credentials
+    },
+    onMutate: async ({ id, active }) => {
+      await queryClient.cancelQueries({ queryKey: credentialKeys.lists() })
+      const previous = queryClient.getQueryData<MaskedCredential[]>(
+        credentialKeys.list(),
+      )
+      queryClient.setQueryData<MaskedCredential[]>(
+        credentialKeys.list(),
+        (rows) =>
+          rows?.map((row) => (row.id === id ? { ...row, active } : row)),
+      )
+      return { previous }
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(credentialKeys.list(), context.previous)
+      }
+    },
+    onSuccess: (credentials) => {
+      queryClient.setQueryData(credentialKeys.list(), credentials)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: credentialKeys.lists() })
+    },
+  })
+}

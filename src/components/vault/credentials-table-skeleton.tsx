@@ -32,7 +32,7 @@ export function CredentialsTableSkeleton() {
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
               <Skeleton className="h-3 w-28" />
-              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-8 w-24" />
             </div>
           </div>
         ))}
@@ -73,7 +73,7 @@ export function CredentialsTableSkeleton() {
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end">
-                    <Skeleton className="h-8 w-16" />
+                    <Skeleton className="h-8 w-24" />
                   </div>
                 </TableCell>
               </TableRow>

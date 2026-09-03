@@ -2404,3 +2404,74 @@ while downloading fine (759651 B) from residential. With no jar stored
 there is no second session to try, so it still resolves to
 `SOURCE_UNAVAILABLE` — permanent, and phrased as though the video were
 gone. Most likely geo: WARP exits in another country. One data point.
+
+## Multiple accounts per provider, with fallback (2026-09-03)
+
+`createCredential` deleted every existing `api_key` row for the provider
+before inserting, so a second key REPLACED the first. That was a
+deliberate one-per-provider rule; it is gone. Replacement now keys on the
+account only (`meta_data.account_id`, or an explicit `replacesId` for a
+cookie jar that carries no id), which is what the Ray path already did.
+
+Two orthogonal concepts, both surfaced on `MaskedCredential`:
+
+- **`active`** — a real column (`credentials.is_active`, migration 0007).
+  Off means every pipeline read path skips it. Chosen over a settings flag
+  because `agents.is_active` is the same idea and it becomes a WHERE
+  clause instead of a second lookup.
+- **`selected`** — `user_settings.credential_selection`, a
+  `{ [provider]: credentialId }` map. Deliberately NOT a column: a
+  "one row is primary" invariant has to be maintained on every insert and
+  delete, whereas a map that names a missing or switched-off row simply
+  reconciles to the oldest active one, the same way
+  `resolveExtractionOrder` reconciles a stale provider order.
+
+`orderForProvider` (src/lib/vault-select.ts) is the single definition of
+the order — selected first, then oldest-first — and every reader goes
+through it, so the UI's badges and the pipeline's chain cannot disagree.
+Single-credential readers (`getAccessToken`, `getSecretByType`, the Notion
+Ray) take the head; readers that can retry walk the whole chain.
+
+### What makes a second account a fallback
+
+`disposition` (src/lib/extraction/chat-failures.ts, split out of chat.ts
+for the 250-line cap) gained `next-credential`. 401/403 and account-wide
+402 were `next-provider` — a dead or spent key abandoned the provider
+outright even when another account was sitting right behind it. 429 stays
+`next-model`, and when the models run out the loop falls through to the
+next credential by itself, which is the rate-limit case. Only 413 still
+abandons the provider: a size limit is the provider's, not the account's.
+
+Transcription had no fallback of any kind — one provider, one key, and any
+failure propagated. `runWhisperPair` (src/lib/transcription/resolve.ts)
+walks providers x keys, but only on 401/403/402/429. A 5xx or a timeout
+does NOT fall through: re-uploading the audio to work around a transient
+fault costs more than it saves.
+
+The model catalog stamp is the NEWEST `updated_at` across the provider's
+active credentials, not the selected one's. The cache row is keyed
+(user, provider), so a per-key stamp would make every fallback invalidate
+the snapshot the next run needs.
+
+### Verified
+
+Against a throwaway local sqlite, not the live Turso:
+
+```
+three keys, oldest first        chain: A -> B -> C
+pinned the third                chain: C -> A -> B
+switched the first off          chain: C -> B
+switched it back on             chain: A -> B -> C   (re-enabling pins it)
+all off                         chain: (empty), getAccessToken -> null
+deleted the pinned key          falls back to the survivor
+```
+
+Through the browser on a scratch database: two Gemini keys with different
+account names coexist, the pin moves which one is first, and Settings ->
+Extraction priority still lists Gemini once rather than once per key.
+
+### Still open
+
+Migration 0007 is NOT applied to the live Turso database. Until it is,
+`is_active` does not exist and the vault renders every row as switched
+off. `bun run db:migrate`.

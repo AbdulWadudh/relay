@@ -1,10 +1,16 @@
 import { Hono } from "hono"
 import { logger } from "@/lib/observability/logger"
-import { credentialInputSchema, credentialUpdateSchema } from "@/lib/schemas"
+import {
+  credentialActiveSchema,
+  credentialInputSchema,
+  credentialUpdateSchema,
+} from "@/lib/schemas"
 import {
   createCredential,
   deleteCredential,
   listCredentials,
+  selectCredential,
+  setCredentialActive,
   updateCredentialMeta,
   updateCredentialSecret,
 } from "@/lib/vault"
@@ -86,4 +92,39 @@ credentialsModule.patch("/:id", async (c) => {
     secret_rotated: accessToken !== undefined,
   })
   return c.json({ credential })
+})
+
+/** Which of a provider's credentials the pipeline uses. */
+credentialsModule.put("/:id/select", async (c) => {
+  const session = c.get("session")
+  const id = c.req.param("id")
+  const provider = await selectCredential(id, session.user.id)
+  if (!provider) return c.json({ error: "Credential not found" }, 404)
+  logger.info("Credential selected", { credential_id: id, provider })
+  return c.json({ credentials: await listCredentials(session.user.id) })
+})
+
+/** Switches a credential in or out of its provider's fallback chain. */
+credentialsModule.put("/:id/active", async (c) => {
+  const session = c.get("session")
+  const id = c.req.param("id")
+  const parsed = credentialActiveSchema.safeParse(
+    await c.req.json().catch(() => null),
+  )
+  if (!parsed.success) {
+    return c.json({ error: "Invalid value", issues: parsed.error.issues }, 400)
+  }
+
+  const provider = await setCredentialActive(
+    id,
+    session.user.id,
+    parsed.data.active,
+  )
+  if (!provider) return c.json({ error: "Credential not found" }, 404)
+  logger.info("Credential active state changed", {
+    credential_id: id,
+    provider,
+    active: parsed.data.active,
+  })
+  return c.json({ credentials: await listCredentials(session.user.id) })
 })

@@ -1,11 +1,21 @@
-import { and, eq, sql } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 
 import config from "@/config"
 
-import { decrypt, encrypt } from "@/lib/crypto"
+import { encrypt } from "@/lib/crypto"
 import { getDb } from "@/lib/db"
 import { type CredentialType, credentials } from "@/lib/db/schema"
 import type { CredentialInput } from "@/lib/schemas"
+import {
+  forgetCredentialSelection,
+  getCredentialSelection,
+} from "@/lib/settings"
+
+export {
+  getAccessToken,
+  selectCredential,
+  setCredentialActive,
+} from "@/lib/vault-select"
 
 /**
  * Credential vault service (TRD §4, PRD §4.4).
@@ -24,13 +34,11 @@ export interface MaskedCredential {
   provider: string
   expiresAt: number | null
   metaData: Record<string, unknown> | null
-  /**
-   * A social session the downloader has been told to log in for
-   * `config.social.staleAfterRejects` times running (SESSION_AUTH.md §4.3).
-   * The raw counter it derives from stays server-side — the browser gets
-   * the one bit it needs to render "Reconnect", not the bookkeeping.
-   */
   stale: boolean
+  /** In its provider's fallback chain at all (vault-select.ts). */
+  active: boolean
+  /** First in that chain — what the provider reaches for. */
+  selected: boolean
   createdAt: number
   updatedAt: number
 }
@@ -48,6 +56,7 @@ const MASKED_COLUMNS = {
   expiresAt: credentials.expiresAt,
   metaData: credentials.metaData,
   additionalData: credentials.additionalData,
+  isActive: credentials.isActive,
   createdAt: credentials.createdAt,
   updatedAt: credentials.updatedAt,
 }
@@ -59,13 +68,14 @@ type MaskedRow = {
   expiresAt: number | null
   metaData: Record<string, unknown> | null
   additionalData: Record<string, unknown>
+  isActive: boolean
   createdAt: number
   updatedAt: number
 }
 
 /** Lifts the user-chosen label out of plaintext meta_data. */
-function toMasked(row: MaskedRow): MaskedCredential {
-  const { additionalData, ...rest } = row
+function toMasked(row: MaskedRow, selected = false): MaskedCredential {
+  const { additionalData, isActive, ...rest } = row
   const label = rest.metaData?.label
   const rejects = additionalData?.reject_count
   return {
@@ -73,6 +83,8 @@ function toMasked(row: MaskedRow): MaskedCredential {
     label: typeof label === "string" && label.length > 0 ? label : null,
     stale:
       typeof rejects === "number" && rejects >= config.social.staleAfterRejects,
+    active: isActive,
+    selected: isActive && selected,
   }
 }
 
@@ -83,9 +95,17 @@ export async function listCredentials(
     .select(MASKED_COLUMNS)
     .from(credentials)
     .where(eq(credentials.userId, userId))
-    .orderBy(credentials.createdAt)
+    .orderBy(asc(credentials.createdAt))
     .all()
-  return rows.map(toMasked)
+
+  const selection = await getCredentialSelection(userId)
+  const live = new Map<string, string>()
+  for (const row of rows) {
+    if (selection[row.provider] === row.id) live.set(row.provider, row.id)
+    else if (!live.has(row.provider)) live.set(row.provider, row.id)
+  }
+
+  return rows.map((row) => toMasked(row, live.get(row.provider) === row.id))
 }
 
 export async function createCredential(
@@ -109,10 +129,10 @@ export async function createCredential(
   }
   const now = Date.now()
 
-  // Replace scope: API keys are one-per-provider; Ray credentials are
-  // one-per-account, keyed on the provider-agnostic `account_id` meta key
-  // (every registry entry maps its own concept onto it), so multiple
-  // accounts of one provider coexist and reconnecting updates in place.
+  // Replace scope: one-per-ACCOUNT, never one-per-provider, keyed on the
+  // provider-agnostic `account_id` meta key (every registry entry maps its
+  // own concept onto it). So several accounts of one provider coexist and
+  // reconnecting the same account updates in place instead of piling up.
   const accountId = input.metaData?.account_id
   if (replacesId) {
     await db
@@ -126,18 +146,7 @@ export async function createCredential(
       )
       .run()
   }
-  if (input.type === "api_key") {
-    await db
-      .delete(credentials)
-      .where(
-        and(
-          eq(credentials.userId, userId),
-          eq(credentials.provider, input.provider),
-          eq(credentials.type, "api_key"),
-        ),
-      )
-      .run()
-  } else if (typeof accountId === "string" && accountId.length > 0) {
+  if (typeof accountId === "string" && accountId.length > 0) {
     await db
       .delete(credentials)
       .where(
@@ -252,21 +261,7 @@ export async function deleteCredential(
     .where(and(eq(credentials.id, id), eq(credentials.userId, userId)))
     .returning({ id: credentials.id })
     .all()
-  return deleted.length > 0
-}
-
-/** Decrypt the stored access token for a provider (pipeline use only). */
-export async function getAccessToken(
-  provider: string,
-  userId: string,
-): Promise<string | null> {
-  const row = await getDb()
-    .select({ accessToken: credentials.accessToken, iv: credentials.iv })
-    .from(credentials)
-    .where(
-      and(eq(credentials.userId, userId), eq(credentials.provider, provider)),
-    )
-    .get()
-  if (!row) return null
-  return decrypt(row.accessToken, row.iv)
+  if (deleted.length === 0) return false
+  await forgetCredentialSelection(userId, id)
+  return true
 }

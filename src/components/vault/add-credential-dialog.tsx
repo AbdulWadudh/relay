@@ -38,17 +38,6 @@ import { cn } from "@/lib/utils"
  * inside the API-key panel where the other two had no way out but the X.
  */
 
-/**
- * Tabs have different natural heights — the Ray grid is three rows, the
- * Account grid is one. The floor keeps the dialog from resizing as you
- * move between them. It sits on the SCROLLING BODY, so it can never add
- * space beneath the footer. Only from sm up: on a phone the grids are
- * single-column and a fixed floor would strand the short tab in whitespace.
- *
- * 29.5rem is measured, not guessed: it is the natural height of the tallest
- * tab (Ray, three rows of cards). Below it the dialog still grew by ~70px
- * when that tab opened.
- */
 const BODY = "sm:min-h-[29.5rem]"
 
 /**

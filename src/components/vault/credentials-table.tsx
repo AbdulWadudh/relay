@@ -16,7 +16,9 @@ import {
   VaultEmpty,
 } from "@/components/vault/credentials-row"
 import { CredentialsTableSkeleton } from "@/components/vault/credentials-table-skeleton"
+import { ChainBadge } from "@/components/vault/select-credential"
 import { useCredentials } from "@/lib/query/credentials"
+import { cn } from "@/lib/utils"
 import type { MaskedCredential } from "@/lib/vault"
 
 const CREDENTIAL_COLUMNS: ReadonlyArray<DataColumn<MaskedCredential>> = [
@@ -46,6 +48,7 @@ const CREDENTIAL_COLUMNS: ReadonlyArray<DataColumn<MaskedCredential>> = [
     cell: (credential) => (
       <div className="flex items-center gap-1.5">
         <TypeBadge type={credential.type} />
+        <ChainBadge credential={credential} />
         <StaleBadge credential={credential} />
       </div>
     ),
@@ -122,7 +125,10 @@ export function CredentialsTable({
           {rows.map((credential) => (
             <div
               key={credential.id}
-              className="rounded-lg border p-4 transition-colors duration-200"
+              className={cn(
+                "rounded-lg border p-4 transition-all duration-200",
+                credential.active ? "" : "opacity-60",
+              )}
             >
               <div className="flex items-start gap-3">
                 <ProviderTile provider={credential.provider} />
@@ -132,6 +138,7 @@ export function CredentialsTable({
                       {displayName(credential)}
                     </span>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      <ChainBadge credential={credential} />
                       <StaleBadge credential={credential} />
                       <TypeBadge type={credential.type} />
                     </div>

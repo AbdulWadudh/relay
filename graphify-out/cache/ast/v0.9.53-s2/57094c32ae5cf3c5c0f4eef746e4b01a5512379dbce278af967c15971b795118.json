@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_drizzle_0007_hot_vargas_sql", "label": "0007_hot_vargas.sql", "file_type": "code", "source_file": "drizzle/0007_hot_vargas.sql", "source_location": null}, {"id": "credentials", "label": "`credentials`", "file_type": "code", "source_file": "", "source_location": "", "origin_file": "$graphify-root$/drizzle/0007_hot_vargas.sql"}], "edges": []}

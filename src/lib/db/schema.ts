@@ -44,6 +44,9 @@ export const credentials = sqliteTable(
     accessToken: text("access_token").notNull(), // AES-256-GCM encrypted
     refreshToken: text("refresh_token"), // AES-256-GCM encrypted, nullable
     expiresAt: integer("expires_at"), // Unix timestamp in ms, nullable
+    // Off means the pipeline skips it entirely — a key kept on file but not
+    // in the fallback chain (src/lib/vault-select.ts).
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     // Plaintext JSON (workspace_id, bot_id, scopes, ...) — TEXT on disk,
     // auto parse/stringify + typing via Drizzle json mode.
     metaData: text("meta_data", { mode: "json" }).$type<

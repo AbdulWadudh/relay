@@ -1,18 +1,15 @@
 import { logger } from "@/lib/observability/logger"
 import {
-  type TranscriptionProvider,
-  transcriptionProvider,
-  transcriptionProviderIds,
-} from "@/lib/transcription/providers"
+  NoTranscriptionKeyError,
+  runWhisperPair,
+} from "@/lib/transcription/resolve"
 import { type RomanStream, toRomanScript } from "@/lib/transcription/roman"
 import { hasSpeech, NoSpeechError } from "@/lib/transcription/speech"
 import {
-  runWhisper,
   type SpeechConfidence,
   TranscriptionError,
   type TranscriptSegment,
 } from "@/lib/transcription/whisper"
-import { getAccessToken } from "@/lib/vault"
 
 /**
  * Transcription engine (PRD §4.2, Task 4.3).
@@ -21,11 +18,12 @@ import { getAccessToken } from "@/lib/vault"
  * what was actually said, and a millisecond-aligned English translation
  * that Task 4.5 verifies evidence quotes against.
  *
- * Provider-generic throughout — the caller never names a provider. The
- * user's key is decrypted here, held only for the duration of the call,
- * and never logged (PRD §6).
+ * Provider-generic throughout — the caller never names a provider.
+ * Account resolution and fallback live in resolve.ts; the key it returns is
+ * held only for the duration of the call and never logged (PRD §6).
  */
 
+export { NoTranscriptionKeyError } from "@/lib/transcription/resolve"
 export { NoSpeechError } from "@/lib/transcription/speech"
 export type { TranscriptSegment } from "@/lib/transcription/whisper"
 export { TranscriptionError } from "@/lib/transcription/whisper"
@@ -65,36 +63,6 @@ export interface Transcription {
   }
 }
 
-export class NoTranscriptionKeyError extends Error {
-  readonly code = "NO_TRANSCRIPTION_KEY"
-
-  constructor(message: string) {
-    super(message)
-    this.name = "NoTranscriptionKeyError"
-  }
-}
-
-interface ResolvedProvider {
-  provider: TranscriptionProvider
-  apiKey: string
-}
-
-/**
- * First configured provider in preference order. Returns the decrypted key
- * alongside it; callers must not log or persist the key.
- */
-async function resolveProvider(userId: string): Promise<ResolvedProvider> {
-  for (const id of transcriptionProviderIds()) {
-    const apiKey = await getAccessToken(id, userId)
-    if (!apiKey) continue
-    const provider = transcriptionProvider(id)
-    if (provider) return { provider, apiKey }
-  }
-  throw new NoTranscriptionKeyError(
-    "No transcription provider key found. Add an API key in your vault for a provider that supports Whisper.",
-  )
-}
-
 export async function transcribe(options: {
   audioPath: string
   userId: string
@@ -102,29 +70,10 @@ export async function transcribe(options: {
   signal?: AbortSignal
 }): Promise<Transcription> {
   const { audioPath, userId, runId, signal } = options
-  const { provider, apiKey } = await resolveProvider(userId)
-
-  // Both Whisper calls read the same file and don't depend on each other,
-  // so they run concurrently — this is the slowest stage in the pipeline
-  // and PRD §6 targets sub-30s end to end.
-  const startedAt = performance.now()
-  const [spoken, english] = await Promise.all([
-    runWhisper({
-      provider,
-      apiKey,
-      audioPath,
-      task: "transcriptions",
-      signal,
-    }),
-    runWhisper({
-      provider,
-      apiKey,
-      audioPath,
-      task: "translations",
-      signal,
-    }),
-  ])
-  const whisperMs = Math.round(performance.now() - startedAt)
+  // Walks the provider's accounts when one is rate-limited or rejected.
+  const { provider, apiKey, spoken, english, whisperMs } = await runWhisperPair(
+    { audioPath, userId, signal },
+  )
 
   // Gate before anything downstream sees the text. Hallucinated filler is
   // discarded rather than returned, but kept for auditing.
